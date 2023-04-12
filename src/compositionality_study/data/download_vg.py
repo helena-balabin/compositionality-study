@@ -1,16 +1,21 @@
 """Download the Visual Genome dataset."""
+import json
+import os
+
 # Imports
 import click
-from datasets import load_dataset
+import datasets
+import pandas as pd
+from datasets import Value, load_dataset
 
-from compositionality_study.constants import LARGE_DATASET_STORAGE_PATH
+from compositionality_study.constants import LARGE_DATASET_STORAGE_PATH, VG_DIR, VG_METADATA_FILE
 
 
 @click.command()
 @click.option("--cache_dir", type=str, default=LARGE_DATASET_STORAGE_PATH)
 @click.option("--full_split", type=bool, default=False)
 @click.option("--subset", type=str, default="objects_v1.2.0")
-def download_vg_coco_overlap(
+def hf_download_vg_coco_overlap(
     cache_dir: str = LARGE_DATASET_STORAGE_PATH,
     full_split: bool = False,
     subset: str = "objects_v1.2.0",
@@ -29,11 +34,79 @@ def download_vg_coco_overlap(
     """
     vg_ds = load_dataset(
         "visual_genome",
-        subset=subset,
+        name=subset,
         cache_dir=cache_dir,
         split="train" if full_split else "train[:1%]",
     )
     vg_ds.filter(lambda example: example["coco_id"] != "null")
+
+
+@click.command()
+@click.option("--vg_metadata_file", type=str, default=VG_METADATA_FILE)
+@click.option("--hf_coco_name", type=str, default="Multimodal-Fatima/COCO_captions_train")
+@click.option("--coco_cache_dir", type=str, default=LARGE_DATASET_STORAGE_PATH)
+@click.option("--save_dummy_subset", type=bool, default=True)
+@click.option("--dummy_subset_size", type=int, default=1000)
+@click.option("--output_dir", type=str, default=VG_DIR)
+def preprocess_local_vg_files_coco_overlap(
+    vg_metadata_file: str = VG_METADATA_FILE,
+    hf_coco_name: str = "Multimodal-Fatima/COCO_captions_train",
+    coco_cache_dir: str = LARGE_DATASET_STORAGE_PATH,
+    save_dummy_subset: bool = True,
+    dummy_subset_size: int = 1000,
+    output_dir: str = VG_DIR,
+):
+    """Preprocess the local VG files to filter for COCO overlap to get the COCO captions.
+
+    :param vg_metadata_file: Path to the VG metadata file (image_data.json)
+    :type vg_metadata_file: str
+    :param hf_coco_name: Name of the COCO dataset on huggingface's datasets (to include the captions)
+    :type hf_coco_name: str
+    :param coco_cache_dir: Where to store the COCO dataset
+    :type coco_cache_dir: str
+    :param save_dummy_subset: Whether to save a dummy subset of the VG + COCO overlap dataset
+    :type save_dummy_subset: bool
+    :param dummy_subset_size: How many entries to save in the dummy subset
+    :type dummy_subset_size: int
+    :param output_dir: Where to save the VG + COCO overlap dataset to, defaults to VG_DIR
+    :type output_dir: str
+    :return: None
+    :rtype: None
+    """
+    # Get the VG images that have COCO overlap
+    with open(vg_metadata_file, "r") as f:
+        vg_metadata = json.load(f)
+    vg = [
+        {"cocoid": m["coco_id"], "vg_image_id": m["image_id"], "vg_url": m["url"]}
+        for m in vg_metadata if m["coco_id"] is not None
+    ]
+    vg_ds = datasets.Dataset.from_pandas(pd.DataFrame(data=vg))
+    # Change the datatype of the cocoid column to int32
+    new_features = vg_ds.features.copy()
+    new_features["cocoid"] = Value("int32")
+    vg_ds = vg_ds.cast(new_features)
+
+    # Get the COCO images that are in VG and have captions
+    coco_ds = load_dataset(hf_coco_name, split="train", cache_dir=coco_cache_dir)
+    coco_ids = set(coco_ds["cocoid"]).intersection(set(vg_ds["cocoid"]))
+    coco_ds = coco_ds.filter(lambda example: example["cocoid"] in coco_ids)
+    vg_ds = vg_ds.filter(lambda example: example["cocoid"] in coco_ids)
+
+    # Merge the two datasets by converting them into dataframes and then merging them
+    coco_df = coco_ds.to_pandas()
+    vg_df = vg_ds.to_pandas()
+    merged_df = pd.merge(coco_df, vg_df, on="cocoid")
+    merged_ds = datasets.Dataset.from_pandas(merged_df)
+    merged_ds = merged_ds.filter(lambda example: len(example["sentences_raw"]) > 0)
+
+    # Save the dataset to disk
+    merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_overlap"))
+    # Also save a small dummy subset of dummy_subset_size many entries
+    if save_dummy_subset:
+        merged_ds.select(
+            list(range(dummy_subset_size))
+        ).save_to_disk(os.path.join(output_dir, "vg_coco_overlap_dummy"))
+    return
 
 
 @click.group()
@@ -42,5 +115,6 @@ def cli() -> None:
 
 
 if __name__ == "__main__":
-    cli.add_command(download_vg_coco_overlap)
+    cli.add_command(hf_download_vg_coco_overlap)
+    cli.add_command(preprocess_local_vg_files_coco_overlap)
     cli()

@@ -23,11 +23,17 @@ os.makedirs(NOTEBOOKS_DIR, exist_ok=True)
 
 # Huggingface cache dirs
 LARGE_DATASET_STORAGE_PATH = os.path.join(
-    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "datasets"
+    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/datasets"
 )
 LARGE_MODELS_STORAGE_PATH = os.path.join(
-    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "transformers"
+    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/transformers"
 )
 LARGE_HUB_STORAGE_PATH = os.path.join(
-    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "hub"
+    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/hub"
 )
+
+# Directory for local Visual Genome files
+VG_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "vg")
+os.makedirs(VG_DIR, exist_ok=True)
+# When using local VG files, place the image_data.json file in the VG_DIR
+VG_METADATA_FILE = os.path.join(VG_DIR, "image_data.json")
