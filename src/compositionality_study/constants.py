@@ -21,6 +21,10 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(NOTEBOOKS_DIR, exist_ok=True)
 
+# Directory for visualizations
+VISUALIZATIONS_DIR = os.path.join(DATA_DIR, "visualizations")
+os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
+
 # Huggingface cache dirs
 LARGE_DATASET_STORAGE_PATH = os.path.join(
     os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/datasets"
@@ -37,3 +41,5 @@ VG_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "vg")
 os.makedirs(VG_DIR, exist_ok=True)
 # When using local VG files, place the image_data.json file in the VG_DIR
 VG_METADATA_FILE = os.path.join(VG_DIR, "image_data.json")
+# This is the directory where the filtered VG/COCO dataset with captions will be stored
+VG_COCO_OVERLAP_DIR = os.path.join(VG_DIR, "vg_coco_overlap")
