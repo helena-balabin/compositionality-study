@@ -41,5 +41,9 @@ VG_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "vg")
 os.makedirs(VG_DIR, exist_ok=True)
 # When using local VG files, place the image_data.json file in the VG_DIR
 VG_METADATA_FILE = os.path.join(VG_DIR, "image_data.json")
+# File paths for objects and relationships
+VG_OBJECTS_FILE = os.path.join(VG_DIR, "data_release", "objects.json")
+VG_RELATIONSHIPS_FILE = os.path.join(VG_DIR, "data_release", "relationships.json")
 # This is the directory where the filtered VG/COCO dataset with captions will be stored
 VG_COCO_OVERLAP_DIR = os.path.join(VG_DIR, "vg_coco_overlap")
+VG_COCO_PREPROCESSED_TEXT_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_text")
