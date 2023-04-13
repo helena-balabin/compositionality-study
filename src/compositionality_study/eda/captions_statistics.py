@@ -30,8 +30,6 @@ def sent_len_histogram(
     :type vis_output_dir: str
     :param color: Color of the bars in the histogram, defaults to "#66C2A5"
     :type color: str
-    :return: None
-    :rtype: None
     """
     # Get the sentences and their lengths
     coco_vg_ds = datasets.load_from_disk(coco_vg_ds_dir)
@@ -40,7 +38,7 @@ def sent_len_histogram(
     sent_lens = [len(sent.split()) for sent in captions]
 
     # Set seaborn theme
-    plt.rcParams['font.family'] = ['sans-serif']
+    plt.rcParams['font.family'] = ['sans-serif']  # noqa
     sns.set_style("ticks")
 
     # Create the histogram
@@ -75,8 +73,6 @@ def dep_parse_tree_depth_histogram(
     :type vis_output_dir: str
     :param color: Color of the bars in the histogram, defaults to "#66C2A5"
     :type color: str
-    :return: None
-    :rtype: None
     """
     # Get the sentences
     coco_vg_ds = datasets.load_from_disk(coco_vg_ds_dir)
@@ -127,8 +123,6 @@ def sent_len_dep_depth_correlation(
     :type vis_output_dir: str
     :param color: Color of the bars in the histogram, defaults to "#66C2A5"
     :type color: str
-    :return: None
-    :rtype: None
     """
     # Get the sentences
     coco_vg_ds = datasets.load_from_disk(coco_vg_ds_dir)
