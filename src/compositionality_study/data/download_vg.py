@@ -89,15 +89,15 @@ def preprocess_local_vg_files_coco_overlap(
     # Get the COCO images that are in VG and have captions
     coco_ds = load_dataset(hf_coco_name, split="train", cache_dir=coco_cache_dir)
     coco_ids = set(coco_ds["cocoid"]).intersection(set(vg_ds["cocoid"]))
-    coco_ds = coco_ds.filter(lambda example: example["cocoid"] in coco_ids)
-    vg_ds = vg_ds.filter(lambda example: example["cocoid"] in coco_ids)
+    coco_ds = coco_ds.filter(lambda example: example["cocoid"] in coco_ids, num_proc=4)
+    vg_ds = vg_ds.filter(lambda example: example["cocoid"] in coco_ids, num_proc=4)
 
     # Merge the two datasets by converting them into dataframes and then merging them
     coco_df = coco_ds.to_pandas()
     vg_df = vg_ds.to_pandas()
     merged_df = pd.merge(coco_df, vg_df, on="cocoid")
     merged_ds = datasets.Dataset.from_pandas(merged_df)
-    merged_ds = merged_ds.filter(lambda example: len(example["sentences_raw"]) > 0)
+    merged_ds = merged_ds.filter(lambda example: len(example["sentences_raw"]) > 0, num_proc=4)
 
     # Save the dataset to disk
     merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_overlap"))
