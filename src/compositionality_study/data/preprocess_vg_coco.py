@@ -43,7 +43,7 @@ def add_text_properties(
     if save_dummy_subset:
         preprocessed_ds.select(
             list(range(dummy_subset_size))
-        ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_dummy"))
+        ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_text_dummy"))
 
 
 @click.group()
