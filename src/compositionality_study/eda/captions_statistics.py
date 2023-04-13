@@ -10,6 +10,7 @@ import spacy
 from tqdm import tqdm
 
 from compositionality_study.constants import VG_COCO_OVERLAP_DIR, VISUALIZATIONS_DIR
+from compositionality_study.utils import walk_tree
 
 
 @click.command()
@@ -109,25 +110,6 @@ def dep_parse_tree_depth_histogram(
     plt.savefig(os.path.join(vis_statistics_dir, "dep_parse_tree_depth_histogram.png"), dpi=300)
 
 
-def walk_tree(
-    node: spacy.tokens.token.Token,
-    depth: int,
-) -> int:
-    """Walk the dependency parse tree and return the maximum depth.
-
-    :param node: The current node in the tree
-    :type node: spacy.tokens.token.Token
-    :param depth: The current depth in the tree
-    :type depth: int
-    :return: The maximum depth in the tree
-    :rtype: int
-    """
-    if node.n_lefts + node.n_rights > 0:
-        return max(walk_tree(child, depth + 1) for child in node.children)
-    else:
-        return depth
-
-
 @click.command()
 @click.option("--coco_vg_ds_dir", type=str, default=VG_COCO_OVERLAP_DIR)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
@@ -137,7 +119,7 @@ def sent_len_dep_depth_correlation(
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#9B9ED4",
 ):
-    """Plot a joint plot of the sentence lengths and dependency parse tree depths for all COCO captions.
+    """Plot a scatter plot of the sentence lengths and dependency parse tree depths for all COCO captions.
 
     :param coco_vg_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
     :type coco_vg_ds_dir: str
@@ -166,8 +148,8 @@ def sent_len_dep_depth_correlation(
     plt.rcParams["font.family"] = ["sans-serif"]
     sns.set_style("ticks")
 
-    # Create a joint plot
-    sns.jointplot(x=depths, y=sent_lens, cmap=sns.light_palette(color, as_cmap=True), kind="kde")
+    # Create a scatter plot
+    sns.scatterplot(x=depths, y=sent_lens, color=color)
     plt.title("VG + COCO overlap: \n Sentence length vs. dependency parse tree depth")
     plt.xlabel("Dependency parse tree depth")
     plt.ylabel("Sentence length")
