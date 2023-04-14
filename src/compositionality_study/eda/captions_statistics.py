@@ -1,6 +1,7 @@
 """Run some basic statistics on the VG + COCO overlap captions."""
 # Imports
 import os
+from typing import List
 
 import click
 import datasets
@@ -9,7 +10,11 @@ import seaborn as sns
 import spacy
 from tqdm import tqdm
 
-from compositionality_study.constants import VG_COCO_OVERLAP_DIR, VISUALIZATIONS_DIR
+from compositionality_study.constants import (
+    VG_COCO_OVERLAP_DIR,
+    VG_COCO_PREP_TEXT_GRAPH_DIR,
+    VISUALIZATIONS_DIR,
+)
 from compositionality_study.utils import walk_tree
 
 
@@ -157,6 +162,55 @@ def sent_len_dep_depth_correlation(
     plt.savefig(os.path.join(vis_statistics_dir, "len_dep_correlation_plot.png"), dpi=300)
 
 
+@click.command()
+@click.option("--vg_coco_text_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
+@click.option("--columns", type=str, multiple=True, default=["sentence_length", "parse_tree_depth", "n_obj", "n_rel"])
+@click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
+@click.option("--color", type=str, default="#A1D99B")
+def text_graph_properties_corr(
+    vg_coco_text_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
+    columns: List[str] = ["sentence_length", "parse_tree_depth", "n_obj", "n_rel"],  # noqa
+    vis_output_dir: str = VISUALIZATIONS_DIR,
+    color: str = "#A1D99B",
+):
+    """Plot a pairplot of the text and graph properties of the VG + COCO overlap dataset.
+
+    :param vg_coco_text_graph_dir: The VG + COCO overlap dataset to plot the pairplot for
+    :type vg_coco_text_graph_dir: str
+    :param columns: The columns to plot the pairplot for,
+        defaults to ["sentence_length", "parse_tree_depth", "n_obj", "n_rel"]
+    :type columns: List[str]
+    :param vis_output_dir: Where to save the figures of the plots to, defaults to VISUALIZATIONS_DIR
+    :type vis_output_dir: str
+    :param color: Color of the points in the pairplot, defaults to "#6BAED6"
+    :type color: str
+    """
+    # Load the dataset and convert to pandas
+    vg_ds = datasets.load_from_disk(vg_coco_text_graph_dir)
+    vg_df = vg_ds.to_pandas()
+
+    # Set seaborn theme
+    plt.rcParams["font.family"] = ["sans-serif"]
+    sns.set_style("ticks")
+
+    # Create a pairplot
+    sns.pairplot(
+        vg_df[list(columns)],
+        kind="reg",
+        diag_kind="kde",
+        plot_kws={"color": color, "scatter_kws": {"s": 1}},
+        diag_kws={"color": color},
+    )
+    plt.tight_layout()
+
+    # Create the output directory
+    vis_statistics_dir = os.path.join(vis_output_dir, "statistics")
+    os.makedirs(vis_statistics_dir, exist_ok=True)
+
+    # Save the figure
+    plt.savefig(os.path.join(vis_statistics_dir, "text_graph_correlation_plot.png"), dpi=300)
+
+
 @click.group()
 def cli() -> None:
     """Generate basic statistics on the VG + COCO overlap captions dataset."""
@@ -166,4 +220,5 @@ if __name__ == "__main__":
     cli.add_command(sent_len_histogram)
     cli.add_command(dep_parse_tree_depth_histogram)
     cli.add_command(sent_len_dep_depth_correlation)
+    cli.add_command(text_graph_properties_corr)
     cli()

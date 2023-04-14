@@ -47,3 +47,4 @@ VG_RELATIONSHIPS_FILE = os.path.join(VG_DIR, "data_release", "relationships.json
 # This is the directory where the filtered VG/COCO dataset with captions will be stored
 VG_COCO_OVERLAP_DIR = os.path.join(VG_DIR, "vg_coco_overlap")
 VG_COCO_PREPROCESSED_TEXT_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_text")
+VG_COCO_PREP_TEXT_GRAPH_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_graph")
