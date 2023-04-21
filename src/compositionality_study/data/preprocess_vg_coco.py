@@ -1,11 +1,15 @@
 """Preprocesses the Visual Genome + COCO overlap dataset."""
 # Imports
 import os
+from typing import Any, Dict, List, Optional
 
 import click
+import networkx as nx
+import numpy as np
 import pandas as pd
 import spacy
 from datasets import Dataset, load_dataset, load_from_disk
+from tqdm import tqdm
 
 from compositionality_study.constants import (
     VG_COCO_OVERLAP_DIR,
@@ -89,42 +93,13 @@ def add_graph_properties(
     """
     # Load the dataset
     preprocessed_ds = load_from_disk(vg_coco_overlap_text_dir)
-    image_ids = set(preprocessed_ds["vg_image_id"])
+    image_ids = list(set(preprocessed_ds["vg_image_id"]))
     preprocessed_df = preprocessed_ds.to_pandas()
 
-    # Load the object and relationship files as hf datasets from json
-    vg_objects = load_dataset("json", data_files=vg_objects_file)
-    vg_relationships = load_dataset("json", data_files=vg_relationships_file)
+    # Get the graph characteristics
+    vg_graph_dict = determine_graph_complexity_measures(vg_objects_file, vg_relationships_file, image_ids)
+    vg_graph_df = pd.DataFrame(vg_graph_dict).rename(columns={"image_id": "vg_image_id"})
 
-    # Get the number of objects
-    # Filter for those objects and relationships that are in the VG + COCO overlap dataset
-    vg_objects_filtered = vg_objects.filter(
-        lambda example: "image_id" in example.keys() and example["image_id"] in image_ids,
-        num_proc=4,
-    )
-    vg_n_obj = vg_objects_filtered.map(
-        lambda example: example | {"n_obj": len(example["objects"])},
-        num_proc=4,
-    )
-    vg_n_obj = vg_n_obj.rename_column("image_id", "vg_image_id")
-    vg_n_obj = vg_n_obj.remove_columns(["objects", "image_url"])
-    vg_n_obj_df = pd.DataFrame(vg_n_obj["train"])
-
-    # Get the number of relationships
-    vg_relationships_filtered = vg_relationships.filter(
-        lambda example: "image_id" in example.keys() and example["image_id"] in image_ids,
-        num_proc=4,
-    )
-    vg_n_rel = vg_relationships_filtered.map(
-        lambda example: example | {"n_rel": len(example["relationships"])},
-        num_proc=4,
-    )
-    vg_n_rel = vg_n_rel.rename_column("image_id", "vg_image_id")
-    vg_n_rel = vg_n_rel.remove_columns(["relationships"])
-    vg_n_rel_df = pd.DataFrame(vg_n_rel["train"])
-
-    # Add the number of obj and rels by merging everything nicely with to_pandas and then back to hf datasets
-    vg_graph_df = pd.merge(vg_n_obj_df, vg_n_rel_df, on="vg_image_id")
     vg_graph_merged_ds = Dataset.from_pandas(pd.merge(preprocessed_df, vg_graph_df, on="vg_image_id"))
 
     # Save to disk
@@ -135,6 +110,67 @@ def add_graph_properties(
         vg_graph_merged_ds.select(
             list(range(dummy_subset_size))
         ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_graph_dummy"))
+
+
+def determine_graph_complexity_measures(
+    vg_objects_file: str = VG_OBJECTS_FILE,
+    vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
+    image_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Characterize the graph complexity of the VG + COCO overlap dataset for the given image ids.
+
+    :param vg_objects_file: Path to the file where the Visual Genome objects json is stored.
+    :type vg_objects_file: str
+    :param vg_relationships_file: Path to the file where the Visual Genome relationship json is stored.
+    :type vg_relationships_file: str
+    :param image_ids: Optional list of image ids to characterize the graph complexity for, defaults to None
+    :type image_ids: Optional[List[str]]
+    :return: List of dictionaries with the graph complexity measures and image id
+    :rtype: List[Dict[str, Any]]
+    """
+    # Load the object and relationship files from json
+    vg_objects = load_dataset("json", data_files=vg_objects_file, split="train")
+    vg_relationships = load_dataset("json", data_files=vg_relationships_file, split="train")
+    # Filter by image ids if given
+    if image_ids:
+        vg_objects = vg_objects.filter(lambda x: x["image_id"] in image_ids, num_proc=4)
+        vg_relationships = vg_relationships.filter(
+            lambda x: x["image_id"] in image_ids,
+            num_proc=4,
+        )
+
+    # Process each VG image/graph into a networkx graph
+    graph_measures = []
+    for obj, rel in tqdm(
+        zip(vg_objects, vg_relationships),
+        desc="Processing rels/objs as networkx graphs",
+        total=len(vg_objects),
+    ):
+        # Create the graph based on objects and relationships
+        graph = nx.Graph()
+        for o in obj["objects"]:
+            graph.add_node(o["object_id"])
+        for r in rel["relationships"]:
+            graph.add_edge(r["object"]["object_id"], r["subject"]["object_id"])
+
+        # Determine the characteristics + add the image id as well
+        measures = {
+            "image_id": obj["image_id"],
+            "avg_node_degree": np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0,
+            "avg_clustering_coefficient": nx.algorithms.approximation.average_clustering(
+                graph,
+                trials=1000,
+                seed=42,
+            ) if nx.number_of_nodes(graph) > 0 else 0,
+            "density": nx.density(graph),
+            "n_connected_components": nx.number_connected_components(graph),
+            "n_obj": len(obj["objects"]),
+            "n_rel": len(rel["relationships"]),
+        }
+        # Append them to the list
+        graph_measures.append(measures)
+
+    return graph_measures
 
 
 @click.group()
