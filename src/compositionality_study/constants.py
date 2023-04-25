@@ -48,3 +48,5 @@ VG_RELATIONSHIPS_FILE = os.path.join(VG_DIR, "data_release", "relationships.json
 VG_COCO_OVERLAP_DIR = os.path.join(VG_DIR, "vg_coco_overlap")
 VG_COCO_PREPROCESSED_TEXT_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_text")
 VG_COCO_PREP_TEXT_GRAPH_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_graph")
+# TODO change later
+VG_COCO_SELECTED_STIMULI_DIR = os.path.join(VG_DIR, "vg_coco_20_stimuli")
