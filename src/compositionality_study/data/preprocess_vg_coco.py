@@ -100,7 +100,11 @@ def add_graph_properties(
     vg_graph_dict = determine_graph_complexity_measures(vg_objects_file, vg_relationships_file, image_ids)
     vg_graph_df = pd.DataFrame(vg_graph_dict).rename(columns={"image_id": "vg_image_id"})
 
-    vg_graph_merged_ds = Dataset.from_pandas(pd.merge(preprocessed_df, vg_graph_df, on="vg_image_id"))
+    # Speed up the merge by setting the ids as index
+    preprocessed_df = preprocessed_df.set_index("vg_image_id")
+    vg_graph_df = vg_graph_df.set_index("vg_image_id")
+    # Merge the two datasets
+    vg_graph_merged_ds = Dataset.from_pandas(preprocessed_df.join(vg_graph_df))
 
     # Save to disk
     output_dir = os.path.split(vg_coco_overlap_text_dir)[0]
