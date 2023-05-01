@@ -4,6 +4,7 @@ import os
 from typing import Any, Dict
 
 import click
+import numpy as np
 from datasets import concatenate_datasets, load_from_disk
 from loguru import logger
 
@@ -106,6 +107,8 @@ def select_stimuli(
     # Load the dataset
     vg_ds = load_from_disk(vg_coco_text_graph_dir)
     logger.info(f"Loaded the preprocessed VG + COCO overlap dataset with {len(vg_ds)} entries.")
+    # Set a random seed for reproducibility
+    np.random.seed(42)
 
     # 1. Filter by sentence length (within a tolerance)
     vg_ds_s_len = vg_ds.filter(
@@ -163,10 +166,13 @@ def select_stimuli(
             filtered_ds = vg_ds_n_rel.filter(
                 lambda x: x["complexity"] == comp,
                 num_proc=4,
-            ).select(range(n_stimuli // 4))
+            )
             if len(filtered_ds) < n_stimuli // 4:
                 print(f"Not enough stimuli for the {comp} condition")
                 return
+            # Select the remaining stimuli randomly
+            random_indices = np.random.choice(len(filtered_ds), size=n_stimuli//4, replace=False)
+            filtered_ds = filtered_ds.select(random_indices)
             vg_n_stim.append(filtered_ds)
         except:  # noqa
             print(f"Not enough stimuli for the {comp} condition")
