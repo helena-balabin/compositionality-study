@@ -161,6 +161,7 @@ def determine_graph_complexity_measures(
         measures = {
             "image_id": obj["image_id"],
             "avg_node_degree": np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0,
+            "avg_node_connectivity": nx.algorithms.connectivity.average_node_connectivity(graph),
             "avg_clustering_coefficient": nx.algorithms.approximation.average_clustering(
                 graph,
                 trials=1000,
