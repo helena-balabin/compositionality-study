@@ -44,6 +44,8 @@ VG_METADATA_FILE = os.path.join(VG_DIR, "image_data.json")
 # File paths for objects and relationships
 VG_OBJECTS_FILE = os.path.join(VG_DIR, "data_release", "objects.json")
 VG_RELATIONSHIPS_FILE = os.path.join(VG_DIR, "data_release", "relationships.json")
+# Directory for object segmentation annotation files
+VG_COCO_OBJ_SEG_DIR = os.path.join(VG_DIR, "coco_annotations")
 # This is the directory where the filtered VG/COCO dataset with captions will be stored
 VG_COCO_OVERLAP_DIR = os.path.join(VG_DIR, "vg_coco_overlap")
 VG_COCO_PREPROCESSED_TEXT_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_text")
