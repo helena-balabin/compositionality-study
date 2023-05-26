@@ -8,15 +8,15 @@ import numpy as np
 from datasets import concatenate_datasets, load_from_disk
 from loguru import logger
 
-from compositionality_study.constants import VG_COCO_PREP_TEXT_GRAPH_DIR
+from compositionality_study.constants import VG_COCO_PREP_TEXT_IMG_SEG_DIR
 
 
 def map_conditions(
     example: Dict[str, Any],
     min_dep_parse_tree_depth: int = 5,
     max_dep_parse_tree_depth: int = 10,
-    min_n_rel: int = 10,
-    max_n_rel: int = 50,
+    min_n_obj_img_seg: int = 3,
+    max_n_obj_img_seg: int = 18,
 ) -> Dict:
     """Map the conditions (high/low textual complexity, high/low visual complexity) to the example.
 
@@ -27,10 +27,10 @@ def map_conditions(
     :type min_dep_parse_tree_depth: int
     :param max_dep_parse_tree_depth: The maximum dependency parse tree depth
     :type max_dep_parse_tree_depth: int
-    :param min_n_rel: The minimum number of relations
-    :type min_n_rel: int
-    :param max_n_rel: The maximum number of relations
-    :type max_n_rel: int
+    :param min_n_obj_img_seg: The minimum number of objects (image segmentation based)
+    :type min_n_obj_img_seg: int
+    :param max_n_obj_img_seg: The maximum number of objects (image segmentation based)
+    :type max_n_obj_img_seg: int
     :return: The example with the mapped conditions, i.e., extra features for the conditions
     :rtype: Dict
     """
@@ -39,48 +39,44 @@ def map_conditions(
     textual_complexity = "high" if example["parse_tree_depth"] >= middle_dep_parse_tree_depth else "low"
     example["textual_complexity"] = textual_complexity
 
-    # Map the graph complexity condition
-    middle_n_rel = (min_n_rel + max_n_rel) / 2
-    graph_complexity = "high" if example["n_rel"] >= middle_n_rel else "low"
-    example["graph_complexity"] = graph_complexity
+    # Map the visual complexity condition
+    middle_n_obj_seg = (min_n_obj_img_seg + max_n_obj_img_seg) / 2
+    img_seg_complexity = "high" if example["n_img_seg_obj"] >= middle_n_obj_seg else "low"
+    example["img_seg_complexity"] = img_seg_complexity
 
     # Combine the two
-    example["complexity"] = f"{textual_complexity}_text_{graph_complexity}_graph"
+    example["complexity"] = f"{textual_complexity}_text_{img_seg_complexity}_objseg"
 
     return example
 
 
 @click.command()
-@click.option("--vg_coco_text_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
-@click.option("--sent_len", type=int, default=20)
+@click.option("--vg_coco_text_img_seg_dir", type=str, default=VG_COCO_PREP_TEXT_IMG_SEG_DIR)
+@click.option("--sent_len", type=int, default=15)
 @click.option("--sent_len_tol", type=int, default=2)
 @click.option("--min_dep_parse_tree_depth", type=int, default=5)
 @click.option("--max_dep_parse_tree_depth", type=int, default=10)
 @click.option("--dep_tol", type=int, default=1)
-@click.option("--n_obj", type=int, default=20)
-@click.option("--n_obj_tol", type=int, default=2)
-@click.option("--min_n_rel", type=int, default=10)
-@click.option("--max_n_rel", type=int, default=20)
-@click.option("--rel_tol", type=int, default=2)
+@click.option("--min_n_obj_img_seg", type=int, default=3)
+@click.option("--max_n_obj_img_seg", type=int, default=18)
+@click.option("--obj_img_seg_tol", type=int, default=2)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
-    vg_coco_text_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
-    sent_len: int = 20,
+    vg_coco_text_img_seg_dir: str = VG_COCO_PREP_TEXT_IMG_SEG_DIR,
+    sent_len: int = 15,
     sent_len_tol: int = 2,
     min_dep_parse_tree_depth: int = 5,
     max_dep_parse_tree_depth: int = 10,
     dep_tol: int = 1,
-    n_obj: int = 20,
-    n_obj_tol: int = 2,
-    min_n_rel: int = 10,
-    max_n_rel: int = 20,
-    rel_tol: int = 2,
+    min_n_obj_img_seg: int = 3,
+    max_n_obj_img_seg: int = 18,
+    obj_img_seg_tol: int = 2,
     n_stimuli: int = 80,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
 
-    :param vg_coco_text_graph_dir: The preprocessed VG + COCO overlap dataset to select stimuli from
-    :type vg_coco_text_graph_dir: str
+    :param vg_coco_text_img_seg_dir: The preprocessed VG + COCO overlap dataset to select stimuli from
+    :type vg_coco_text_img_seg_dir: str
     :param sent_len: The sentence length to control for (controlled variable
     :type sent_len: int
     :param sent_len_tol: The tolerance for the sentence length (+- sent_len_tol within sent_len)
@@ -91,21 +87,17 @@ def select_stimuli(
     :type max_dep_parse_tree_depth: int
     :param dep_tol: The tolerance for the dependency parse tree depth
     :type dep_tol: int
-    :param n_obj: The number of objects to select stimuli for (controlled variable)
-    :type n_obj: int
-    :param n_obj_tol: The tolerance for the number of objects (+- n_obj_tol within n_obj)
-    :type n_obj_tol: int
-    :param min_n_rel: The min number of relationships to select stimuli for
-    :type min_n_rel: int
-    :param max_n_rel: The max number of relationships to select stimuli for
-    :type max_n_rel: int
-    :param rel_tol: The tolerance for the number of relationships
-    :type rel_tol: int
+    :param min_n_obj_img_seg: The min number of objects (image segmentation based) to select stimuli for
+    :type min_n_obj_img_seg: int
+    :param max_n_obj_img_seg: The max number of objects (image segmentation based) to select stimuli for
+    :type max_n_obj_img_seg: int
+    :param obj_img_seg_tol: The tolerance for the number of objects (image segmentation based)
+    :type obj_img_seg_tol: int
     :param n_stimuli: The number of stimuli to select, must be divisible by 4
     :type n_stimuli: int
     """
     # Load the dataset
-    vg_ds = load_from_disk(vg_coco_text_graph_dir)
+    vg_ds = load_from_disk(vg_coco_text_img_seg_dir)
     logger.info(f"Loaded the preprocessed VG + COCO overlap dataset with {len(vg_ds)} entries.")
     # Set a random seed for reproducibility
     np.random.seed(42)
@@ -130,40 +122,36 @@ def select_stimuli(
     logger.info(f"Filtered the dataset for dependency parse tree depths of either {min_dep_parse_tree_depth} or "
                 f"{max_dep_parse_tree_depth} within a tolerance of {dep_tol}, {len(vg_ds_dep_p)} entries remain.")
 
-    # 3. Filter by the number of objects (within a tolerance)
-    vg_ds_n_obj = vg_ds_dep_p.filter(
-        lambda x: abs(x["n_obj"] - n_obj) <= n_obj_tol,
-        num_proc=4,
-    )
-    logger.info(f"Controlled the dataset for a number of objects of {n_obj} within a tolerance of {n_obj_tol}, "
-                f"{len(vg_ds_n_obj)} entries remain.")
+    # 3. TODO filter by visual properties
 
-    # 4. Select by number of relationships
-    vg_ds_n_rel = vg_ds_n_obj.filter(
-        lambda x: abs(x["n_rel"] - max_n_rel) <= rel_tol or abs(
-            x["n_rel"] - min_n_rel
-        ) <= rel_tol,
+    # 4. Select by number of objects (image segmentation rather than scene graph) that match max and min
+    vg_ds_n_obj_img_seg = vg_ds_dep_p.filter(
+        lambda x: abs(x["n_img_seg_obj"] - max_n_obj_img_seg) <= obj_img_seg_tol or abs(
+            x["n_img_seg_obj"] - min_n_obj_img_seg
+        ) <= obj_img_seg_tol,
         num_proc=4,
     )
-    logger.info(f"Filtered the dataset for a number of relationships of either {min_n_rel} or {max_n_rel} within a "
-                f"tolerance of {rel_tol}, {len(vg_ds_n_rel)} many entries remain.")
+    logger.info(f"Filtered the dataset for a number of objects (img seg) of either {min_n_obj_img_seg} or "
+                f"{max_n_obj_img_seg} within a tolerance of {obj_img_seg_tol}, {len(vg_ds_n_obj_img_seg)} "
+                f"many entries remain.")
 
     # 5. Map the conditions to the examples
-    vg_ds_n_rel = vg_ds_n_rel.map(
+    vg_ds_n_obj_img_seg = vg_ds_n_obj_img_seg.map(
         lambda x: map_conditions(
             x,
             min_dep_parse_tree_depth=min_dep_parse_tree_depth,
             max_dep_parse_tree_depth=max_dep_parse_tree_depth,
-            min_n_rel=min_n_rel,
-            max_n_rel=max_n_rel,
+            min_n_obj_img_seg=min_n_obj_img_seg,
+            max_n_obj_img_seg=max_n_obj_img_seg,
         ),
         num_proc=4,
     )
+
     # 6. Select n_stimuli many stimuli, evenly distributed over the conditions
     vg_n_stim = []
-    for comp in ["low_text_low_graph", "low_text_high_graph", "high_text_low_graph", "high_text_high_graph"]:
+    for comp in ["low_text_low_objseg", "low_text_high_objseg", "high_text_low_objseg", "high_text_high_objseg"]:
         try:
-            filtered_ds = vg_ds_n_rel.filter(
+            filtered_ds = vg_ds_n_obj_img_seg.filter(
                 lambda x: x["complexity"] == comp,
                 num_proc=4,
             )
@@ -180,7 +168,7 @@ def select_stimuli(
     vg_ds_n_stimuli = concatenate_datasets(vg_n_stim)
 
     # Save the dataset
-    output_dir = os.path.split(vg_coco_text_graph_dir)[0]
+    output_dir = os.path.split(vg_coco_text_img_seg_dir)[0]
     vg_ds_n_stimuli.save_to_disk(
         os.path.join(
             output_dir,
