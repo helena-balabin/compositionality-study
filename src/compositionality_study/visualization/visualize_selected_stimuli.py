@@ -26,6 +26,9 @@ complexities = list(set([example["complexity"] for example in dataset]))
 # Create table-like layout
 col1, col2, col3, col4 = st.columns(4, gap="medium")
 
+# Retrieve the id column
+id_col = "cocoid" if "cocoid" in dataset.features else "id"
+
 for cell, comp in zip([col1, col2, col3, col4], complexities):
     with cell:
         header = comp.replace('_', ' ')  # noqa
@@ -40,7 +43,7 @@ for cell, comp in zip([col1, col2, col3, col4], complexities):
                 # Generate the dependency parse tree and display it
                 visualize_parser(
                     doc,
-                    key=f"{example['cocoid']}_parser_split_sents",
+                    key=f"{str(example[id_col])}_parser_split_sents",
                     displacy_options={"compact": True, "distance": 65},
                     title=None,
                 )
