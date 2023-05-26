@@ -9,6 +9,7 @@ import click
 import networkx as nx
 import numpy as np
 import pandas as pd
+import pydevd_pycharm
 import spacy
 from datasets import Dataset, load_dataset, load_from_disk
 from tqdm import tqdm
@@ -156,9 +157,9 @@ def add_image_segmentation_properties(
     # Merge the two datasets
     joined_df = preprocessed_df.join(coco_obj_seg_df)
     vg_img_seg_ds = Dataset.from_pandas(joined_df)
-    # Remove the index column
-    if "__index_level_0__" in vg_img_seg_ds.features:
-        vg_img_seg_ds = vg_img_seg_ds.remove_columns("__index_level_0__")
+    pydevd_pycharm.settrace('localhost', port=8223, stdoutToServer=True, stderrToServer=True)
+    # Rename the index column back to cocoid
+    vg_img_seg_ds = vg_img_seg_ds.rename_column("__index_level_0__", "cocoid")
 
     # Save to disk
     vg_img_seg_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg"))
