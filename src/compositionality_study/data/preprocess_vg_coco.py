@@ -156,6 +156,9 @@ def add_image_segmentation_properties(
     # Merge the two datasets
     joined_df = preprocessed_df.join(coco_obj_seg_df)
     vg_img_seg_ds = Dataset.from_pandas(joined_df)
+    # Remove the index column
+    if "__index_level_0__" in vg_img_seg_ds.features:
+        vg_img_seg_ds = vg_img_seg_ds.remove_columns("__index_level_0__")
 
     # Save to disk
     vg_img_seg_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg"))
