@@ -52,3 +52,9 @@ VG_COCO_PREPROCESSED_TEXT_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_text"
 VG_COCO_PREP_TEXT_GRAPH_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_graph")
 VG_COCO_PREP_TEXT_IMG_SEG_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_img_seg")
 VG_COCO_SELECTED_STIMULI_DIR = os.path.join(VG_DIR, "vg_coco_80_stimuli")
+
+# Directory for the image complexity models and outputs
+IC9000_MODEL_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or MODELS_DIR, "IC9600")
+IC9000_IMG_COM_OUTPUT_DIR = os.path.join(IC9000_MODEL_DIR, "img_com_output")
+IMG_DUMMY_DIR = os.path.join(DATA_DIR, "dummy_images")
+os.makedirs(IC9000_IMG_COM_OUTPUT_DIR, exist_ok=True)
