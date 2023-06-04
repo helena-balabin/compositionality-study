@@ -127,18 +127,9 @@ def infer_img_source(
         imgs = os.listdir(img_source)
 
     col_name = ""
-    # Filter for unique images and define a col name in the case of a dataset
+    # Define a col name in the case of a dataset
     if isinstance(imgs, Dataset):
         col_name = "cocoid" if "cocoid" in imgs.column_names else "__index_level_0__"
-
-        # Take only ONE entry per image_id (there are multiple entries per image_id) from the original dataset
-        unique_img = imgs.unique("vg_image_id")
-        filtered_imgs = []
-
-        for img_id in tqdm(unique_img, desc="Filtering for unique images"):
-            filtered_imgs.append(imgs.filter(lambda x: x["vg_image_id"] == img_id)[0])
-
-        imgs = filtered_imgs
 
     # Define a results dict
     results = {}
