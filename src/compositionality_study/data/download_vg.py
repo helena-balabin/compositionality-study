@@ -22,7 +22,6 @@ def hf_download_vg_coco_overlap(
 ):
     """Download the Visual Genome dataset from huggingface's datasets and filter for COCO overlap.
 
-
     :param cache_dir: Where to store the dataset
     :type cache_dir: str
     :param full_split: Whether to download the full split or a small subset, defaults to False
@@ -53,7 +52,7 @@ def preprocess_local_vg_files_coco_overlap(
     hf_coco_name: str = "Multimodal-Fatima/COCO_captions_train",
     coco_cache_dir: str = LARGE_DATASET_STORAGE_PATH,
     save_dummy_subset: bool = True,
-    dummy_subset_size: int = 1000,
+    dummy_subset_size: int = 5000,
     output_dir: str = VG_DIR,
 ):
     """Preprocess the local VG files to filter for COCO overlap to get the COCO captions.
