@@ -48,7 +48,7 @@ def add_text_properties(
     """
     vg_coco_ds = load_from_disk(vg_coco_overlap_dir)
     # Remove unnnecessary columns
-    vg_coco_ds = vg_coco_ds.remove_columns(["sentences_tokens", "sentences_sentid"])
+    vg_coco_ds = vg_coco_ds.remove_columns(["sentences_tokens", "sentences_sentid", "__index_level_0__"])
 
     # Flatten the dataset so that there is one caption per example
     vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=4)
@@ -75,9 +75,9 @@ def add_text_properties(
         return doc
 
     # Add dependency parse tree depth
-    nlp = spacy.load(spacy_model, disable=["ner", "tagger", "attribute_ruler", "lemmatizer", "tok2vec", "textcat"])
+    nlp = spacy.load(spacy_model)
     nlp.add_pipe("force_single_sentence", before="parser")
-    preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=4)
+    preprocessed_ds = preprocessed_ds.select(range(500)).map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=4)
 
     # Save to disk
     output_dir = os.path.split(vg_coco_overlap_dir)[0]

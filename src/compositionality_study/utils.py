@@ -29,17 +29,21 @@ def walk_tree_hf_ds(
     example: Dict[str, Any],
     nlp: spacy.lang,
 ) -> Dict[str, Any]:
-    """Walk the dependency parse tree and return the maximum depth.
+    """Walk the dependency parse tree and return the maximum depth as well as the number of verbs.
 
     :param example: A hf dataset example
     :type example: Dict[str, Any]
     :param nlp: Spacy pipeline to use, initialized using nlp = spacy.load("en_core_web_trf")
     :type nlp: spacy.lang
-    :return: The maximum depth in the tree
-    :rtype: int
+    :return: The maximum depth in the tree and the number of verbs
+    :rtype: Dict
     """
     doc = nlp(example["sentences_raw"])
-    return example | {"parse_tree_depth": walk_tree(next(doc.sents).root, 0)}
+    new_features = {
+        "parse_tree_depth": walk_tree(next(doc.sents).root, 0),
+        "n_verbs": len([token for token in doc if token.pos_ == "VERB"]),
+    }
+    return example | new_features
 
 
 def flatten_examples(
