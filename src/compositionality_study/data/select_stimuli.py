@@ -54,6 +54,7 @@ def map_conditions(
 @click.option("--vg_coco_text_img_seg_dir", type=str, default=VG_COCO_PREP_TEXT_IMG_SEG_DIR)
 @click.option("--sent_len", type=int, default=15)
 @click.option("--sent_len_tol", type=int, default=2)
+@click.option("--verbs", type=bool, default=True)
 @click.option("--min_dep_parse_tree_depth", type=int, default=5)
 @click.option("--max_dep_parse_tree_depth", type=int, default=10)
 @click.option("--dep_tol", type=int, default=1)
@@ -65,6 +66,7 @@ def select_stimuli(
     vg_coco_text_img_seg_dir: str = VG_COCO_PREP_TEXT_IMG_SEG_DIR,
     sent_len: int = 15,
     sent_len_tol: int = 2,
+    verbs: bool = True,
     min_dep_parse_tree_depth: int = 5,
     max_dep_parse_tree_depth: int = 10,
     dep_tol: int = 1,
@@ -81,6 +83,9 @@ def select_stimuli(
     :type sent_len: int
     :param sent_len_tol: The tolerance for the sentence length (+- sent_len_tol within sent_len)
     :type sent_len_tol: int
+    :param verbs: Whether to control for verbs (controlled variable), i.e., only select captions with verbs,
+        defaults to True
+    :type verbs: bool
     :param min_dep_parse_tree_depth: The min dependency parse tree depth to select stimuli for
     :type min_dep_parse_tree_depth: int
     :param max_dep_parse_tree_depth: The max dependency parse tree depth to select stimuli for
@@ -109,6 +114,13 @@ def select_stimuli(
     )
     logger.info(f"Controlled the dataset for a sentence length of {sent_len} within a tolerance of {sent_len_tol}, "
                 f"{len(vg_ds_s_len)} entries remain.")
+    # Also filter by verbs if specified
+    if verbs:
+        vg_ds_s_len = vg_ds_s_len.filter(
+            lambda x: x["n_verbs"] > 0,
+            num_proc=4,
+        )
+        logger.info(f"Controlled the dataset for captions with verbs, {len(vg_ds_s_len)} entries remain.")
 
     # 2. Select by dependency parse tree depth that match max and min
     vg_ds_dep_p = vg_ds_s_len.filter(
