@@ -217,13 +217,13 @@ def text_graph_properties_corr(
 @click.option("--spacy_model", type=str, default="en_core_web_sm")
 def check_captions_for_verbs(
     vg_coco_dir: str = VG_COCO_OVERLAP_DIR,
-    spacy_model: str = "en_core_web_sm",
+    spacy_model: str = "en_core_web_trf",
 ):
     """Check how many of the captions actually have a verb in them.
 
     :param vg_coco_dir: The VG + COCO overlap dataset to check the captions for verbs for
     :type vg_coco_dir: str
-    :param spacy_model: The spaCy model to use for POS tagging, defaults to "en_core_web_sm"
+    :param spacy_model: The spaCy model to use for POS tagging, defaults to "en_core_web_trf"
     :type spacy_model: str
     """
     # Load the dataset
