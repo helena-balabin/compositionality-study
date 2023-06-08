@@ -8,6 +8,7 @@ import datasets
 import matplotlib.pyplot as plt
 import seaborn as sns
 import spacy
+from loguru import logger
 from tqdm import tqdm
 
 from compositionality_study.constants import (
@@ -211,6 +212,41 @@ def text_graph_properties_corr(
     plt.savefig(os.path.join(vis_statistics_dir, "text_graph_correlation_plot.png"), dpi=300)
 
 
+@click.command()
+@click.option("--vg_coco_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--spacy_model", type=str, default="en_core_web_sm")
+def check_captions_for_verbs(
+    vg_coco_dir: str = VG_COCO_OVERLAP_DIR,
+    spacy_model: str = "en_core_web_sm",
+):
+    """Check how many of the captions actually have a verb in them.
+
+    :param vg_coco_dir: The VG + COCO overlap dataset to check the captions for verbs for
+    :type vg_coco_dir: str
+    :param spacy_model: The spaCy model to use for POS tagging, defaults to "en_core_web_sm"
+    :type spacy_model: str
+    """
+    # Load the dataset
+    vg_coco_ds = datasets.load_from_disk(vg_coco_dir)
+
+    # Get the captions
+    captions = vg_coco_ds["sentences_raw"]
+
+    # Check how many of the captions have a verb in them
+    nlp = spacy.load(spacy_model)
+    n_verbs = 0
+
+    for caption in tqdm(captions, desc="Checking captions for verbs"):
+        doc = nlp(caption)
+        if "VERB" in set(i.pos_ for i in doc):
+            n_verbs += 1
+
+    # Print the results
+    logger.info(f"{n_verbs/len(captions) * 100:.2f}% of the captions have a verb in them.")
+
+
+# TODO add function for exploring the IC scores
+
 @click.group()
 def cli() -> None:
     """Generate basic statistics on the VG + COCO overlap captions dataset."""
@@ -221,4 +257,5 @@ if __name__ == "__main__":
     cli.add_command(dep_parse_tree_depth_histogram)
     cli.add_command(sent_len_dep_depth_correlation)
     cli.add_command(text_graph_properties_corr)
+    cli.add_command(check_captions_for_verbs)
     cli()
