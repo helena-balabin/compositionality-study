@@ -12,6 +12,7 @@ import pandas as pd
 import pydevd_pycharm
 import spacy
 from datasets import Dataset, load_dataset, load_from_disk
+from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
@@ -25,10 +26,12 @@ from compositionality_study.utils import flatten_examples, walk_tree_hf_ds
 
 @click.command()
 @click.option("--vg_coco_overlap_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--spacy_model", type=str, default="en_core_web_trf")
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
 def add_text_properties(
     vg_coco_overlap_dir: str = VG_COCO_OVERLAP_DIR,
+    spacy_model: str = "en_core_web_trf",
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
 ):
@@ -36,6 +39,8 @@ def add_text_properties(
 
     :param vg_coco_overlap_dir: Path to the directory where the Visual Genome + COCO overlap dataset is stored.
     :type vg_coco_overlap_dir: str
+    :param spacy_model: Which spacy model to use, defaults to "en_core_web_trf" (transformer model!)
+    :type spacy_model: str
     :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
     :type save_dummy_subset: bool
     :param dummy_subset_size: Size of the dummy subset, defaults to 1000
@@ -53,8 +58,25 @@ def add_text_properties(
         lambda example: example | {"sentence_length": len(example["sentences_raw"].split())}, num_proc=4,
     )
 
+    @Language.component("force_single_sentence")
+    def one_sentence_per_doc(
+        doc: spacy.tokens.Doc,
+    ) -> spacy.tokens.Doc:
+        """Force the document to be one sentence.
+
+        :param doc: The document to force to be one sentence
+        :type doc: spacy.tokens.Doc
+        :return: The document with one sentence
+        :rtype: spacy.tokens.Doc
+        """
+        doc[0].sent_start = True
+        for i in range(1, len(doc)):
+            doc[i].sent_start = False
+        return doc
+
     # Add dependency parse tree depth
-    nlp = spacy.load("en_core_web_sm")
+    nlp = spacy.load(spacy_model, disable=["ner", "tagger", "attribute_ruler", "lemmatizer", "tok2vec", "textcat"])
+    nlp.add_pipe("force_single_sentence", before="parser")
     preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=4)
 
     # Save to disk

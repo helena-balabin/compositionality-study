@@ -16,7 +16,7 @@ from compositionality_study.constants import VG_COCO_SELECTED_STIMULI_DIR
 st.set_page_config(layout="wide")
 
 # Load a spacy model to display the dependency trees
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_trf")
 
 # Load the dataset
 dataset = load_from_disk(VG_COCO_SELECTED_STIMULI_DIR)

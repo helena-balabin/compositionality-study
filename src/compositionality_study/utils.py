@@ -33,7 +33,7 @@ def walk_tree_hf_ds(
 
     :param example: A hf dataset example
     :type example: Dict[str, Any]
-    :param nlp: Spacy pipeline to use, initialized using nlp = spacy.load("en_core_web_sm")
+    :param nlp: Spacy pipeline to use, initialized using nlp = spacy.load("en_core_web_trf")
     :type nlp: spacy.lang
     :return: The maximum depth in the tree
     :rtype: int

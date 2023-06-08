@@ -86,8 +86,8 @@ def dep_parse_tree_depth_histogram(
     captions = [sent for sent_list in captions_nested for sent in sent_list]
 
     # Get the dependency parse tree depths
-    # You might need to run `python -m spacy download en_core_web_sm` to download the model before
-    nlp = spacy.load("en_core_web_sm")
+    # You might need to run `python -m spacy download en_core_web_trf` to download the model before
+    nlp = spacy.load("en_core_web_trf")
     depths = []
     for sentence in tqdm(captions, desc="Determing dependency parse tree depths"):
         doc = nlp(sentence)
@@ -137,8 +137,8 @@ def sent_len_dep_depth_correlation(
 
     # Get their sentence lengths and dep parse tree depths
     sent_lens = [len(sent.split()) for sent in captions]
-    # You might need to run `python -m spacy download en_core_web_sm` to download the model before
-    nlp = spacy.load("en_core_web_sm")
+    # You might need to run `python -m spacy download en_core_web_trf` to download the model before
+    nlp = spacy.load("en_core_web_trf")
     depths = []
     for sentence in tqdm(captions, desc="Determing dependency parse tree depths"):
         doc = nlp(sentence)
@@ -214,7 +214,7 @@ def text_graph_properties_corr(
 
 @click.command()
 @click.option("--vg_coco_dir", type=str, default=VG_COCO_OVERLAP_DIR)
-@click.option("--spacy_model", type=str, default="en_core_web_sm")
+@click.option("--spacy_model", type=str, default="en_core_web_trf")
 def check_captions_for_verbs(
     vg_coco_dir: str = VG_COCO_OVERLAP_DIR,
     spacy_model: str = "en_core_web_trf",
