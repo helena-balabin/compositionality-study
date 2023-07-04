@@ -1,6 +1,6 @@
 """Preprocesses the Visual Genome + COCO overlap dataset."""
-import json
 # Imports
+import json
 import os
 from collections import Counter
 from typing import Any, Dict, List, Optional
@@ -9,17 +9,20 @@ import click
 import networkx as nx
 import numpy as np
 import pandas as pd
-import pydevd_pycharm
 import spacy
 from datasets import Dataset, load_dataset, load_from_disk
+from nltk.corpus import wordnet as wn
 from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
-    VG_COCO_OBJ_SEG_DIR, VG_COCO_OVERLAP_DIR,
+    VG_COCO_OBJ_SEG_DIR,
+    VG_COCO_OVERLAP_DIR,
     VG_COCO_PREPROCESSED_TEXT_DIR,
-    VG_COCO_PREP_TEXT_GRAPH_DIR, VG_OBJECTS_FILE,
+    VG_COCO_PREP_TEXT_GRAPH_DIR,
+    VG_OBJECTS_FILE,
     VG_RELATIONSHIPS_FILE,
+    WN_EXCLUDED_CATEGORIES,
 )
 from compositionality_study.utils import flatten_examples, walk_tree_hf_ds
 
@@ -29,6 +32,31 @@ from compositionality_study.utils import flatten_examples, walk_tree_hf_ds
 @click.option("--spacy_model", type=str, default="en_core_web_trf")
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
+def add_text_properties_wrapper(
+    vg_coco_overlap_dir: str = VG_COCO_OVERLAP_DIR,
+    spacy_model: str = "en_core_web_trf",
+    save_dummy_subset: bool = True,
+    dummy_subset_size: int = 1000,
+):
+    """Wrapper for the add_text_properties function.
+
+    :param vg_coco_overlap_dir: Path to the directory where the Visual Genome + COCO overlap dataset is stored.
+    :type vg_coco_overlap_dir: str
+    :param spacy_model: Which spacy model to use, defaults to "en_core_web_trf" (transformer model)
+    :type spacy_model: str
+    :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
+    :type save_dummy_subset: bool
+    :param dummy_subset_size: Size of the dummy subset, defaults to 1000
+    :type dummy_subset_size: int
+    """
+    add_text_properties(
+        vg_coco_overlap_dir=vg_coco_overlap_dir,
+        spacy_model=spacy_model,
+        save_dummy_subset=save_dummy_subset,
+        dummy_subset_size=dummy_subset_size,
+    )
+
+
 def add_text_properties(
     vg_coco_overlap_dir: str = VG_COCO_OVERLAP_DIR,
     spacy_model: str = "en_core_web_trf",
@@ -60,8 +88,8 @@ def add_text_properties(
 
     @Language.component("force_single_sentence")
     def one_sentence_per_doc(
-        doc: spacy.tokens.Doc,
-    ) -> spacy.tokens.Doc:
+        doc: spacy.tokens.Doc,  # noqa
+    ) -> spacy.tokens.Doc:  # noqa
         """Force the document to be one sentence.
 
         :param doc: The document to force to be one sentence
@@ -95,6 +123,36 @@ def add_text_properties(
 @click.option("--vg_relationships_file", type=str, default=VG_RELATIONSHIPS_FILE)
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
+def add_graph_properties_wrapper(
+    vg_coco_overlap_text_dir: str = VG_COCO_PREPROCESSED_TEXT_DIR,
+    vg_objects_file: str = VG_OBJECTS_FILE,
+    vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
+    save_dummy_subset: bool = True,
+    dummy_subset_size: int = 1000,
+):
+    """Wrapper for the add_graph_properties function.
+
+    :param vg_coco_overlap_text_dir: Path to the directory where the Visual Genome + COCO overlap dataset with text
+        properties is stored.
+    :type vg_coco_overlap_text_dir: str
+    :param vg_objects_file: Path to the file where the Visual Genome objects json is stored.
+    :type vg_objects_file: str
+    :param vg_relationships_file: Path to the file where the Visual Genome relationship json is stored.
+    :type vg_relationships_file: str
+    :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
+    :type save_dummy_subset: bool
+    :param dummy_subset_size: Size of the dummy subset, defaults to 1000
+    :type dummy_subset_size: int
+    """
+    add_graph_properties(
+        vg_coco_overlap_text_dir=vg_coco_overlap_text_dir,
+        vg_objects_file=vg_objects_file,
+        vg_relationships_file=vg_relationships_file,
+        save_dummy_subset=save_dummy_subset,
+        dummy_subset_size=dummy_subset_size,
+    )
+
+
 def add_graph_properties(
     vg_coco_overlap_text_dir: str = VG_COCO_PREPROCESSED_TEXT_DIR,
     vg_objects_file: str = VG_OBJECTS_FILE,
@@ -146,6 +204,32 @@ def add_graph_properties(
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
 @click.option("--output_dir", type=str, default=os.path.split(VG_COCO_OVERLAP_DIR)[0])
+def add_image_segmentation_properties_wrapper(
+    coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    save_dummy_subset: bool = True,
+    dummy_subset_size: int = 1000,
+    output_dir: str = os.path.split(VG_COCO_OVERLAP_DIR)[0],
+):
+    """Wrapper for the add_image_segmentation_properties function.
+
+    :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
+    :type coco_obj_seg_dir: str
+    :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
+    :type save_dummy_subset: bool
+    :param dummy_subset_size: Size of the dummy subset, defaults to 1000
+    :type dummy_subset_size: int
+    :param output_dir: Directory where the output dataset should be stored, defaults to
+        os.path.split(VG_COCO_OVERLAP_DIR)[0]
+    :type output_dir: str
+    """
+    add_image_segmentation_properties(
+        coco_obj_seg_dir=coco_obj_seg_dir,
+        save_dummy_subset=save_dummy_subset,
+        dummy_subset_size=dummy_subset_size,
+        output_dir=output_dir,
+    )
+
+
 def add_image_segmentation_properties(
     vg_coco_overlap_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
@@ -179,7 +263,6 @@ def add_image_segmentation_properties(
     # Merge the two datasets
     joined_df = preprocessed_df.join(coco_obj_seg_df)
     vg_img_seg_ds = Dataset.from_pandas(joined_df)
-    pydevd_pycharm.settrace('localhost', port=8223, stdoutToServer=True, stderrToServer=True)
     # Rename the index column back to cocoid
     vg_img_seg_ds = vg_img_seg_ds.rename_column("__index_level_0__", "cocoid")
 
@@ -233,6 +316,14 @@ def determine_graph_complexity_measures(
         for r in rel["relationships"]:
             graph.add_edge(r["object"]["object_id"], r["subject"]["object_id"])
 
+        # Count the number of (action) verbs in the image by check for predicate synsets that are (action) verbs
+        # One might need to install wordnet via nltk for this: nltk.download('wordnet')
+        all_verbs = [
+            r for r in rel["relationships"] if len(r["synsets"]) > 0 and ".v." in r["synsets"][0]
+        ]
+        # Exlcude static verbs (e.g. be, have, ...)
+        action_verbs = [v for v in all_verbs if wn.synset(v["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES]
+
         # Determine the characteristics + add the image id as well
         measures = {
             "image_id": obj["image_id"],
@@ -249,6 +340,8 @@ def determine_graph_complexity_measures(
             "n_connected_components": nx.number_connected_components(graph),
             "n_obj": len(obj["objects"]),
             "n_rel": len(rel["relationships"]),
+            "n_verbs": len(all_verbs),
+            "n_action_verbs": len(action_verbs),
         }
         # Append them to the list
         graph_measures.append(measures)
@@ -296,7 +389,7 @@ def cli() -> None:
 
 
 if __name__ == "__main__":
-    cli.add_command(add_text_properties)
-    cli.add_command(add_graph_properties)
-    cli.add_command(add_image_segmentation_properties)
+    cli.add_command(add_text_properties_wrapper)
+    cli.add_command(add_graph_properties_wrapper)
+    cli.add_command(add_image_segmentation_properties_wrapper)
     cli()

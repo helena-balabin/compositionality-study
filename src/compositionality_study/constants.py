@@ -58,3 +58,7 @@ IC9000_MODEL_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or MODELS_DIR, "
 IC9000_IMG_COM_OUTPUT_DIR = os.path.join(IC9000_MODEL_DIR, "img_com_output")
 IMG_DUMMY_DIR = os.path.join(DATA_DIR, "dummy_images")
 os.makedirs(IC9000_IMG_COM_OUTPUT_DIR, exist_ok=True)
+
+# Excluded WordNet verb synsets for action-based filtering of relationships
+WN_EXCLUDED_CATEGORIES = ["verb.possession", "verb.body", "verb.stative"]  # "verb.contact", "verb.change",
+# "verb.weather"
