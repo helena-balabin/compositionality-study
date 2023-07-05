@@ -167,12 +167,12 @@ def sent_len_dep_depth_correlation(
 @click.option("--vg_coco_text_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
 @click.option("--columns", type=str, multiple=True, default=["sentence_length", "parse_tree_depth", "n_obj", "n_rel"])
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
-@click.option("--color", type=str, default="#A1D99B")
-def text_graph_properties_corr(
+@click.option("--color", type=str, default="#6C8EBF")
+def all_properties_corr(
     vg_coco_text_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
     columns: List[str] = ["sentence_length", "parse_tree_depth", "n_obj", "n_rel"],  # noqa
     vis_output_dir: str = VISUALIZATIONS_DIR,
-    color: str = "#A1D99B",
+    color: str = "#6C8EBF",
 ):
     """Plot a pairplot of the text and graph properties of the VG + COCO overlap dataset.
 
@@ -195,7 +195,7 @@ def text_graph_properties_corr(
     sns.set_style("ticks")
 
     # Create a pairplot
-    sns.pairplot(
+    pairplot = sns.pairplot(
         vg_df[list(columns)],
         kind="reg",
         diag_kind="kde",
@@ -204,12 +204,21 @@ def text_graph_properties_corr(
     )
     plt.tight_layout()
 
+    # Calculate correlation coefficients
+    correlation_matrix = vg_df[list(columns)].corr()
+
+    # Add correlation coefficients as annotations
+    for i, (ax_row, correlation_row) in enumerate(zip(pairplot.axes, correlation_matrix.values)):
+        for j, (ax, correlation) in enumerate(zip(ax_row, correlation_row)):
+            if i != j:
+                ax.annotate(f"r = {correlation:.2f}", (0.5, 0.9), xycoords='axes fraction', ha='center', fontsize=10)
+
     # Create the output directory
     vis_statistics_dir = os.path.join(vis_output_dir, "statistics")
     os.makedirs(vis_statistics_dir, exist_ok=True)
 
     # Save the figure
-    plt.savefig(os.path.join(vis_statistics_dir, "text_graph_correlation_plot.png"), dpi=300)
+    plt.savefig(os.path.join(vis_statistics_dir, "properties_correlation_plot.png"), dpi=300)
 
 
 @click.command()
@@ -245,8 +254,6 @@ def check_captions_for_verbs(
     logger.info(f"{n_verbs/len(captions) * 100:.2f}% of the captions have a verb in them.")
 
 
-# TODO add function for exploring the IC scores
-
 @click.group()
 def cli() -> None:
     """Generate basic statistics on the VG + COCO overlap captions dataset."""
@@ -256,6 +263,6 @@ if __name__ == "__main__":
     cli.add_command(sent_len_histogram)
     cli.add_command(dep_parse_tree_depth_histogram)
     cli.add_command(sent_len_dep_depth_correlation)
-    cli.add_command(text_graph_properties_corr)
+    cli.add_command(all_properties_corr)
     cli.add_command(check_captions_for_verbs)
     cli()
