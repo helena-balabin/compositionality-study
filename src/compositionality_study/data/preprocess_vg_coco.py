@@ -93,11 +93,11 @@ def add_text_properties(
     vg_coco_ds = vg_coco_ds.remove_columns(["sentences_tokens", "sentences_sentid", "__index_level_0__"])
 
     # Flatten the dataset so that there is one caption per example
-    vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=4)
+    vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=24)
 
     # Add sentence length
     preprocessed_ds = vs_coco_ds_flattened.map(
-        lambda example: example | {"sentence_length": len(example["sentences_raw"].split())}, num_proc=4,
+        lambda example: example | {"sentence_length": len(example["sentences_raw"].split())}, num_proc=24,
     )
 
     @Language.component("force_single_sentence")
@@ -119,7 +119,7 @@ def add_text_properties(
     # Add dependency parse tree depth
     nlp = spacy.load(spacy_model)
     nlp.add_pipe("force_single_sentence", before="parser")
-    preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=4)
+    preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=24)
 
     # Save to disk
     if save_to_disk:
