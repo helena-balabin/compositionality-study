@@ -220,7 +220,7 @@ def add_graph_properties(
 
     # Save to disk
     if save_to_disk:
-        output_dir = os.path.split(vg_coco_overlap_text)[0]
+        output_dir = os.path.split(vg_coco_overlap_text)[0] if isinstance(vg_coco_overlap_text, str) else VG_DIR
         vg_graph_merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_graph"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
@@ -312,7 +312,8 @@ def add_image_segmentation_properties(
     joined_df = preprocessed_df.join(coco_obj_seg_df)
     vg_img_seg_ds = Dataset.from_pandas(joined_df)
     # Rename the index column back to cocoid
-    vg_img_seg_ds = vg_img_seg_ds.rename_column("__index_level_0__", "cocoid")
+    if "__index_level_0__" in vg_img_seg_ds.column_names:
+        vg_img_seg_ds = vg_img_seg_ds.rename_column("__index_level_0__", "cocoid")
 
     # Save to disk
     if save_to_disk:
