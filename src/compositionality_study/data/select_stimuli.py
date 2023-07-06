@@ -57,11 +57,11 @@ def map_conditions(
 @click.option("--verbs", type=bool, default=True)
 @click.option("--img_comp", type=float, default=0.5)
 @click.option("--img_comp_tol", type=float, default=0.1)
-@click.option("--min_dep_parse_tree_depth", type=int, default=5)
+@click.option("--min_dep_parse_tree_depth", type=int, default=3)
 @click.option("--max_dep_parse_tree_depth", type=int, default=10)
 @click.option("--dep_tol", type=int, default=1)
-@click.option("--min_n_action_verbs", type=int, default=2)
-@click.option("--max_n_action_verbs", type=int, default=7)
+@click.option("--min_n_action_verbs", type=int, default=1)
+@click.option("--max_n_action_verbs", type=int, default=8)
 @click.option("--action_verbs_tol", type=int, default=1)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
@@ -71,11 +71,11 @@ def select_stimuli(
     verbs: bool = True,
     img_comp: float = 0.5,
     img_comp_tol: float = 0.1,
-    min_dep_parse_tree_depth: int = 5,
+    min_dep_parse_tree_depth: int = 3,
     max_dep_parse_tree_depth: int = 10,
     dep_tol: int = 1,
-    min_n_action_verbs: int = 2,
-    max_n_action_verbs: int = 7,
+    min_n_action_verbs: int = 1,
+    max_n_action_verbs: int = 8,
     action_verbs_tol: int = 1,
     n_stimuli: int = 80,
 ):
