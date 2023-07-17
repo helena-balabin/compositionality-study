@@ -58,6 +58,8 @@ def map_conditions(
 @click.option("--verbs", type=bool, default=True)
 @click.option("--img_comp", type=float, default=0.5)
 @click.option("--img_comp_tol", type=float, default=0.1)
+@click.option("--asp_min", type=float, default=1.0)
+@click.option("--asp_max", type=float, default=2.0)
 @click.option("--min_dep_parse_tree_depth", type=int, default=3)
 @click.option("--max_dep_parse_tree_depth", type=int, default=10)
 @click.option("--dep_tol", type=int, default=1)
@@ -72,6 +74,8 @@ def select_stimuli(
     verbs: bool = True,
     img_comp: float = 0.5,
     img_comp_tol: float = 0.1,
+    asp_min: float = 1.0,
+    asp_max: float = 2.0,
     min_dep_parse_tree_depth: int = 3,
     max_dep_parse_tree_depth: int = 10,
     dep_tol: int = 1,
@@ -95,6 +99,10 @@ def select_stimuli(
     :type img_comp: float
     :param img_comp_tol: The tolerance for the image complexity (+- img_comp_tol within img_comp), defaults to 0.1
     :type img_comp_tol: float
+    :param asp_min: The min aspect ratio of the images to select stimuli for, defaults to 1.0
+    :type asp_min: float
+    :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 2.0
+    :type asp_max: float
     :param min_dep_parse_tree_depth: The min dependency parse tree depth to select stimuli for
     :type min_dep_parse_tree_depth: int
     :param max_dep_parse_tree_depth: The max dependency parse tree depth to select stimuli for
@@ -140,11 +148,18 @@ def select_stimuli(
     )
     logger.info(f"Controlled the dataset for an image complexity of {img_comp} within a tolerance of {img_comp_tol}, "
                 f"{len(vg_ds)} entries remain.")
-    # Also filter by aspect ratio of the images (only horizontal images)
-    vg_ds = vg_ds.filter(
-        lambda x: get_image_aspect_ratio_from_local_path(x["filepath"]) > 1,
-        num_proc=24,
-    )
+    # Also filter by aspect ratio of the images (e.g., only horizontal images)
+    if "aspect_ratio" in vg_ds.features:
+        vg_ds = vg_ds.filter(
+            lambda x: asp_min <= x["aspect_ratio"] <= asp_max,
+            num_proc=24,
+        )
+    else:
+        vg_ds = vg_ds.filter(
+            lambda x: asp_min <= get_image_aspect_ratio_from_local_path(x["filepath"]) <= asp_max,
+            num_proc=24,
+        )
+    logger.info(f"Controlled the dataset the aspect ratio of the images, {len(vg_ds)} entries remain.")
 
     # 3. Select by dependency parse tree depth that match max and min
     vg_ds = vg_ds.filter(
