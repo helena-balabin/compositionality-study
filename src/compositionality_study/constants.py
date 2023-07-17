@@ -41,7 +41,7 @@ VG_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "vg")
 os.makedirs(VG_DIR, exist_ok=True)
 # When using local VG files, place the image_data.json file in the VG_DIR
 VG_METADATA_FILE = os.path.join(VG_DIR, "image_data.json")
-VG_IMAGE_DIR = os.path.join(VG_DIR, "VG_100K")
+VG_IMAGE_DIR = os.path.join(VG_DIR, "coco_images")
 # File paths for objects and relationships
 VG_OBJECTS_FILE = os.path.join(VG_DIR, "data_release", "objects.json")
 VG_RELATIONSHIPS_FILE = os.path.join(VG_DIR, "data_release", "relationships.json")
