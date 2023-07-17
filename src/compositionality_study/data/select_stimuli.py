@@ -139,8 +139,6 @@ def select_stimuli(
         )
         logger.info(f"Controlled the dataset for captions with verbs, {len(vg_ds)} entries remain.")
 
-    import pydevd_pycharm
-    pydevd_pycharm.settrace('localhost', port=8223, stdoutToServer=True, stderrToServer=True)
     # 2. Filter by image complexity (within a tolerance)
     vg_ds = vg_ds.filter(
         lambda x: abs(x["ic_score"] - img_comp) <= img_comp_tol,
