@@ -1,13 +1,19 @@
 """Utils for the compositionality project."""
+import os
 # Imports
 from typing import Any, Dict, List
 
 import numpy as np
 import spacy
+import requests
+from PIL import Image
+from io import BytesIO
+
+from compositionality_study.constants import VG_IMAGE_DIR
 
 
 def walk_tree(
-    node: spacy.tokens.token.Token,
+    node: spacy.tokens.token.Token,  # noqa
     depth: int,
 ) -> int:
     """Walk the dependency parse tree and return the maximum depth.
@@ -27,7 +33,7 @@ def walk_tree(
 
 def walk_tree_hf_ds(
     example: Dict[str, Any],
-    nlp: spacy.lang,
+    nlp: spacy.lang,  # noqa
 ) -> Dict[str, Any]:
     """Walk the dependency parse tree and return the maximum depth as well as the number of verbs.
 
@@ -67,3 +73,41 @@ def flatten_examples(
         else:
             flattened_data[key] = np.repeat(value, number_of_sentences).tolist()
     return flattened_data
+
+
+def get_image_aspect_ratio_from_url(
+    url: str,
+) -> float:
+    """Get the aspect ratio of an image from a URL.
+
+    :param url: The URL of the image
+    :type url: str
+    :return: The aspect ratio of the image, greater than 1 means the image is horizontal (i.e., wider than it is tall)
+    :rtype: float
+    """
+    response = requests.get(url)
+    image_bytes = BytesIO(response.content)
+
+    with Image.open(image_bytes) as img:
+        width, height = img.size
+        aspect_ratio = width / height
+        return aspect_ratio
+
+
+def get_image_aspect_ratio_from_local_path(
+    file_path: str,
+    base_path: str = VG_IMAGE_DIR,
+) -> float:
+    """Get the aspect ratio of an image from a local path.
+
+    :param file_path: The path to the image
+    :type file_path: str
+    :param base_path: The base path to the directory containing all the images
+    :type base_path: str
+    :return: The aspect ratio of the image, greater than 1 means the image is horizontal (i.e., wider than it is tall)
+    :rtype: float
+    """
+    with Image.open(os.path.join(base_path, file_path)) as img:
+        width, height = img.size
+        aspect_ratio = width / height
+        return aspect_ratio

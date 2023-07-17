@@ -9,6 +9,7 @@ from datasets import concatenate_datasets, load_from_disk
 from loguru import logger
 
 from compositionality_study.constants import VG_COCO_PREP_TEXT_IMG_SEG_DIR
+from compositionality_study.utils import get_image_aspect_ratio_from_local_path
 
 
 def map_conditions(
@@ -130,6 +131,8 @@ def select_stimuli(
         )
         logger.info(f"Controlled the dataset for captions with verbs, {len(vg_ds)} entries remain.")
 
+    import pydevd_pycharm
+    pydevd_pycharm.settrace('localhost', port=8223, stdoutToServer=True, stderrToServer=True)
     # 2. Filter by image complexity (within a tolerance)
     vg_ds = vg_ds.filter(
         lambda x: abs(x["ic_score"] - img_comp) <= img_comp_tol,
@@ -137,6 +140,11 @@ def select_stimuli(
     )
     logger.info(f"Controlled the dataset for an image complexity of {img_comp} within a tolerance of {img_comp_tol}, "
                 f"{len(vg_ds)} entries remain.")
+    # Also filter by aspect ratio of the images (only horizontal images)
+    vg_ds = vg_ds.filter(
+        lambda x: get_image_aspect_ratio_from_local_path(x["filepath"]) > 1,
+        num_proc=24,
+    )
 
     # 3. Select by dependency parse tree depth that match max and min
     vg_ds = vg_ds.filter(
