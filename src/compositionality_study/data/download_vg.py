@@ -76,7 +76,12 @@ def preprocess_local_vg_files_coco_overlap(
     with open(vg_metadata_file, "r") as f:
         vg_metadata = json.load(f)
     vg = [
-        {"cocoid": m["coco_id"], "vg_image_id": m["image_id"], "vg_url": m["url"]}
+        {
+            "cocoid": m["coco_id"],
+            "vg_image_id": m["image_id"],
+            "vg_url": m["url"],
+            "aspect_ratio": m["width"] / m["height"],
+        }
         for m in vg_metadata if m["coco_id"] is not None
     ]
     vg_ds = datasets.Dataset.from_pandas(pd.DataFrame(data=vg))
