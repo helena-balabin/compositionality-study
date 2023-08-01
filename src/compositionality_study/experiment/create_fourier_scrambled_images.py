@@ -6,6 +6,7 @@ import numpy as np
 def fft_phase_scrambling_channel(
     channel: np.ndarray,
     avg_phase: np.ndarray,
+    random_seed: int = 42,
 ) -> np.ndarray:
     """Apply FFT phase scrambling to one channel of an image, taking the avg phase spectrum of the image into account.
 
@@ -13,6 +14,8 @@ def fft_phase_scrambling_channel(
     :type channel: np.ndarray
     :param avg_phase: The average phase spectrum of the image.
     :type avg_phase: np.ndarray
+    :param random_seed: The random seed to use for reproducibility.
+    :type random_seed: int
     :return: The scrambled channel.
     :rtype: np.ndarray
     """
@@ -23,7 +26,7 @@ def fft_phase_scrambling_channel(
     phase_channel = np.angle(fft_channel)
 
     # Apply a random phase offset to each pixel in the frequency domain
-    np.random.seed(42)  # For reproducibility, change the seed for different results
+    np.random.seed(random_seed)  # For reproducibility, change the seed for different results
     phase_offset = 2 * np.pi * np.random.rand(*phase_channel.shape)
     phase_channel = np.angle(np.exp(1j * (phase_channel - avg_phase) + 1j * phase_offset))
 
