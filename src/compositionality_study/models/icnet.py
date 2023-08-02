@@ -6,6 +6,7 @@ import torchvision
 
 
 class slam(nn.Module):  # noqa
+    """Spatial attention module."""
     def __init__(self, spatial_dim):
         """Spatial attention module."""
         super(slam, self).__init__()
@@ -34,6 +35,7 @@ class slam(nn.Module):  # noqa
 
 
 class to_map(nn.Module): # noqa
+    """Feature map to attention map."""
     def __init__(self, channels):
         """Convert feature map to attention map."""
         super(to_map, self).__init__()
@@ -48,6 +50,7 @@ class to_map(nn.Module): # noqa
 
 
 class conv_bn_relu(nn.Module): # noqa
+    """Convolutional block with batch normalization and ReLU activation."""
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, stride=1):
         """Convolutional block with batch normalization and ReLU activation."""
         super(conv_bn_relu, self).__init__()
@@ -66,6 +69,7 @@ class conv_bn_relu(nn.Module): # noqa
 
 
 class up_conv_bn_relu(nn.Module): # noqa
+    """Upsample block with convolutional layer, batch normalization, and ReLU activation."""
     def __init__(self, up_size, in_channels, out_channels=64, kernal_size=1, padding=0, stride=1):
         """Upsample block with convolutional layer, batch normalization, and ReLU activation."""
         super(up_conv_bn_relu, self).__init__()

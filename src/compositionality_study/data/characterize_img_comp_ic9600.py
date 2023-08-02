@@ -33,6 +33,7 @@ inference_transform = transforms.Compose(
 
 
 def blend(ori_img, ic_img, alpha=0.8, cm=plt.get_cmap("magma")):
+    """Blend the original image with the IC map."""
     cm_ic_map = cm(ic_img)
     heatmap = Image.fromarray((cm_ic_map[:, :, -2::-1] * 255).astype(np.uint8))
     ori_img = Image.fromarray(ori_img)
