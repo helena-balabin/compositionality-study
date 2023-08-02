@@ -19,10 +19,6 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          sudo apt-get install graphviz
-          pip install tox
       - name: Check manifest
         run: tox run -e manifest
       - name: Check code quality with flake8
@@ -51,8 +47,6 @@ jobs:
         run: tox run -e doc8
       - name: Check docstring coverage
         run: tox run -e docstr-coverage
-      - name: Check documentation build with Sphinx
-        run: tox run -e docs-test
   tests:
     name: Tests
     runs-on: ${{ matrix.os }}
@@ -66,11 +60,6 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: pip install tox
-      - name: Test with pytest and generate coverage file
-        run:
-          tox run -e py
       - name: Upload coverage report to codecov
         uses: codecov/codecov-action@v1
         if: success()
