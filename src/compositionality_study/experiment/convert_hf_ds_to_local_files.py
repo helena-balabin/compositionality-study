@@ -4,22 +4,21 @@ import random
 import string
 from typing import List
 
-# Imports
 import click
 import pandas as pd
 import requests
-from PIL import Image
 from datasets import load_from_disk
+from PIL import Image
 from tqdm import tqdm
 
-from compositionality_study.constants import (
+from compositionality_study.constants import (  # noqa
     VG_COCO_LOCAL_STIMULI_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
 )
-from compositionality_study.experiment.create_fourier_scrambled_images import fft_phase_scrambling
-
-# Set a random seed for reproducibility
-random.seed(42)
+from compositionality_study.experiment.create_fourier_scrambled_images import fft_phase_scrambling  # noqa
+# noqa
+# Set a random seed for reproducibility  # noqa
+random.seed(42)  # noqa
 
 
 def estimate_letter_frequency(
@@ -62,7 +61,7 @@ def generate_non_word_sentence(
     non_words = []
     for word in words:
         # Sample letters according to their frequency
-        letters = random.choices(string.ascii_lowercase, weights=letter_frequencies, k=len(word))
+        letters = random.choices(string.ascii_lowercase, weights=letter_frequencies, k=len(word))  # noqa
 
         # Add the non word to the list
         non_words.append("".join(letters))
@@ -111,7 +110,7 @@ def convert_hf_dataset_to_local_stimuli(
     # Iterate through the dataset
     for ex in tqdm(dataset, desc="Downloading images"):
         # Download and save the image
-        img = Image.open(requests.get(ex["vg_url"], stream=True).raw)
+        img = Image.open(requests.get(ex["vg_url"], stream=True, timeout=10).raw)
         output_path = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}.jpg"
         img.save(os.path.join(local_stimuli_dir, output_path))
         # Add the text and image path to the dataframe
@@ -140,7 +139,9 @@ def convert_hf_dataset_to_local_stimuli(
 
     for ex in tqdm(stimuli_df_subset.itertuples(), desc="Generating null condition stimuli"):
         # Create a scrambled version of the image and turn it into a PIL image
-        scrambled_img = Image.fromarray(fft_phase_scrambling(os.path.join(local_stimuli_dir, ex.img_path)))
+        scrambled_img = Image.fromarray(
+            fft_phase_scrambling(os.path.join(local_stimuli_dir, ex.img_path)),
+        )
         sc_img_output_path = f"scrambled_{ex.img_id}.jpg"
         # Write the scrambled image to disk
         scrambled_img.save(os.path.join(local_stimuli_dir, sc_img_output_path))

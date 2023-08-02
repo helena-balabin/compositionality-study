@@ -1,22 +1,24 @@
 """ICNet model directly taken from https://github.com/tinglyfeng/IC9600/blob/master/ICNet.py."""
 import torch
-import torchvision
 import torch.nn as nn
 import torch.nn.functional as F  # noqa
+import torchvision
 
 
 class slam(nn.Module):  # noqa
     def __init__(self, spatial_dim):
+        """Spatial attention module."""
         super(slam, self).__init__()
         self.spatial_dim = spatial_dim
         self.linear = nn.Sequential(
-            nn.Linear(spatial_dim ** 2, 512),
+            nn.Linear(spatial_dim ** 2, 512),  # noqa
             nn.ReLU(),
             nn.Linear(512, 1),
             nn.Sigmoid()
         )
 
     def forward(self, feature):
+        """Forward pass."""
         n, c, h, w = feature.shape
         if h != self.spatial_dim:
             x = F.interpolate(feature, size=(self.spatial_dim, self.spatial_dim), mode="bilinear", align_corners=True)
@@ -33,6 +35,7 @@ class slam(nn.Module):  # noqa
 
 class to_map(nn.Module): # noqa
     def __init__(self, channels):
+        """Convert feature map to attention map."""
         super(to_map, self).__init__()
         self.to_map = nn.Sequential(
             nn.Conv2d(in_channels=channels, out_channels=1, kernel_size=1, stride=1),
@@ -40,11 +43,13 @@ class to_map(nn.Module): # noqa
         )
 
     def forward(self, feature):
+        """Forward pass."""
         return self.to_map(feature)
 
 
 class conv_bn_relu(nn.Module): # noqa
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, stride=1):
+        """Convolutional block with batch normalization and ReLU activation."""
         super(conv_bn_relu, self).__init__()
         self.conv = nn.Conv2d(
             in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding, stride=stride
@@ -53,6 +58,7 @@ class conv_bn_relu(nn.Module): # noqa
         self.relu = nn.ReLU()
 
     def forward(self, x):
+        """Forward pass."""
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
@@ -61,6 +67,7 @@ class conv_bn_relu(nn.Module): # noqa
 
 class up_conv_bn_relu(nn.Module): # noqa
     def __init__(self, up_size, in_channels, out_channels=64, kernal_size=1, padding=0, stride=1):
+        """Upsample block with convolutional layer, batch normalization, and ReLU activation."""
         super(up_conv_bn_relu, self).__init__()
         self.upSample = nn.Upsample(size=(up_size, up_size), mode="bilinear", align_corners=True)
         self.conv = nn.Conv2d(
@@ -70,6 +77,7 @@ class up_conv_bn_relu(nn.Module): # noqa
         self.act = nn.ReLU()
 
     def forward(self, x):
+        """Forward pass."""
         x = self.upSample(x)
         x = self.conv(x)
         x = self.bn(x)
@@ -78,7 +86,10 @@ class up_conv_bn_relu(nn.Module): # noqa
 
 
 class ICNet(nn.Module):
+    """ICNet model."""
+
     def __init__(self, is_pretrain=True, size1=512, size2=256):
+        """Initialize the ICNet model."""
         super(ICNet, self).__init__()
         resnet18Pretrained1 = torchvision.models.resnet18(pretrained=is_pretrain) # noqa
         resnet18Pretrained2 = torchvision.models.resnet18(pretrained=is_pretrain) # noqa
@@ -128,7 +139,8 @@ class ICNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
     def forward(self, x1):
-        assert (x1.shape[2] == x1.shape[3] == self.size1)
+        """Forward pass."""
+        assert (x1.shape[2] == x1.shape[3] == self.size1)  # noqa
         x2 = F.interpolate(x1, size=(self.size2, self.size2), mode="bilinear", align_corners=True)
 
         x1 = self.b1_2_slam(self.b1_2(self.b1_1_slam(self.b1_1(x1))))

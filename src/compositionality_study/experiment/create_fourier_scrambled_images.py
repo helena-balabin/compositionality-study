@@ -52,10 +52,10 @@ def fft_phase_scrambling(
     :rtype: np.ndarray
     """
     # Step 1: Load image
-    image = cv2.imread(im_path)
+    image = cv2.imread(im_path)  # noqa
 
     # Separate RGB channels
-    b, g, r = cv2.split(image)
+    b, g, r = cv2.split(image)  # noqa
 
     # Calculate the average phase spectrum using the blue channel
     # It doesn't matter which channel we use, because the phase relationships among the channels in an RGB image are
@@ -68,6 +68,6 @@ def fft_phase_scrambling(
     r_scrambled = fft_phase_scrambling_channel(r, avg_phase)
 
     # Recombine RGB channels to get the final image
-    image_scrambled = cv2.merge((b_scrambled, g_scrambled, r_scrambled))
+    image_scrambled = cv2.merge((b_scrambled, g_scrambled, r_scrambled))  # noqa
 
     return image_scrambled

@@ -65,7 +65,7 @@ def infer_one_image(
         img_data = io.BytesIO(input_img_data["bytes"])
         out_name = input_img_data["path"].strip(".jpg")
     else:
-        img_data = input_img_data
+        img_data = input_img_data  # type: ignore
         out_name = os.path.basename(input_img_data).split('.')[0]
 
     with torch.no_grad():

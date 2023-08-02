@@ -3,16 +3,13 @@ import os
 import random
 from typing import List
 
-# Imports
 import click
 import pandas as pd
-from psychopy import core, visual
 from PIL import Image, ImageOps
+from psychopy import core, visual
 from tqdm import tqdm
 
-from compositionality_study.constants import (
-    VG_COCO_LOCAL_STIMULI_DIR,
-)
+from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR
 
 # Set a random seed for reproducibility
 random.seed(42)
@@ -74,7 +71,7 @@ def generate_psychopy_exp(
     # Load the csv file for the stimuli
     stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
     # Load the captions and images from the URL in the dataset
-    stimuli = []
+    stimuli: List = []
     for _, row in tqdm(stimuli_df.iterrows(), desc="Loading stimuli"):
         # Load the image from disk and resize it
         img = Image.open(os.path.join(local_stimuli_dir, row["img_path"]))
@@ -87,7 +84,12 @@ def generate_psychopy_exp(
     random.shuffle(stimuli)
 
     # Create the psychopy window
-    win = visual.Window(size=(1600, 1200), fullscr=True, allowGUI=True, color='white')
+    win = visual.Window(
+        size=(1600, 1200),
+        fullscr=True,
+        allowGUI=True,
+        color="white",
+    )
 
     # Run the experiment
     run_images(

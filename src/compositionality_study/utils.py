@@ -1,13 +1,12 @@
 """Utils for the compositionality project."""
 import os
-# Imports
+from io import BytesIO
 from typing import Any, Dict, List
 
 import numpy as np
-import spacy
 import requests
+import spacy
 from PIL import Image
-from io import BytesIO
 
 from compositionality_study.constants import VG_IMAGE_DIR
 
@@ -85,7 +84,7 @@ def get_image_aspect_ratio_from_url(
     :return: The aspect ratio of the image, greater than 1 means the image is horizontal (i.e., wider than it is tall)
     :rtype: float
     """
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     image_bytes = BytesIO(response.content)
 
     with Image.open(image_bytes) as img:
