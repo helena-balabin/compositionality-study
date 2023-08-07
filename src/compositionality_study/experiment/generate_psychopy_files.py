@@ -6,7 +6,7 @@ from typing import List
 import click
 import pandas as pd
 from PIL import Image, ImageOps
-from psychopy import core, visual
+from psychopy import core, event, visual
 from tqdm import tqdm
 
 from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR
@@ -15,58 +15,127 @@ from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR
 random.seed(42)
 
 
-def run_images(
+def check_quit_skip_exp() -> bool:
+    """Check if the experiment should be exited or whether the stimulus should be skipped (press space/right arrow).
+
+    :return: Return True if the stimulus should be skipped.
+    :rtype: bool
+    """
+    keys = event.getKeys()
+    if "escape" in keys:
+        core.quit()
+        return False
+    elif "space" in keys or "right" in keys:
+        return True
+    else:
+        return False
+
+
+def run_single_run(
     win: visual.Window,
     stimuli: List,
-    image_duration: float = 1.0,
-    inter_trial_interval: float = 0.5,
+    duration: float = 6.0,
+    inter_trial_interval: float = 2.0,
+    frame_rate: int = 60,
+    trigger_button: str = "t",
 ):
-    """Present the images in the stimuli list in a psychopy window.
+    """Present a given stimuli list in a psychopy window.
 
     :param win: The psychopy window.
     :type win: visual.Window
     :param stimuli: The stimuli to present (either visual or textual).
     :type stimuli: List
-    :param image_duration: The duration of the image presentation in seconds.
-    :type image_duration: float
+    :param duration: The duration of the text/image presentation in seconds.
+    :type duration: float
     :param inter_trial_interval: The inter-trial interval in seconds.
     :type inter_trial_interval: float
+    :param frame_rate: The frame rate of the psychopy window in Hz.
+    :type frame_rate: int
+    :param trigger_button: The trigger button to press to start the experiment.
+    :type trigger_button: str
     """
+    # Get the number of frames to present the stimuli and the inter-trial interval
+    n_frames_stimuli = int(duration * frame_rate)
+    n_frames_inter_trial_interval = int(inter_trial_interval * frame_rate)
+
+    # Have a welcome screen
+    welcome_txt = visual.TextStim(
+        win,
+        text=f"Press {trigger_button} to start",
+        color=(0.0, 0.0, 0.0),
+    )
+
+    # Wait for the experiment to start
+    while True:
+        welcome_txt.draw()
+        win.flip()
+        keys = event.getKeys()
+        if trigger_button in keys:
+            break
+        elif "escape" in keys:
+            core.quit()
+
     # Create the visual or textual stimuli
     for ex in stimuli:
-        if isinstance(ex, Image.Image):
-            img = visual.ImageStim(win, image=ex)
-            img.draw()
-        else:
-            txt = visual.TextStim(win, text=ex, color=(0.0, 0.0, 0.0))
-            txt.draw()
-        win.flip()
-        core.wait(image_duration)
-        win.flip()
-        core.wait(inter_trial_interval)
+        # Show the stimuli for the duration (number of frames)
+        for _ in range(n_frames_stimuli):
+            if isinstance(ex, Image.Image):
+                img = visual.ImageStim(win, image=ex)
+                img.draw()
+            else:
+                txt = visual.TextStim(win, text=ex, color=(0.0, 0.0, 0.0))
+                txt.draw()
+            win.flip()
+            # Check if the experiment should be exited or the stimuli skipped
+            if check_quit_skip_exp():
+                break
+
+        # Wait for the inter-trial interval (number of frames)
+        for _ in range(n_frames_inter_trial_interval):
+            win.flip()
+            # Check if the experiment should be exited or the stimuli skipped
+            if check_quit_skip_exp():
+                break
 
 
 @click.command()
 @click.option("--local_stimuli_dir", type=str, default=VG_COCO_LOCAL_STIMULI_DIR)
-@click.option("--image_duration", type=float, default=1.0)
-@click.option("--inter_trial_interval", type=float, default=0.5)
+@click.option("--duration", type=float, default=6.0)
+@click.option("--inter_trial_interval", type=float, default=2.0)
 @click.option("--n_repetitions", type=int, default=3)
-def generate_psychopy_exp(
+@click.option("--n_runs", type=int, default=8)
+@click.option("--frame_rate", type=int, default=60)
+@click.option("--fullscreen", type=bool, default=False)
+@click.option("--trigger_button", type=str, default="t")
+def run_psychopy_exp(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
-    image_duration: float = 1.0,
-    inter_trial_interval: float = 0.5,
+    duration: float = 6.0,
+    inter_trial_interval: float = 2.0,
     n_repetitions: int = 3,
+    n_runs: int = 8,
+    frame_rate: int = 60,
+    fullscreen: bool = False,
+    trigger_button: str = "t",
 ):
     """Load the selected stimuli and present them in a psychopy experiment.
 
     :param local_stimuli_dir: The directory containing the previously selected stimuli (converted from the HF dataset).
     :type local_stimuli_dir: str
-    :param image_duration: The duration of the image presentation in seconds.
-    :type image_duration: float
+    :param duration: The duration of the image/text presentation in seconds.
+    :type duration: float
     :param inter_trial_interval: The inter-trial interval in seconds.
     :type inter_trial_interval: float
     :param n_repetitions: The number of repetitions of each stimuli.
     :type n_repetitions: int
+    :param n_runs: The number of runs to present the stimuli.
+    :type n_runs: int
+    :param frame_rate: The frame rate of the psychopy window in Hz.
+    :type frame_rate: int
+    :param fullscreen: Whether to run the experiment in fullscreen mode.
+    :type fullscreen: bool
+    :param trigger_button: The trigger button to press to start the experiment.
+    :type trigger_button: str
+    :raises ValueError: If the number of stimuli is not divisible by the number of runs.
     """
     # Load the csv file for the stimuli
     stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
@@ -83,28 +152,40 @@ def generate_psychopy_exp(
     # Shuffle the stimuli (deterministically, because we set the random seed)
     random.shuffle(stimuli)
 
+    # Make sure the number of stimuli is divisible by the number of runs, throw an error otherwise
+    if len(stimuli) % n_runs != 0:
+        raise ValueError(
+            f"{len(stimuli)} stimuli (including {n_repetitions} repetitions) are not divisible into {n_runs} runs."
+        )
+    # Split the stimuli into runs
+    stimuli_runs = [stimuli[i::n_runs] for i in range(n_runs)]
+
     # Create the psychopy window
     win = visual.Window(
-        size=(1600, 1200),
-        fullscr=True,
+        size=(1200, 800),
+        fullscr=fullscreen,
         allowGUI=True,
         color="white",
     )
 
-    # Run the experiment
-    run_images(
-        win=win,
-        stimuli=stimuli,
-        image_duration=image_duration,
-        inter_trial_interval=inter_trial_interval,
-    )
+    # Show the stimuli for each run
+    for stimuli_run in stimuli_runs:
+        # Run a single run
+        run_single_run(
+            win=win,
+            stimuli=stimuli_run,
+            duration=duration,
+            inter_trial_interval=inter_trial_interval,
+            frame_rate=frame_rate,
+            trigger_button=trigger_button,
+        )
 
 
 @click.group()
 def cli() -> None:
-    """Generate the psychopy experiment files for the fMRI experiment based on the local chosen stimuli."""
+    """Run the psychopy experiment files for the fMRI experiment based on the local chosen stimuli."""
 
 
 if __name__ == "__main__":
-    cli.add_command(generate_psychopy_exp)
+    cli.add_command(run_psychopy_exp)
     cli()
