@@ -94,7 +94,7 @@ def run_single_run(
     # Wait for the MRI trigger
     mri_trigger_text = visual.TextStim(
         win,
-        text=f"Waiting for the trigger to start",
+        text="Waiting for the trigger to start",
         color=(0.0, 0.0, 0.0),
     )
     # Wait for the experiment to start
@@ -163,7 +163,7 @@ def run_psychopy_exp(
     fullscreen: bool = False,
     manual_trigger_button: str = "space",
     mri_trigger_button: str = "t",
-    break_duration: int = 30.0,
+    break_duration: float = 30.0,
 ):
     """Load the selected stimuli and present them in a psychopy experiment.
 
@@ -217,8 +217,10 @@ def run_psychopy_exp(
     stimuli_runs = [stimuli[i::n_runs] for i in range(n_runs)]
 
     # Load the practice stimuli
-    practice_stimuli = []
-    practice_stimuli_df = pd.read_csv(os.path.join(practice_stimuli_dir, "stimuli_text_and_im_paths.csv"))
+    practice_stimuli: List = []
+    practice_stimuli_df = pd.read_csv(
+        os.path.join(practice_stimuli_dir, "stimuli_text_and_im_paths.csv"),
+    )
     for _, row in tqdm(practice_stimuli_df.iterrows(), desc="Loading practice stimuli"):
         # Load the image from disk and resize it
         img = Image.open(os.path.join(practice_stimuli_dir, row["img_path"]))
