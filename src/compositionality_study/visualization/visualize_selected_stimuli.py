@@ -16,7 +16,7 @@ from compositionality_study.constants import VG_COCO_SELECTED_STIMULI_DIR
 st.set_page_config(layout="wide")
 
 # Load a spacy model to display the dependency trees
-nlp = spacy.load("en_core_web_trf")  # TODO double check
+nlp = spacy.load("en_core_web_lg")
 
 # Load the dataset
 dataset = load_from_disk(VG_COCO_SELECTED_STIMULI_DIR)
@@ -37,7 +37,6 @@ for cell, comp in zip([col1, col2, col3, col4], complexities):
         for example in examples:
             try:
                 image = Image.open(requests.get(example["vg_url"], stream=True).raw)  # noqa
-                # TODO modify the image (add the bounding boxes/relations)
 
                 st.image(image, caption=f"{example['sentences_raw']}")
                 doc = nlp(example['sentences_raw'])
