@@ -5,10 +5,11 @@ from typing import Any, Dict
 
 import click
 import numpy as np
+import pandas as pd
 from datasets import concatenate_datasets, load_from_disk
 from loguru import logger
 
-from compositionality_study.constants import VG_COCO_PREP_TEXT_IMG_SEG_DIR
+from compositionality_study.constants import VG_COCO_PREP_ALL
 from compositionality_study.utils import get_image_aspect_ratio_from_local_path
 
 
@@ -52,7 +53,7 @@ def map_conditions(
 
 
 @click.command()
-@click.option("--vg_coco_preprocessed_dir", type=str, default=VG_COCO_PREP_TEXT_IMG_SEG_DIR)
+@click.option("--vg_coco_preprocessed_dir", type=str, default=VG_COCO_PREP_ALL)
 @click.option("--sent_len", type=int, default=15)
 @click.option("--sent_len_tol", type=int, default=2)
 @click.option("--verbs", type=bool, default=True)
@@ -60,15 +61,12 @@ def map_conditions(
 @click.option("--img_comp_tol", type=float, default=0.1)
 @click.option("--asp_min", type=float, default=1.0)
 @click.option("--asp_max", type=float, default=2.0)
-@click.option("--min_dep_parse_tree_depth", type=int, default=3)
-@click.option("--max_dep_parse_tree_depth", type=int, default=10)
-@click.option("--dep_tol", type=int, default=1)
-@click.option("--min_n_action_verbs", type=int, default=1)
-@click.option("--max_n_action_verbs", type=int, default=8)
-@click.option("--action_verbs_tol", type=int, default=1)
+@click.option("--dep_quantile", type=float, default=0.01)
+@click.option("--action_verbs_quantile", type=float, default=0.05)
+@click.option("--filter_outliers", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
-    vg_coco_preprocessed_dir: str = VG_COCO_PREP_TEXT_IMG_SEG_DIR,
+    vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
     sent_len: int = 15,
     sent_len_tol: int = 2,
     verbs: bool = True,
@@ -76,17 +74,15 @@ def select_stimuli(
     img_comp_tol: float = 0.1,
     asp_min: float = 1.0,
     asp_max: float = 2.0,
-    min_dep_parse_tree_depth: int = 3,
-    max_dep_parse_tree_depth: int = 10,
-    dep_tol: int = 1,
-    min_n_action_verbs: int = 1,
-    max_n_action_verbs: int = 8,
-    action_verbs_tol: int = 1,
+    dep_quantile: float = 0.01,
+    action_verbs_quantile: float = 0.05,
+    filter_outliers: bool = True,
     n_stimuli: int = 80,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
 
-    :param vg_coco_preprocessed_dir: The preprocessed VG + COCO overlap dataset to select stimuli from
+    :param vg_coco_preprocessed_dir: The preprocessed VG + COCO overlap dataset to select stimuli from, defaults to
+        VG_COCO_PREP_ALL
     :type vg_coco_preprocessed_dir: str
     :param sent_len: The sentence length to control for (controlled variable
     :type sent_len: int
@@ -103,18 +99,15 @@ def select_stimuli(
     :type asp_min: float
     :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 2.0
     :type asp_max: float
-    :param min_dep_parse_tree_depth: The min dependency parse tree depth to select stimuli for
-    :type min_dep_parse_tree_depth: int
-    :param max_dep_parse_tree_depth: The max dependency parse tree depth to select stimuli for
-    :type max_dep_parse_tree_depth: int
-    :param dep_tol: The tolerance for the dependency parse tree depth
-    :type dep_tol: int
-    :param min_n_action_verbs: The min number of objects (image segmentation based) to select stimuli for
-    :type min_n_action_verbs: int
-    :param max_n_action_verbs: The max number of objects (image segmentation based) to select stimuli for
-    :type max_n_action_verbs: int
-    :param action_verbs_tol: The tolerance for the number of objects (image segmentation based)
-    :type action_verbs_tol: int
+    :param dep_quantile: The quantile of the dependency parse tree depth to select stimuli for, e.g., 0.05 means
+        that the stimuli with the lowest 5% and highest 5% dependency parse tree depth are selected, defaults to 0.05
+    :type dep_quantile: float
+    :param action_verbs_quantile: The quantile of the number of action verbs to select stimuli for, e.g., 0.05 means
+        that the stimuli with the lowest 5% and highest 5% number of action verbs are selected, defaults to 0.05
+    :type action_verbs_quantile: float
+    :param filter_outliers: Whether to filter out outliers (more than 3x of the standard deviation) for the dependency
+        parse tree depth and number of action verbs, defaults to True
+    :type filter_outliers: bool
     :param n_stimuli: The number of stimuli to select, must be divisible by 4
     :type n_stimuli: int
     """
@@ -159,42 +152,56 @@ def select_stimuli(
         )
     logger.info(f"Controlled the dataset the aspect ratio of the images, {len(vg_ds)} entries remain.")
 
-    # 3. Select by dependency parse tree depth that match max and min
+    # 3. Filter out any outliers for dep parse tree depth and number of action verbs
+    if filter_outliers:
+        dep_m = pd.Series(vg_ds["parse_tree_depth"]).mean()
+        dep_std = pd.Series(vg_ds["parse_tree_depth"]).std()
+        vg_ds = vg_ds.filter(
+            lambda x: abs(x["parse_tree_depth"] - dep_m) <= 3 * dep_std,
+            num_proc=24,
+        )
+        logger.info(f"Filtered out outlier dependency parse tree depth values, {len(vg_ds)} entries remain.")
+        ac_m = pd.Series(vg_ds["n_rel_action_verbs"]).mean()
+        ac_std = pd.Series(vg_ds["n_rel_action_verbs"]).std()
+        vg_ds = vg_ds.filter(
+            lambda x: abs(x["n_rel_action_verbs"] - ac_m) <= 3 * ac_std,
+            num_proc=24,
+        )
+        logger.info(f"Filtered out outliers for the number of action verbs values, {len(vg_ds)} entries remain.")
+
+    # 4. Select by dependency parse tree depth that match max and min quantile
+    dep_min = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(dep_quantile))
+    dep_max = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(1 - dep_quantile))
     vg_ds = vg_ds.filter(
-        lambda x: abs(
-            x["parse_tree_depth"] - max_dep_parse_tree_depth
-        ) <= dep_tol or abs(
-            x["parse_tree_depth"] - min_dep_parse_tree_depth
-        ) <= dep_tol,
+        lambda x: x["parse_tree_depth"] <= dep_min or x["parse_tree_depth"] >= dep_max,
         num_proc=24,
     )
-    logger.info(f"Filtered the dataset for dependency parse tree depths of either {min_dep_parse_tree_depth} or "
-                f"{max_dep_parse_tree_depth} within a tolerance of {dep_tol}, {len(vg_ds)} entries remain.")
+    logger.info(f"Filtered the dataset for dependency parse tree depths of either <= {dep_min} or "
+                f">={dep_max}, {len(vg_ds)} entries remain.")
 
-    # 4. Select by number action verbs that match max and min
+    # 5. Select by number action verbs that match max and min quantiles
+    ac_min = int(pd.Series(vg_ds["n_rel_action_verbs"]).quantile(action_verbs_quantile))
+    ac_max = int(pd.Series(vg_ds["n_rel_action_verbs"]).quantile(1 - action_verbs_quantile))
     vg_ds = vg_ds.filter(
-        lambda x: abs(x["n_rel_action_verbs"] - max_n_action_verbs) <= action_verbs_tol or abs(
-            x["n_rel_action_verbs"] - min_n_action_verbs
-        ) <= action_verbs_tol,
+        lambda x: x["n_rel_action_verbs"] <= ac_min or x["n_rel_action_verbs"] >= ac_max,
         num_proc=24,
     )
-    logger.info(f"Filtered the dataset for a number of action verbs of either {min_n_action_verbs} or "
-                f"{max_n_action_verbs} within a tolerance of {action_verbs_tol}, {len(vg_ds)} "
-                f"many entries remain.")
+    logger.info(f"Filtered the dataset for a number of action verbs of either <= {ac_min} or "
+                f">={ac_max}, {len(vg_ds)} entries remain.")
 
-    # 5. Map the conditions to the examples
+    # 6. Map the conditions to the examples
     vg_ds = vg_ds.map(
         lambda x: map_conditions(
             x,
-            min_dep_parse_tree_depth=min_dep_parse_tree_depth,
-            max_dep_parse_tree_depth=max_dep_parse_tree_depth,
-            min_n_action_verbs=min_n_action_verbs,
-            max_n_action_verbs=max_n_action_verbs,
+            min_dep_parse_tree_depth=dep_min,
+            max_dep_parse_tree_depth=dep_max,
+            min_n_action_verbs=ac_min,
+            max_n_action_verbs=ac_max,
         ),
         num_proc=24,
     )
 
-    # 6. Select n_stimuli many stimuli, evenly distributed over the conditions
+    # 7. Select n_stimuli many stimuli, evenly distributed over the conditions
     vg_n_stim = []
     for comp in ["low_text_low_acverb", "low_text_high_acverb", "high_text_low_acverb", "high_text_high_acverb"]:
         try:
@@ -214,7 +221,7 @@ def select_stimuli(
             return
     vg_ds_n_stimuli = concatenate_datasets(vg_n_stim)
 
-    # Save the dataset
+    # 8. Save the dataset
     output_dir = os.path.split(vg_coco_preprocessed_dir)[0]
     vg_ds_n_stimuli.save_to_disk(
         os.path.join(
