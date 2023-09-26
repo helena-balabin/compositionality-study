@@ -76,12 +76,14 @@ def generate_non_word_sentence(
 @click.option("--delete_existing", default=True, type=bool)
 @click.option("--random_seed", default=42, type=int)
 @click.option("--only_control", default=False, type=bool, is_flag=True)
+@click.option("--control_fraction", default=0.2, type=float)
 def convert_hf_dataset_to_local_stimuli(
     hf_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     delete_existing: bool = True,
     random_seed: int = 42,
     only_control: bool = False,
+    control_fraction: float = 0.2,
 ) -> pd.DataFrame:
     """Convert the stimuli from the huggingface dataset to locally stimuli (images/text).
 
@@ -96,6 +98,8 @@ def convert_hf_dataset_to_local_stimuli(
     :param only_control: Whether to only generate the control stimuli (scrambled images and non word sentences), assumes
         that the stimuli have already been downloaded.
     :type only_control: bool
+    :param control_fraction: The fraction of stimuli to use for the control condition.
+    :type control_fraction: float
     :return: A dataframe containing the text and path to the image and image ID.
     :rtype: pd.DataFrame
     """
@@ -139,10 +143,9 @@ def convert_hf_dataset_to_local_stimuli(
         # Load the existing stimuli_df
         stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
 
-    # TODO smaller fraction
-    # Generate null condition stimuli by scrambling half of the images for each complexity condition
+    # Generate null condition stimuli by scrambling control_fraction of the images for each complexity condition
     # Take a subset of the stimuli, stratified by complexity
-    stimuli_df_subset = stimuli_df.groupby("complexity").sample(frac=0.5, random_state=random_seed)
+    stimuli_df_subset = stimuli_df.groupby("complexity").sample(frac=control_fraction, random_state=random_seed)
 
     # Estimate the letter frequencies
     letter_frequencies = estimate_letter_frequency(stimuli_df_subset["text"])
