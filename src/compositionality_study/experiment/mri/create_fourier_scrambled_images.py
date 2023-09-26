@@ -1,6 +1,4 @@
 """Create Fourier-scrambled versions of some images in the selected stimuli directory."""
-from typing import Tuple
-
 import cv2
 import numpy as np
 
