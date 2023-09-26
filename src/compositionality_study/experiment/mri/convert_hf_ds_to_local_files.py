@@ -75,11 +75,13 @@ def generate_non_word_sentence(
 @click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
 @click.option("--delete_existing", default=True, type=bool)
 @click.option("--random_seed", default=42, type=int)
+@click.option("--only_control", default=False, type=bool, is_flag=True)
 def convert_hf_dataset_to_local_stimuli(
     hf_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     delete_existing: bool = True,
     random_seed: int = 42,
+    only_control: bool = False,
 ) -> pd.DataFrame:
     """Convert the stimuli from the huggingface dataset to locally stimuli (images/text).
 
@@ -91,6 +93,9 @@ def convert_hf_dataset_to_local_stimuli(
     :type delete_existing: bool
     :param random_seed: The random seed to use for reproducibility.
     :type random_seed: int
+    :param only_control: Whether to only generate the control stimuli (scrambled images and non word sentences), assumes
+        that the stimuli have already been downloaded.
+    :type only_control: bool
     :return: A dataframe containing the text and path to the image and image ID.
     :rtype: pd.DataFrame
     """
@@ -99,37 +104,42 @@ def convert_hf_dataset_to_local_stimuli(
     # Initialize a dataframe that contains the text, path to the image, image ID and the condition
     stimuli_df = pd.DataFrame(columns=["text", "img_path", "img_id", "complexity"])
 
-    # Create the output directory if it does not exist
-    if not os.path.exists(local_stimuli_dir):
-        os.makedirs(local_stimuli_dir)
-    # Delete the existing stimuli if specified
-    if delete_existing:
-        for f in os.listdir(local_stimuli_dir):
-            os.remove(os.path.join(local_stimuli_dir, f))
+    if not only_control:
+        # Create the output directory if it does not exist
+        if not os.path.exists(local_stimuli_dir):
+            os.makedirs(local_stimuli_dir)
+        # Delete the existing stimuli if specified
+        if delete_existing:
+            for f in os.listdir(local_stimuli_dir):
+                os.remove(os.path.join(local_stimuli_dir, f))
 
-    # Iterate through the dataset
-    for ex in tqdm(dataset, desc="Downloading images"):
-        # Download and save the image
-        img = Image.open(requests.get(ex["vg_url"], stream=True, timeout=10).raw)
-        output_path = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}.jpg"
-        img.save(os.path.join(local_stimuli_dir, output_path))
-        # Add the text and image path to the dataframe
-        stimuli_df = pd.concat(
-            [
-                stimuli_df,
-                pd.DataFrame(
-                    {
-                        "text": ex["sentences_raw"],
-                        "img_path": output_path,
-                        "img_id": f"{ex['vg_image_id']}_{ex['sentids']}",
-                        "complexity": ex["complexity"],
-                    },
-                    index=[0],
-                ),
-            ],
-            ignore_index=True,
-        )
+        # Iterate through the dataset and download the images
+        for ex in tqdm(dataset, desc="Downloading images"):
+            # Download and save the image
+            img = Image.open(requests.get(ex["vg_url"], stream=True, timeout=10).raw)
+            output_path = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}.jpg"
+            img.save(os.path.join(local_stimuli_dir, output_path))
+            # Add the text and image path to the dataframe
+            stimuli_df = pd.concat(
+                [
+                    stimuli_df,
+                    pd.DataFrame(
+                        {
+                            "text": ex["sentences_raw"],
+                            "img_path": output_path,
+                            "img_id": f"{ex['vg_image_id']}_{ex['sentids']}",
+                            "complexity": ex["complexity"],
+                        },
+                        index=[0],
+                    ),
+                ],
+                ignore_index=True,
+            )
+    else:
+        # Load the existing stimuli_df
+        stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
 
+    # TODO smaller fraction
     # Generate null condition stimuli by scrambling half of the images for each complexity condition
     # Take a subset of the stimuli, stratified by complexity
     stimuli_df_subset = stimuli_df.groupby("complexity").sample(frac=0.5, random_state=random_seed)
