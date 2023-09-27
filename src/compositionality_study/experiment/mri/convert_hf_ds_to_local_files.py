@@ -15,9 +15,7 @@ from compositionality_study.constants import (  # noqa
     VG_COCO_SELECTED_STIMULI_DIR,
 )
 from compositionality_study.experiment.mri.create_fourier_scrambled_images import fft_phase_scrambling  # noqa
-from compositionality_study.utils import apply_gamma_correction
-
-# noqa
+from compositionality_study.utils import apply_gamma_correction # noqa
 # Set a random seed for reproducibility  # noqa
 random.seed(42)  # noqa
 

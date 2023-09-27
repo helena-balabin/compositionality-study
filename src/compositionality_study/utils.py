@@ -3,9 +3,8 @@ import os
 from io import BytesIO
 from typing import Any, Dict, List
 
-import PIL
-import cv2
 import numpy as np
+import PIL
 import requests
 import spacy
 from PIL import Image, ImageOps
