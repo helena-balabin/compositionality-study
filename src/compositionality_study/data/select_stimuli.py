@@ -6,10 +6,12 @@ from typing import Any, Dict
 import click
 import numpy as np
 import pandas as pd
+from PIL import Image
 from datasets import concatenate_datasets, load_from_disk
 from loguru import logger
+from pytesseract import image_to_string
 
-from compositionality_study.constants import VG_COCO_PREP_ALL
+from compositionality_study.constants import VG_COCO_PREP_ALL, VG_IMAGE_DIR
 from compositionality_study.utils import get_image_aspect_ratio_from_local_path
 
 
@@ -58,12 +60,13 @@ def map_conditions(
 @click.option("--sent_len_tol", type=int, default=2)
 @click.option("--verbs", type=bool, default=True)
 @click.option("--img_comp", type=float, default=0.5)
-@click.option("--img_comp_tol", type=float, default=0.1)
-@click.option("--asp_min", type=float, default=1.0)
-@click.option("--asp_max", type=float, default=2.0)
+@click.option("--img_comp_tol", type=float, default=0.15)
+@click.option("--asp_min", type=float, default=1.2)
+@click.option("--asp_max", type=float, default=1.8)
 @click.option("--dep_quantile", type=float, default=0.01)
 @click.option("--action_verbs_quantile", type=float, default=0.05)
 @click.option("--filter_outliers", type=bool, default=True)
+@click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
@@ -71,12 +74,13 @@ def select_stimuli(
     sent_len_tol: int = 2,
     verbs: bool = True,
     img_comp: float = 0.5,
-    img_comp_tol: float = 0.1,
-    asp_min: float = 1.0,
-    asp_max: float = 2.0,
+    img_comp_tol: float = 0.15,
+    asp_min: float = 1.2,
+    asp_max: float = 1.8,
     dep_quantile: float = 0.01,
     action_verbs_quantile: float = 0.05,
     filter_outliers: bool = True,
+    image_quality_threshold: int = 400,
     n_stimuli: int = 80,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
@@ -93,11 +97,11 @@ def select_stimuli(
     :type verbs: bool
     :param img_comp: The image complexity to control for (controlled variable), defaults to 0.5
     :type img_comp: float
-    :param img_comp_tol: The tolerance for the image complexity (+- img_comp_tol within img_comp), defaults to 0.1
+    :param img_comp_tol: The tolerance for the image complexity (+- img_comp_tol within img_comp), defaults to 0.15
     :type img_comp_tol: float
-    :param asp_min: The min aspect ratio of the images to select stimuli for, defaults to 1.0
+    :param asp_min: The min aspect ratio of the images to select stimuli for, defaults to 1.2
     :type asp_min: float
-    :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 2.0
+    :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 1.8
     :type asp_max: float
     :param dep_quantile: The quantile of the dependency parse tree depth to select stimuli for, e.g., 0.05 means
         that the stimuli with the lowest 5% and highest 5% dependency parse tree depth are selected, defaults to 0.05
@@ -108,6 +112,8 @@ def select_stimuli(
     :param filter_outliers: Whether to filter out outliers (more than 3x of the standard deviation) for the dependency
         parse tree depth and number of action verbs, defaults to True
     :type filter_outliers: bool
+    :param image_quality_threshold: Minimum number of pixels (height) of the image, defaults to 400
+    :type image_quality_threshold: int
     :param n_stimuli: The number of stimuli to select, must be divisible by 4
     :type n_stimuli: int
     """
@@ -122,8 +128,10 @@ def select_stimuli(
         lambda x: abs(x["sentence_length"] - sent_len) <= sent_len_tol,
         num_proc=24,
     )
-    logger.info(f"Controlled the dataset for a sentence length of {sent_len} within a tolerance of {sent_len_tol}, "
-                f"{len(vg_ds)} entries remain.")
+    logger.info(
+        f"Controlled the dataset for a sentence length of {sent_len} within a tolerance of {sent_len_tol}, "
+        f"{len(vg_ds)} entries remain."
+    )
     # Also filter by verbs if specified
     if verbs:
         vg_ds = vg_ds.filter(
@@ -137,8 +145,10 @@ def select_stimuli(
         lambda x: abs(x["ic_score"] - img_comp) <= img_comp_tol,
         num_proc=24,
     )
-    logger.info(f"Controlled the dataset for an image complexity of {img_comp} within a tolerance of {img_comp_tol}, "
-                f"{len(vg_ds)} entries remain.")
+    logger.info(
+        f"Controlled the dataset for an image complexity of {img_comp} within a tolerance of {img_comp_tol}, "
+        f"{len(vg_ds)} entries remain."
+    )
     # Also filter by aspect ratio of the images (e.g., only horizontal images)
     if "aspect_ratio" in vg_ds.features:
         vg_ds = vg_ds.filter(
@@ -161,6 +171,7 @@ def select_stimuli(
             num_proc=24,
         )
         logger.info(f"Filtered out outlier dependency parse tree depth values, {len(vg_ds)} entries remain.")
+
         ac_m = pd.Series(vg_ds["n_rel_action_verbs"]).mean()
         ac_std = pd.Series(vg_ds["n_rel_action_verbs"]).std()
         vg_ds = vg_ds.filter(
@@ -176,8 +187,10 @@ def select_stimuli(
         lambda x: x["parse_tree_depth"] <= dep_min or x["parse_tree_depth"] >= dep_max,
         num_proc=24,
     )
-    logger.info(f"Filtered the dataset for dependency parse tree depths of either <= {dep_min} or "
-                f">={dep_max}, {len(vg_ds)} entries remain.")
+    logger.info(
+        f"Filtered the dataset for dependency parse tree depths of either <= {dep_min} or "
+        f">={dep_max}, {len(vg_ds)} entries remain."
+    )
 
     # 5. Select by number action verbs that match max and min quantiles
     ac_min = int(pd.Series(vg_ds["n_rel_action_verbs"]).quantile(action_verbs_quantile))
@@ -186,10 +199,40 @@ def select_stimuli(
         lambda x: x["n_rel_action_verbs"] <= ac_min or x["n_rel_action_verbs"] >= ac_max,
         num_proc=24,
     )
-    logger.info(f"Filtered the dataset for a number of action verbs of either <= {ac_min} or "
-                f">={ac_max}, {len(vg_ds)} entries remain.")
+    logger.info(
+        f"Filtered the dataset for a number of action verbs of either <= {ac_min} or "
+        f">={ac_max}, {len(vg_ds)} entries remain."
+    )
 
-    # 6. Map the conditions to the examples
+    # 6. Filter out black and white images and images with text on them and images with low quality
+    # Add the images to the dataset, load based on the filenames
+    vg_ds = vg_ds.map(
+        lambda x: {**x, "img": Image.open(os.path.join(VG_IMAGE_DIR, x["filename"]))},
+        num_proc=24,
+    )
+    # Filter out images with low quality
+    vg_ds = vg_ds.filter(
+        lambda x: x["img"].size[0] > 1.5 * image_quality_threshold and x["img"].size[1] > image_quality_threshold,
+        num_proc=24,
+    )
+    # Take a 50 x 50 patch and if it's equal across two RGB channels, it's a black and white image
+    vg_ds = vg_ds.filter(
+        lambda x: not np.all(
+            np.array(x["img"])[:50, :50, 0] == np.array(x["img"])[:50, :50, 1]
+        ),
+        num_proc=24,
+    )
+    # Filter out images with text on them using pytesseract (make sure to install it first, see
+    # https://tesseract-ocr.github.io/tessdoc/Installation.html)
+    vg_ds = vg_ds.filter(
+        lambda x: len(image_to_string(x["img"]).strip(" \n\x0c")) == 0,
+        num_proc=24,
+    )
+    logger.info(
+        f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} entries remain."
+    )
+
+    # 7. Map the conditions to the examples
     vg_ds = vg_ds.map(
         lambda x: map_conditions(
             x,
@@ -201,7 +244,7 @@ def select_stimuli(
         num_proc=24,
     )
 
-    # 7. Select n_stimuli many stimuli, evenly distributed over the conditions
+    # Select n_stimuli many stimuli, evenly distributed over the conditions
     vg_n_stim = []
     for comp in ["low_text_low_acverb", "low_text_high_acverb", "high_text_low_acverb", "high_text_high_acverb"]:
         try:
