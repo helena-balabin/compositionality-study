@@ -6,7 +6,6 @@ from typing import List
 
 import click
 import pandas as pd
-import requests
 from datasets import load_from_disk
 from PIL import Image
 from tqdm import tqdm
@@ -16,6 +15,8 @@ from compositionality_study.constants import (  # noqa
     VG_COCO_SELECTED_STIMULI_DIR,
 )
 from compositionality_study.experiment.mri.create_fourier_scrambled_images import fft_phase_scrambling  # noqa
+from compositionality_study.utils import apply_gamma_correction
+
 # noqa
 # Set a random seed for reproducibility  # noqa
 random.seed(42)  # noqa
@@ -117,11 +118,15 @@ def convert_hf_dataset_to_local_stimuli(
             for f in os.listdir(local_stimuli_dir):
                 os.remove(os.path.join(local_stimuli_dir, f))
 
-        # Iterate through the dataset and download the images
-        for ex in tqdm(dataset, desc="Downloading images"):
-            # Download and save the image
-            img = Image.open(requests.get(ex["vg_url"], stream=True, timeout=10).raw)
+        # Iterate through the dataset and load the images
+        for ex in tqdm(dataset, desc="Loading images"):
+            # Load the image
+            img = ex["img"]
             output_path = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}.jpg"
+
+            # Apply gamma correction to the image
+            img = apply_gamma_correction(img)
+
             img.save(os.path.join(local_stimuli_dir, output_path))
             # Add the text and image path to the dataframe
             stimuli_df = pd.concat(
