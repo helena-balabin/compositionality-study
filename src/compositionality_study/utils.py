@@ -3,10 +3,12 @@ import os
 from io import BytesIO
 from typing import Any, Dict, List
 
+import PIL
+import cv2
 import numpy as np
 import requests
 import spacy
-from PIL import Image
+from PIL import Image, ImageOps
 
 from compositionality_study.constants import VG_IMAGE_DIR
 
@@ -110,3 +112,31 @@ def get_image_aspect_ratio_from_local_path(
         width, height = img.size
         aspect_ratio = width / height
         return aspect_ratio
+
+
+def apply_gamma_correction(
+    image: PIL.Image,
+    target_mean=128.0,
+) -> PIL.Image:
+    """Apply gamma correction to an image.
+
+    :param image: The image to apply gamma correction to
+    :type image: PIL.Image
+    :param target_mean: The target mean brightness of the image, defaults to 128.0
+    :type target_mean: float, optional
+    :return: The image with gamma correction applied
+    :rtype: PIL.Image
+    """
+    # Convert the PIL image to a numpy array
+    img_array = np.array(image)
+
+    # Calculate the current mean brightness of the image
+    current_mean = np.mean(img_array)
+
+    # Calculate the gamma value to adjust the mean to the target mean
+    gamma = np.log(target_mean) / np.log(current_mean)
+
+    # Apply gamma correction to the image
+    corrected_image = ImageOps.autocontrast(image, cutoff=gamma)
+
+    return corrected_image
