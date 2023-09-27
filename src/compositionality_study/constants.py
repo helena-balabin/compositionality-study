@@ -66,5 +66,6 @@ IMG_DUMMY_DIR = os.path.join(DATA_DIR, "dummy_images")
 os.makedirs(IC9000_IMG_COM_OUTPUT_DIR, exist_ok=True)
 
 # Excluded WordNet verb synsets for action-based filtering of relationships
-WN_EXCLUDED_CATEGORIES = ["verb.possession", "verb.body", "verb.stative"]
+# Consumption had to be excluded because of food-related stimuli that had a high number of verbs but no actions
+WN_EXCLUDED_CATEGORIES = ["verb.possession", "verb.body", "verb.stative", "verb.consumption"]
 # "verb.contact", "verb.change", "verb.weather"
