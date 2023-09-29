@@ -3,13 +3,16 @@ import os
 from io import BytesIO
 from typing import Any, Dict, List
 
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 import numpy as np
 import PIL
 import requests
 import spacy
+from nltk.corpus import wordnet as wn
 from PIL import Image, ImageOps
 
-from compositionality_study.constants import VG_IMAGE_DIR
+from compositionality_study.constants import VG_IMAGE_DIR, WN_EXCLUDED_CATEGORIES
 
 
 def walk_tree(
@@ -139,3 +142,69 @@ def apply_gamma_correction(
     corrected_image = ImageOps.autocontrast(image, cutoff=gamma)
 
     return corrected_image
+
+
+def draw_objs_and_rels(
+    input_img: PIL.Image,
+    image_objects: List,
+    image_relationships: List,
+) -> PIL.Image:
+    """Draw Visual Genome objects and relationships onto the respective image.
+
+    :param input_img: Input image from Visual Genome
+    :type input_img: PIL.Image
+    :param image_objects: Objects for that image
+    :type image_objects: List
+    :param image_relationships: Relationships for that image
+    :type image_relationships: List
+    :return: The input image with boxes and relationships, in which the action-based relationships are marked in a
+        different color
+    :rtype: PIL.Image
+    """
+    # Create a Matplotlib figure
+    fig, ax = plt.subplots(1)
+
+    # Display the image
+    ax.imshow(input_img)
+
+    # Draw bounding boxes for objects
+    for obj in image_objects[0]["objects"]:
+        rect = patches.Rectangle(
+            (obj["x"], obj["y"]),
+            obj["w"],
+            obj["h"],
+            linewidth=2,
+            edgecolor="r",
+            facecolor="none",
+        )
+        ax.add_patch(rect)
+
+    # Draw lines for relationships
+    for rel in image_relationships[0]["relationships"]:
+        rel_color = "g-" if check_if_action_verb(rel["synsets"][0]) else "r-"
+        subject = rel["subject"]
+        obj = rel["object"]
+        x1 = subject["x"] + subject["w"] / 2
+        y1 = subject["y"] + subject["h"] / 2
+        x2 = obj["x"] + obj["w"] / 2
+        y2 = obj["y"] + obj["h"] / 2
+        plt.plot([x1, x2], [y1, y2], rel_color, linewidth=2)
+
+    return PIL.Image.frombytes("RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+
+
+def check_if_action_verb(
+    rel_name: str,
+) -> bool:
+    """Check if the name of a given relationship is an action verb or not.
+
+    :param rel_name: Name of the relationship
+    :type rel_name: str
+    :return: True if it is an action verb
+    :rtype: bool
+    """
+    return (
+        len(rel_name) > 0
+        and ".v." in rel_name
+        and wn.synset(rel_name).lexname() not in WN_EXCLUDED_CATEGORIES
+    )
