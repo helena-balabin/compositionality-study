@@ -634,6 +634,47 @@ def add_all_properties(
     return ic_scores_ds
 
 
+@click.command()
+@click.option("--vg_objs_file", type=str, default=VG_OBJECTS_FILE)
+@click.option("--vg_rels_file", type=str, default=VG_RELATIONSHIPS_FILE)
+def create_searchable_vg_rel_obj_idx(
+    vg_objs_file: str = VG_OBJECTS_FILE,
+    vg_rels_file: str = VG_RELATIONSHIPS_FILE,
+) -> Dict[str, Dict[str, List]]:
+    """Create a dictionary that maps the vg_image_id to the indices in the relationships and objects file.
+
+    :param vg_objs_file: Path to the json file with the VG objects
+    :type vg_objs_file: str
+    :param vg_rels_file: Path to the json file with the VG relationships
+    :type vg_rels_file: str
+    :return: Dictionary with vg_image_id (str) mapped a Dict containing "rels" and "objs" as keys, and the List of
+        indices from the vg_objs_file and vg_rels_file matching the vg_image_id, respectively
+    :rtype: Dict[str, Dict[str, List]]
+    """
+    # Load the files
+    output_dir = os.path.dirname(vg_objs_file)
+    with open(vg_objs_file, "r") as f:
+        vg_objs = json.load(f)
+    with open(vg_rels_file, "r") as f:
+        vg_rels = json.load(f)
+    # Initialize the result
+    all_ids = set([x["image_id"] for x in vg_objs]).intersection(set([x["image_id"] for x in vg_rels]))
+    res_dict = {vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids}
+
+    # Iterate over all objects
+    for i, obj in tqdm(enumerate(vg_objs), desc="Iterating through all objects"):
+        res_dict[obj["image_id"]]["objs"].append(i)
+    # Iterate over all relationships
+    for i, obj in tqdm(enumerate(vg_rels), desc="Iterating through all relationships"):
+        res_dict[obj["image_id"]]["rels"].append(i)
+
+    # Save the result
+    with open(os.path.join(output_dir, "vg_objs_rels_idx.json"), "w") as f:
+        json.dump(res_dict, f)
+
+    return res_dict
+
+
 @click.group()
 def cli() -> None:
     """Preprocess the VG + COCO overlap dataset, first for text, then for graph properties (on top of text)."""
@@ -645,4 +686,5 @@ if __name__ == "__main__":
     cli.add_command(add_image_segmentation_properties_wrapper)
     cli.add_command(add_ic_scores_wrapper)
     cli.add_command(add_all_properties)
+    cli.add_command(create_searchable_vg_rel_obj_idx)
     cli()
