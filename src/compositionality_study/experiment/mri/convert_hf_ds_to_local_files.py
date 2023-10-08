@@ -156,9 +156,13 @@ def convert_hf_dataset_to_local_stimuli(
             # Find the object annotations for the selected image
             image_objects = objs[obj_rel_idx_file[str(ex["vg_image_id"])]["objs"]]["objects"][0]  # type: ignore
             # Find the relationship annotations for the selected image
-            image_relationships = rels[obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]][  # type: ignore
+            image_relationships = rels[
+                obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]  # type: ignore
+            ][
                 "relationships"  # type: ignore
-            ][0]
+            ][
+                0
+            ]
             img_boxes = draw_objs_and_rels(img_vg, image_objects, image_relationships)
 
             # Apply gamma correction to the image
