@@ -7,6 +7,7 @@ from typing import List
 
 import click
 import pandas as pd
+import requests
 from datasets import load_dataset, load_from_disk
 from PIL import Image
 from tqdm import tqdm
@@ -127,7 +128,8 @@ def convert_hf_dataset_to_local_stimuli(
         # Delete the existing stimuli if specified
         if delete_existing:
             for f in os.listdir(local_stimuli_dir):
-                os.remove(os.path.join(local_stimuli_dir, f))
+                if f != "boxes":
+                    os.remove(os.path.join(local_stimuli_dir, f))
             for f in os.listdir(os.path.join(local_stimuli_dir, "boxes")):
                 os.remove(os.path.join(local_stimuli_dir, "boxes", f))
 
@@ -135,10 +137,10 @@ def convert_hf_dataset_to_local_stimuli(
         for ex in tqdm(dataset, desc="Loading images"):
             # Load the image
             img = ex["img"]
+            # Draw the bounding boxes on a different version of the image because there is a mismatch in the image size
+            # otherwise
+            img_vg = Image.open(requests.get(ex["vg_url"], stream=True).raw)
             output_name = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}"
-
-            # Apply gamma correction to the image
-            img = apply_gamma_correction(img)
 
             # Add boxes and relations to the image
             # Find the object annotations for the selected image
@@ -147,11 +149,14 @@ def convert_hf_dataset_to_local_stimuli(
             image_relationships = rels[
                 obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]
             ]["relationships"][0]
-            img_boxes = draw_objs_and_rels(img, image_objects, image_relationships)
+            img_boxes = draw_objs_and_rels(img_vg, image_objects, image_relationships)
+
+            # Apply gamma correction to the image
+            img = apply_gamma_correction(img)
 
             # Save the images to disk
-            img.save(os.path.join(local_stimuli_dir, output_name + ".jpg"))
-            img_boxes.save(os.path.join(local_stimuli_dir, "boxes", output_name + "_boxes.jpg"))
+            img.save(os.path.join(local_stimuli_dir, output_name + ".png"))
+            img_boxes.save(os.path.join(local_stimuli_dir, "boxes", output_name + "_boxes.png"))
 
             # Add the text and image path to the dataframe
             stimuli_df = pd.concat(
@@ -160,9 +165,11 @@ def convert_hf_dataset_to_local_stimuli(
                     pd.DataFrame(
                         {
                             "text": ex["sentences_raw"],
-                            "img_path": output_name + ".jpg",
+                            "img_path": output_name + ".png",
                             "img_id": f"{ex['vg_image_id']}_{ex['sentids']}",
                             "complexity": ex["complexity"],
+                            "parse_tree_depth": ex["parse_tree_depth"],
+                            "n_rel_action_verbs": ex["n_rel_action_verbs"],
                         },
                         index=[0],
                     ),
@@ -185,7 +192,7 @@ def convert_hf_dataset_to_local_stimuli(
         scrambled_img = Image.fromarray(
             fft_phase_scrambling(os.path.join(local_stimuli_dir, ex.img_path)),
         )
-        sc_img_output_path = f"scrambled_{ex.img_id}.jpg"
+        sc_img_output_path = f"scrambled_{ex.img_id}.png"
         # Write the scrambled image to disk
         scrambled_img.save(os.path.join(local_stimuli_dir, sc_img_output_path))
 

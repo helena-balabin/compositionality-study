@@ -1,7 +1,7 @@
 """Utils for the compositionality project."""
 import os
 from io import BytesIO
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -9,6 +9,7 @@ import numpy as np
 import PIL
 import requests
 import spacy
+from labellines import labelLines
 from nltk.corpus import wordnet as wn
 from PIL import Image, ImageOps
 
@@ -168,43 +169,74 @@ def draw_objs_and_rels(
     ax.imshow(input_img)
 
     # Draw bounding boxes for objects
-    for obj in image_objects[0]["objects"]:
+    for obj in image_objects:
         rect = patches.Rectangle(
             (obj["x"], obj["y"]),
             obj["w"],
             obj["h"],
-            linewidth=2,
+            linewidth=1,
             edgecolor="r",
             facecolor="none",
         )
         ax.add_patch(rect)
 
     # Draw lines for relationships
-    for rel in image_relationships[0]["relationships"]:
-        rel_color = "g-" if check_if_action_verb(rel["synsets"][0]) else "r-"
+    for rel in image_relationships:
+        action_verb = check_if_action_verb(rel)
+        rel_color = "g-" if action_verb[0] else "r-"
         subject = rel["subject"]
         obj = rel["object"]
+        if action_verb[0]:
+            # Plot the boxes in green again
+            for box in [subject, obj]:
+                rect = patches.Rectangle(
+                    (box["x"], box["y"]),
+                    box["w"],
+                    box["h"],
+                    linewidth=2,
+                    edgecolor="g",
+                    facecolor="none",
+                )
+                ax.add_patch(rect)
+        # Plot the relationships
         x1 = subject["x"] + subject["w"] / 2
         y1 = subject["y"] + subject["h"] / 2
         x2 = obj["x"] + obj["w"] / 2
         y2 = obj["y"] + obj["h"] / 2
-        plt.plot([x1, x2], [y1, y2], rel_color, linewidth=2)
+        plt.plot(
+            [x1, x2],
+            [y1, y2],
+            rel_color,
+            linewidth=2 if action_verb[0] else 1,
+            label=action_verb[1],
+        )
 
-    return PIL.Image.frombytes("RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+    labelLines(ax.get_lines(), zorder=2.5)
+
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png')
+    buffer.seek(0)
+    plt.close()
+
+    return PIL.Image.open(buffer)
 
 
 def check_if_action_verb(
-    rel_name: str,
-) -> bool:
+    rel: Dict,
+) -> Tuple[bool, str]:
     """Check if the name of a given relationship is an action verb or not.
 
-    :param rel_name: Name of the relationship
-    :type rel_name: str
-    :return: True if it is an action verb
-    :rtype: bool
+    :param rel: Relationship dictionary
+    :type rel: Dict
+    :return: True and name if it is an action verb
+    :rtype: Tuple(bool, str)
     """
-    return (
-        len(rel_name) > 0
-        and ".v." in rel_name
-        and wn.synset(rel_name).lexname() not in WN_EXCLUDED_CATEGORIES
+    name = ""
+    action_verb = (
+        len(rel["synsets"]) > 0
+        and ".v." in rel["synsets"][0]
+        and wn.synset(rel["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES
     )
+    if action_verb:
+        name = rel["synsets"][0].split(".")[0]
+    return action_verb, name
