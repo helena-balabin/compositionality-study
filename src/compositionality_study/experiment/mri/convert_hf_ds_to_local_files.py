@@ -1,4 +1,5 @@
 """Convert the HF dataset with the selected stimuli into locally saved images and text."""
+import json
 import os
 import random
 import string
@@ -6,16 +7,16 @@ from typing import List
 
 import click
 import pandas as pd
-from datasets import load_from_disk
+from datasets import load_dataset, load_from_disk
 from PIL import Image
 from tqdm import tqdm
 
 from compositionality_study.constants import (  # noqa
     VG_COCO_LOCAL_STIMULI_DIR,
-    VG_COCO_SELECTED_STIMULI_DIR,
+    VG_COCO_SELECTED_STIMULI_DIR, VG_OBJECTS_FILE, VG_OBJ_REL_IDX_FILE, VG_RELATIONSHIPS_FILE,
 )
 from compositionality_study.experiment.mri.create_fourier_scrambled_images import fft_phase_scrambling  # noqa
-from compositionality_study.utils import apply_gamma_correction # noqa
+from compositionality_study.utils import apply_gamma_correction, draw_objs_and_rels # noqa
 # Set a random seed for reproducibility  # noqa
 random.seed(42)  # noqa
 
@@ -107,25 +108,51 @@ def convert_hf_dataset_to_local_stimuli(
     # Initialize a dataframe that contains the text, path to the image, image ID and the condition
     stimuli_df = pd.DataFrame(columns=["text", "img_path", "img_id", "complexity"])
 
+    # Load some metadata files needed to draw the objects and relationships
+    objs, rels, obj_rel_idx_file = None, None, None
+    if os.path.exists(VG_OBJECTS_FILE) and os.path.exists(VG_RELATIONSHIPS_FILE) and os.path.exists(
+        VG_OBJ_REL_IDX_FILE
+    ):
+        objs = load_dataset("json", data_files=VG_OBJECTS_FILE, split="train")
+        rels = load_dataset("json", data_files=VG_RELATIONSHIPS_FILE, split="train")
+        with open(VG_OBJ_REL_IDX_FILE, "r") as f:
+            obj_rel_idx_file = json.load(f)
+
     if not only_control:
         # Create the output directory if it does not exist
         if not os.path.exists(local_stimuli_dir):
             os.makedirs(local_stimuli_dir)
+        if not os.path.exists(os.path.join(local_stimuli_dir, "boxes")):
+            os.makedirs(os.path.join(local_stimuli_dir, "boxes"))
         # Delete the existing stimuli if specified
         if delete_existing:
             for f in os.listdir(local_stimuli_dir):
                 os.remove(os.path.join(local_stimuli_dir, f))
+            for f in os.listdir(os.path.join(local_stimuli_dir, "boxes")):
+                os.remove(os.path.join(local_stimuli_dir, "boxes", f))
 
         # Iterate through the dataset and load the images
         for ex in tqdm(dataset, desc="Loading images"):
             # Load the image
             img = ex["img"]
-            output_path = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}.jpg"
+            output_name = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}"
 
             # Apply gamma correction to the image
             img = apply_gamma_correction(img)
 
-            img.save(os.path.join(local_stimuli_dir, output_path))
+            # Add boxes and relations to the image
+            # Find the object annotations for the selected image
+            image_objects = objs[obj_rel_idx_file[str(ex["vg_image_id"])]["objs"]]["objects"][0]
+            # Find the relationship annotations for the selected image
+            image_relationships = rels[
+                obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]
+            ]["relationships"][0]
+            img_boxes = draw_objs_and_rels(img, image_objects, image_relationships)
+
+            # Save the images to disk
+            img.save(os.path.join(local_stimuli_dir, output_name + ".jpg"))
+            img_boxes.save(os.path.join(local_stimuli_dir, "boxes", output_name + "_boxes.jpg"))
+
             # Add the text and image path to the dataframe
             stimuli_df = pd.concat(
                 [
@@ -133,7 +160,7 @@ def convert_hf_dataset_to_local_stimuli(
                     pd.DataFrame(
                         {
                             "text": ex["sentences_raw"],
-                            "img_path": output_path,
+                            "img_path": output_name + ".jpg",
                             "img_id": f"{ex['vg_image_id']}_{ex['sentids']}",
                             "complexity": ex["complexity"],
                         },
