@@ -37,8 +37,9 @@ col1, col2, col3, col4 = st.columns(4, gap="medium")
 # Retrieve the id column
 id_col = "cocoid" if "cocoid" in dataset.features else "id"
 
-objs, rels = None, None
-vg_objs_idx, vg_rels_idx, obj_rel_idx_file = None, None, None
+objs, rels = [], []
+vg_objs_idx, vg_rels_idx = [], []  # type: ignore
+obj_rel_idx_file = {}  # type: ignore
 
 if (
     os.path.exists(VG_OBJECTS_FILE)
@@ -66,11 +67,11 @@ for cell, comp in zip([col1, col2, col3, col4], complexities):
             ):
                 # Find the object annotations for the selected image
                 image_objects = objs[obj_rel_idx_file[str(example["vg_image_id"])]["objs"]][
-                    "objects"
+                    "objects"  # type: ignore
                 ][0]
                 # Find the relationship annotations for the selected image
                 image_relationships = rels[obj_rel_idx_file[str(example["vg_image_id"])]["rels"]][
-                    "relationships"
+                    "relationships"  # type: ignore
                 ][0]
                 image = draw_objs_and_rels(image, image_objects, image_relationships)
 

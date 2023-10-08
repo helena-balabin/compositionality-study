@@ -659,7 +659,7 @@ def create_searchable_vg_rel_obj_idx(
         vg_rels = json.load(f)
     # Initialize the result
     all_ids = set([x["image_id"] for x in vg_objs]).intersection(set([x["image_id"] for x in vg_rels]))
-    res_dict = {vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids}
+    res_dict: Dict[str, Dict[str, List]] = {vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids}
 
     # Iterate over all objects
     for i, obj in tqdm(enumerate(vg_objs), desc="Iterating through all objects"):

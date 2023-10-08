@@ -118,7 +118,7 @@ def convert_hf_dataset_to_local_stimuli(
     stimuli_df = pd.DataFrame(columns=["text", "img_path", "img_id", "complexity"])
 
     # Load some metadata files needed to draw the objects and relationships
-    objs, rels, obj_rel_idx_file = None, None, None
+    objs, rels, obj_rel_idx_file = [], [], []
     if (
         os.path.exists(VG_OBJECTS_FILE)
         and os.path.exists(VG_RELATIONSHIPS_FILE)
@@ -137,11 +137,11 @@ def convert_hf_dataset_to_local_stimuli(
             os.makedirs(os.path.join(local_stimuli_dir, "boxes"))
         # Delete the existing stimuli if specified
         if delete_existing:
-            for f in os.listdir(local_stimuli_dir):
+            for f in os.listdir(local_stimuli_dir):  # type: ignore
                 if f != "boxes":
-                    os.remove(os.path.join(local_stimuli_dir, f))
-            for f in os.listdir(os.path.join(local_stimuli_dir, "boxes")):
-                os.remove(os.path.join(local_stimuli_dir, "boxes", f))
+                    os.remove(os.path.join(local_stimuli_dir, f))  # type: ignore
+            for f in os.listdir(os.path.join(local_stimuli_dir, "boxes")):  # type: ignore
+                os.remove(os.path.join(local_stimuli_dir, "boxes", f))  # type: ignore
 
         # Iterate through the dataset and load the images
         for ex in tqdm(dataset, desc="Loading images"):
@@ -154,10 +154,10 @@ def convert_hf_dataset_to_local_stimuli(
 
             # Add boxes and relations to the image
             # Find the object annotations for the selected image
-            image_objects = objs[obj_rel_idx_file[str(ex["vg_image_id"])]["objs"]]["objects"][0]
+            image_objects = objs[obj_rel_idx_file[str(ex["vg_image_id"])]["objs"]]["objects"][0]  # type: ignore
             # Find the relationship annotations for the selected image
-            image_relationships = rels[obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]][
-                "relationships"
+            image_relationships = rels[obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]][  # type: ignore
+                "relationships"  # type: ignore
             ][0]
             img_boxes = draw_objs_and_rels(img_vg, image_objects, image_relationships)
 
