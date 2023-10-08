@@ -121,7 +121,8 @@ def add_text_properties(
     # Add dependency parse tree depth
     nlp = spacy.load(spacy_model)
     nlp.add_pipe("force_single_sentence", before="parser")
-    preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=24)
+    # This cannot be parallelized because of the spacy model/GPU issues
+    preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=1)
 
     # Save to disk
     if save_to_disk:
