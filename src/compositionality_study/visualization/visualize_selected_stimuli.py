@@ -14,8 +14,8 @@ from spacy_streamlit import visualize_parser
 
 from compositionality_study.constants import (
     VG_COCO_SELECTED_STIMULI_DIR,
-    VG_OBJECTS_FILE,
     VG_OBJ_REL_IDX_FILE,
+    VG_OBJECTS_FILE,
     VG_RELATIONSHIPS_FILE,
 )
 from compositionality_study.utils import draw_objs_and_rels
@@ -40,8 +40,10 @@ id_col = "cocoid" if "cocoid" in dataset.features else "id"
 objs, rels = None, None
 vg_objs_idx, vg_rels_idx, obj_rel_idx_file = None, None, None
 
-if os.path.exists(VG_OBJECTS_FILE) and os.path.exists(VG_RELATIONSHIPS_FILE) and os.path.exists(
-    VG_OBJ_REL_IDX_FILE
+if (
+    os.path.exists(VG_OBJECTS_FILE)
+    and os.path.exists(VG_RELATIONSHIPS_FILE)
+    and os.path.exists(VG_OBJ_REL_IDX_FILE)
 ):
     objs = load_dataset("json", data_files=VG_OBJECTS_FILE, split="train")
     rels = load_dataset("json", data_files=VG_RELATIONSHIPS_FILE, split="train")
@@ -57,15 +59,19 @@ for cell, comp in zip([col1, col2, col3, col4], complexities):
             image = Image.open(requests.get(example["vg_url"], stream=True).raw)  # noqa
 
             # Also plot the objects and relationships if the objects and relationship files exist
-            if os.path.exists(VG_OBJECTS_FILE) and os.path.exists(VG_RELATIONSHIPS_FILE) and os.path.exists(
-                VG_OBJ_REL_IDX_FILE
+            if (
+                os.path.exists(VG_OBJECTS_FILE)
+                and os.path.exists(VG_RELATIONSHIPS_FILE)
+                and os.path.exists(VG_OBJ_REL_IDX_FILE)
             ):
                 # Find the object annotations for the selected image
-                image_objects = objs[obj_rel_idx_file[str(example["vg_image_id"])]["objs"]]["objects"][0]
+                image_objects = objs[obj_rel_idx_file[str(example["vg_image_id"])]["objs"]][
+                    "objects"
+                ][0]
                 # Find the relationship annotations for the selected image
-                image_relationships = rels[
-                    obj_rel_idx_file[str(example["vg_image_id"])]["rels"]
-                ]["relationships"][0]
+                image_relationships = rels[obj_rel_idx_file[str(example["vg_image_id"])]["rels"]][
+                    "relationships"
+                ][0]
                 image = draw_objs_and_rels(image, image_objects, image_relationships)
 
                 st.image(image, caption=f"{example['sentences_raw']}")

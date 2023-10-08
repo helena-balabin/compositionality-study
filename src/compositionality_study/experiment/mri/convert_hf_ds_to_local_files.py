@@ -14,10 +14,16 @@ from tqdm import tqdm
 
 from compositionality_study.constants import (  # noqa
     VG_COCO_LOCAL_STIMULI_DIR,
-    VG_COCO_SELECTED_STIMULI_DIR, VG_OBJECTS_FILE, VG_OBJ_REL_IDX_FILE, VG_RELATIONSHIPS_FILE,
+    VG_COCO_SELECTED_STIMULI_DIR,
+    VG_OBJ_REL_IDX_FILE,
+    VG_OBJECTS_FILE,
+    VG_RELATIONSHIPS_FILE,
 )
-from compositionality_study.experiment.mri.create_fourier_scrambled_images import fft_phase_scrambling  # noqa
-from compositionality_study.utils import apply_gamma_correction, draw_objs_and_rels # noqa
+from compositionality_study.experiment.mri.create_fourier_scrambled_images import (
+    fft_phase_scrambling,
+)
+from compositionality_study.utils import apply_gamma_correction, draw_objs_and_rels  # noqa
+
 # Set a random seed for reproducibility  # noqa
 random.seed(42)  # noqa
 
@@ -62,7 +68,9 @@ def generate_non_word_sentence(
     non_words = []
     for word in words:
         # Sample letters according to their frequency
-        letters = random.choices(string.ascii_lowercase, weights=letter_frequencies, k=len(word))  # noqa
+        letters = random.choices(  # noqa
+            string.ascii_lowercase, weights=letter_frequencies, k=len(word)
+        )  # noqa
 
         # Add the non word to the list
         non_words.append("".join(letters))
@@ -111,8 +119,10 @@ def convert_hf_dataset_to_local_stimuli(
 
     # Load some metadata files needed to draw the objects and relationships
     objs, rels, obj_rel_idx_file = None, None, None
-    if os.path.exists(VG_OBJECTS_FILE) and os.path.exists(VG_RELATIONSHIPS_FILE) and os.path.exists(
-        VG_OBJ_REL_IDX_FILE
+    if (
+        os.path.exists(VG_OBJECTS_FILE)
+        and os.path.exists(VG_RELATIONSHIPS_FILE)
+        and os.path.exists(VG_OBJ_REL_IDX_FILE)
     ):
         objs = load_dataset("json", data_files=VG_OBJECTS_FILE, split="train")
         rels = load_dataset("json", data_files=VG_RELATIONSHIPS_FILE, split="train")
@@ -139,16 +149,16 @@ def convert_hf_dataset_to_local_stimuli(
             img = ex["img"]
             # Draw the bounding boxes on a different version of the image because there is a mismatch in the image size
             # otherwise
-            img_vg = Image.open(requests.get(ex["vg_url"], stream=True).raw)
+            img_vg = Image.open(requests.get(ex["vg_url"], stream=True).raw)  # noqa
             output_name = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}"
 
             # Add boxes and relations to the image
             # Find the object annotations for the selected image
             image_objects = objs[obj_rel_idx_file[str(ex["vg_image_id"])]["objs"]]["objects"][0]
             # Find the relationship annotations for the selected image
-            image_relationships = rels[
-                obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]
-            ]["relationships"][0]
+            image_relationships = rels[obj_rel_idx_file[str(ex["vg_image_id"])]["rels"]][
+                "relationships"
+            ][0]
             img_boxes = draw_objs_and_rels(img_vg, image_objects, image_relationships)
 
             # Apply gamma correction to the image
@@ -182,7 +192,9 @@ def convert_hf_dataset_to_local_stimuli(
 
     # Generate null condition stimuli by scrambling control_fraction of the images for each complexity condition
     # Take a subset of the stimuli, stratified by complexity
-    stimuli_df_subset = stimuli_df.groupby("complexity").sample(frac=control_fraction, random_state=random_seed)
+    stimuli_df_subset = stimuli_df.groupby("complexity").sample(
+        frac=control_fraction, random_state=random_seed
+    )
 
     # Estimate the letter frequencies
     letter_frequencies = estimate_letter_frequency(stimuli_df_subset["text"])

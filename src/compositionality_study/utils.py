@@ -214,7 +214,7 @@ def draw_objs_and_rels(
     labelLines(ax.get_lines(), zorder=2.5)
 
     buffer = BytesIO()
-    plt.savefig(buffer, format='png')
+    plt.savefig(buffer, format="png")
     buffer.seek(0)
     plt.close()
 
