@@ -45,9 +45,9 @@ def map_conditions(
     example["textual_complexity"] = textual_complexity
 
     # Map the visual complexity condition
-    middle_n_obj_seg = (min_n_action_verbs + max_n_action_verbs) / 2
-    img_seg_complexity = "high" if example["n_img_seg_obj"] >= middle_n_obj_seg else "low"
-    example["img_seg_complexity"] = img_seg_complexity
+    middle_n_action_verbs = (min_n_action_verbs + max_n_action_verbs) / 2
+    img_seg_complexity = "high" if example["n_rel_action_verbs"] >= middle_n_action_verbs else "low"
+    example["img_act_complexity"] = img_seg_complexity
 
     # Combine the two
     example["complexity"] = f"{textual_complexity}_text_{img_seg_complexity}_acverb"
@@ -274,6 +274,7 @@ def select_stimuli(
         except:  # noqa
             print(f"Not enough stimuli for the {comp} condition")
             return
+    # TODO check the mapping of the conditions, it's not correct (see csv file in local stimuli)
     vg_ds_n_stimuli = concatenate_datasets(vg_n_stim)
 
     # 8. Save the dataset
