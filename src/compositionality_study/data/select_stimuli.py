@@ -192,8 +192,8 @@ def select_stimuli(
         f">={dep_max}, {len(vg_ds)} entries remain."
     )
 
-    # 5. Select by number action verbs that match max and min quantiles
-    ac_min = int(pd.Series(vg_ds["n_rel_action_verbs"]).quantile(action_verbs_quantile))
+    # 5. Select by number action verbs that match max and min quantiles (min 1 action verb)
+    ac_min = max(1, int(pd.Series(vg_ds["n_rel_action_verbs"]).quantile(action_verbs_quantile)))
     ac_max = int(pd.Series(vg_ds["n_rel_action_verbs"]).quantile(1 - action_verbs_quantile))
     vg_ds = vg_ds.filter(
         lambda x: x["n_rel_action_verbs"] <= ac_min or x["n_rel_action_verbs"] >= ac_max,
