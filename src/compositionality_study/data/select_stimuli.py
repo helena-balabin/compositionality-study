@@ -1,4 +1,5 @@
 """Select stimuli from the VG + COCO overlap dataset."""
+import copy
 # Imports
 import os
 from typing import Any, Dict
@@ -160,7 +161,8 @@ def select_stimuli(
             lambda x: asp_min <= get_image_aspect_ratio_from_local_path(x["filepath"]) <= asp_max,
             num_proc=24,
         )
-    logger.info(f"Controlled the dataset the aspect ratio of the images, {len(vg_ds)} entries remain.")
+    logger.info(f"Controlled the dataset for the aspect ratio of the images (between {asp_min} and {asp_max}), "
+                f"{len(vg_ds)} entries remain.")
 
     # 3. Filter out any outliers for dep parse tree depth and number of action verbs
     if filter_outliers:
@@ -206,8 +208,9 @@ def select_stimuli(
 
     # 6. Filter out black and white images and images with text on them and images with low quality
     # Add the images to the dataset, load based on the filenames
+    # Avoid PIL-related bugs by copying the images
     vg_ds = vg_ds.map(
-        lambda x: {**x, "img": Image.open(os.path.join(VG_IMAGE_DIR, x["filename"]))},
+        lambda x: {**x, "img": copy.deepcopy(Image.open(os.path.join(VG_IMAGE_DIR, x["filename"])))},
         num_proc=24,
     )
     # Filter out images with low quality
