@@ -240,7 +240,8 @@ def select_stimuli(
             num_proc=8,  # Lower parallelization because of pytesseract
         )
         logger.info(
-            f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} entries remain."
+            f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} "
+            f"entries remain."
         )
 
     # 7. Map the conditions to the examples
