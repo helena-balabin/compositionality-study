@@ -218,10 +218,11 @@ def select_stimuli(
         lambda x: x["img"].size[0] > 1.5 * image_quality_threshold and x["img"].size[1] > image_quality_threshold,
         num_proc=24,
     )
-    # Take a 50 x 50 patch and if it's equal across two RGB channels, it's a black and white image
+    # Take a 20 x 20 patch and if it's equal across two RGB channels, it's a black and white image
     vg_ds = vg_ds.filter(
-        lambda x: not np.all(
-            np.array(x["img"])[:50, :50, 0] == np.array(x["img"])[:50, :50, 1]
+        # Take possibly faulty images into account
+        lambda x: np.array(x["img"]).ndim > 2 and not np.all(
+            np.array(x["img"])[:20, :20, 0] == np.array(x["img"])[:20, :20, 1]
         ),
         num_proc=24,
     )
