@@ -230,7 +230,7 @@ def select_stimuli(
     # https://tesseract-ocr.github.io/tessdoc/Installation.html)
     vg_ds = vg_ds.filter(
         lambda x: len(image_to_string(x["img"]).strip(" \n\x0c")) == 0,
-        num_proc=24,
+        num_proc=8,  # Lower parallelization because of pytesseract
     )
     logger.info(
         f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} entries remain."
