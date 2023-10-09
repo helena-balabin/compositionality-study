@@ -68,6 +68,7 @@ def map_conditions(
 @click.option("--action_verbs_quantile", type=float, default=0.05)
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
+@click.option("--filter_text_on_images", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
@@ -82,6 +83,7 @@ def select_stimuli(
     action_verbs_quantile: float = 0.05,
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
+    filter_text_on_images: bool = True,
     n_stimuli: int = 80,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
@@ -115,6 +117,8 @@ def select_stimuli(
     :type filter_outliers: bool
     :param image_quality_threshold: Minimum number of pixels (height) of the image, defaults to 400
     :type image_quality_threshold: int
+    :param filter_text_on_images: Whether to filter out images with text on them, defaults to True
+    :type filter_text_on_images: bool
     :param n_stimuli: The number of stimuli to select, must be divisible by 4
     :type n_stimuli: int
     """
@@ -226,15 +230,16 @@ def select_stimuli(
         ),
         num_proc=24,
     )
-    # Filter out images with text on them using pytesseract (make sure to install it first, see
-    # https://tesseract-ocr.github.io/tessdoc/Installation.html)
-    vg_ds = vg_ds.filter(
-        lambda x: len(image_to_string(x["img"]).strip(" \n\x0c")) == 0,
-        num_proc=8,  # Lower parallelization because of pytesseract
-    )
-    logger.info(
-        f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} entries remain."
-    )
+    if filter_text_on_images:
+        # Filter out images with text on them using pytesseract (make sure to install it first, see
+        # https://tesseract-ocr.github.io/tessdoc/Installation.html)
+        vg_ds = vg_ds.filter(
+            lambda x: len(image_to_string(x["img"]).strip(" \n\x0c")) == 0,
+            num_proc=8,  # Lower parallelization because of pytesseract
+        )
+        logger.info(
+            f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} entries remain."
+        )
 
     # 7. Map the conditions to the examples
     vg_ds = vg_ds.map(
