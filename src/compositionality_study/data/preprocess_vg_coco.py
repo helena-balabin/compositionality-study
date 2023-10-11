@@ -12,7 +12,6 @@ import pandas as pd
 import spacy
 from datasets import Dataset, load_dataset, load_from_disk
 from loguru import logger
-from nltk.corpus import wordnet as wn
 from spacy import Language
 from tqdm import tqdm
 
@@ -25,9 +24,8 @@ from compositionality_study.constants import (
     VG_COCO_PREP_TEXT_IMG_SEG_DIR,
     VG_DIR, VG_OBJECTS_FILE,
     VG_RELATIONSHIPS_FILE,
-    WN_EXCLUDED_CATEGORIES, WN_PREDICATE_FILTER, WN_SYNSET_FILTER,
 )
-from compositionality_study.utils import flatten_examples, walk_tree_hf_ds
+from compositionality_study.utils import check_if_living_being, flatten_examples, walk_tree_hf_ds
 
 
 @click.command()
@@ -470,16 +468,23 @@ def determine_graph_complexity_measures(
         for o in obj["objects"]:
             graph.add_node(o["object_id"])
         for r in rel["relationships"]:
-            graph.add_edge(r["object"]["object_id"], r["subject"]["object_id"])
+            graph.add_edge(
+                r["object"]["object_id"],
+                r["subject"]["object_id"],
+                rel_id=r["relationship_id"],
+            )
 
-        # Exlcude static verbs (e.g. be, have, ...) and prepositions that are used to describe static positions
-        # based on WN_SYNSET_FILTER and WN_PREDICATE_FILTER
+        # Filter for relationships that have at least one living being as subject/object
         filtered_rels = [
-            r for r in rel["relationships"] if len(r["synsets"]) > 0
-            and wn.synset(r["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES
-            and not any([w in r["synsets"][0] for w in WN_SYNSET_FILTER])
-            and not any([w in r["predicate"].lower() for w in WN_PREDICATE_FILTER])
+            r for r in rel["relationships"] if len(r["object"]["synsets"]) > 0 and len(r["subject"]["synsets"]) > 0
+            and (check_if_living_being(r["object"]["synsets"][0]) or check_if_living_being(r["subject"]["synsets"][0]))
         ]
+        filtered_rel_ids = [r["relationship_id"] for r in filtered_rels]
+        filtered_edges = [
+            (u, v, data) for u, v, data in graph.edges(data=True) if data.get("rel_id") in filtered_rel_ids
+        ]
+        # Create a new graph with the filtered edges
+        filtered_graph = nx.Graph(filtered_edges)
 
         # Determine the characteristics + add the image id as well
         measures = {
@@ -494,9 +499,12 @@ def determine_graph_complexity_measures(
                 seed=42,
             ) if nx.number_of_nodes(graph) > 0 else 0,
             "density": nx.density(graph),
-            "max_depth": max(
+            "sg_depth": max(
                 [max(nx.shortest_path_length(graph, source=n).values()) for n in graph.nodes()]
             ) if nx.number_of_nodes(graph) > 0 else 0,
+            "sg_filtered_depth": max(
+                [max(nx.shortest_path_length(filtered_graph, source=n).values()) for n in filtered_graph.nodes()]
+            ) if nx.number_of_nodes(filtered_graph) > 0 else 0,
             "n_connected_components": nx.number_connected_components(graph),
             "n_obj": len(obj["objects"]),
             "n_rel": len(rel["relationships"]),

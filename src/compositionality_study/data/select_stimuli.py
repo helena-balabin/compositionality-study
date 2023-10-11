@@ -20,8 +20,8 @@ def map_conditions(
     example: Dict[str, Any],
     min_dep_parse_tree_depth: int = 5,
     max_dep_parse_tree_depth: int = 10,
-    min_n_filtered_rel: int = 3,
-    max_n_filtered_rel: int = 18,
+    min_sg_filtered_depth: int = 3,
+    max_sg_filtered_depth: int = 18,
 ) -> Dict:
     """Map the conditions (high/low textual complexity, high/low visual complexity) to the example.
 
@@ -32,10 +32,10 @@ def map_conditions(
     :type min_dep_parse_tree_depth: int
     :param max_dep_parse_tree_depth: The maximum dependency parse tree depth
     :type max_dep_parse_tree_depth: int
-    :param min_n_filtered_rel: The minimum number of filtered verbs
-    :type min_n_filtered_rel: int
-    :param max_n_filtered_rel: The maximum number of filtered verbs
-    :type max_n_filtered_rel: int
+    :param min_sg_filtered_depth: The minimum scene graph depth
+    :type min_sg_filtered_depth: int
+    :param max_sg_filtered_depth: The maximum scene graph depth
+    :type max_sg_filtered_depth: int
     :return: The example with the mapped conditions, i.e., extra features for the conditions
     :rtype: Dict
     """
@@ -45,8 +45,8 @@ def map_conditions(
     example["textual_complexity"] = textual_complexity
 
     # Map the visual complexity condition
-    middle_n_filtered_rel = (min_n_filtered_rel + max_n_filtered_rel) / 2
-    img_seg_complexity = "high" if example["n_filtered_rel"] >= middle_n_filtered_rel else "low"
+    middle_sg_filtered_depth = (min_sg_filtered_depth + max_sg_filtered_depth) / 2
+    img_seg_complexity = "high" if example["sg_filtered_depth"] >= middle_sg_filtered_depth else "low"
     example["img_act_complexity"] = img_seg_complexity
 
     # Combine the two
@@ -65,7 +65,7 @@ def map_conditions(
 @click.option("--asp_min", type=float, default=1.2)
 @click.option("--asp_max", type=float, default=1.8)
 @click.option("--dep_quantile", type=float, default=0.01)
-@click.option("--filtered_rel_quantile", type=float, default=0.05)
+@click.option("--sg_filtered_depth_quantile", type=float, default=0.05)
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=True)
@@ -80,7 +80,7 @@ def select_stimuli(
     asp_min: float = 1.2,
     asp_max: float = 1.8,
     dep_quantile: float = 0.01,
-    filtered_rel_quantile: float = 0.05,
+    sg_filtered_depth_quantile: float = 0.05,
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = True,
@@ -109,9 +109,9 @@ def select_stimuli(
     :param dep_quantile: The quantile of the dependency parse tree depth to select stimuli for, e.g., 0.05 means
         that the stimuli with the lowest 5% and highest 5% dependency parse tree depth are selected, defaults to 0.05
     :type dep_quantile: float
-    :param filtered_rel_quantile: The quantile of the number of filtered verbs to select stimuli for, e.g., 0.05 means
-        that the stimuli with the lowest 5% and highest 5% number of filtered verbs are selected, defaults to 0.05
-    :type filtered_rel_quantile: float
+    :param sg_filtered_depth_quantile: The quantile of the number of filtered verbs to select stimuli for, e.g., 0.05
+        means that the stimuli with the lowest 5% and highest 5% number of sg depths are selected, defaults to 0.05
+    :type sg_filtered_depth_quantile: float
     :param filter_outliers: Whether to filter out outliers (more than 3x of the standard deviation) for the dependency
         parse tree depth and number of filtered verbs, defaults to True
     :type filter_outliers: bool
@@ -178,10 +178,10 @@ def select_stimuli(
         )
         logger.info(f"Filtered out outlier dependency parse tree depth values, {len(vg_ds)} entries remain.")
 
-        ac_m = pd.Series(vg_ds["n_filtered_rel"]).mean()
-        ac_std = pd.Series(vg_ds["n_filtered_rel"]).std()
+        ac_m = pd.Series(vg_ds["sg_filtered_depth"]).mean()
+        ac_std = pd.Series(vg_ds["sg_filtered_depth"]).std()
         vg_ds = vg_ds.filter(
-            lambda x: abs(x["n_filtered_rel"] - ac_m) <= 3 * ac_std,
+            lambda x: abs(x["sg_filtered_depth"] - ac_m) <= 3 * ac_std,
             num_proc=24,
         )
         logger.info(f"Filtered out outliers for the number of filtered verbs values, {len(vg_ds)} entries remain.")
@@ -198,12 +198,12 @@ def select_stimuli(
         f">={dep_max}, {len(vg_ds)} entries remain."
     )
 
-    # 5. Select by number filtered verbs that match max and min quantiles (min 1 filtered verb)
-    ac_min = max(1, int(pd.Series(vg_ds["n_filtered_rel"]).quantile(filtered_rel_quantile)))
-    ac_max = int(pd.Series(vg_ds["n_filtered_rel"]).quantile(1 - filtered_rel_quantile))
+    # 5. Select by number scene graph depths that match max and min quantiles (min 1 filtered verb)
+    ac_min = max(1, int(pd.Series(vg_ds["sg_filtered_depth"]).quantile(sg_filtered_depth_quantile)))
+    ac_max = int(pd.Series(vg_ds["sg_filtered_depth"]).quantile(1 - sg_filtered_depth_quantile))
     vg_ds = vg_ds.filter(
-        lambda x: x["n_filtered_rel"] > 0 and (
-            x["n_filtered_rel"] <= ac_min or x["n_filtered_rel"] >= ac_max
+        lambda x: x["sg_filtered_depth"] > 0 and (
+            x["sg_filtered_depth"] <= ac_min or x["sg_filtered_depth"] >= ac_max
         ),
         num_proc=24,
     )
@@ -250,8 +250,8 @@ def select_stimuli(
             x,
             min_dep_parse_tree_depth=dep_min,
             max_dep_parse_tree_depth=dep_max,
-            min_n_filtered_rel=ac_min,
-            max_n_filtered_rel=ac_max,
+            min_sg_filtered_depth=ac_min,
+            max_sg_filtered_depth=ac_max,
         ),
         num_proc=24,
     )
