@@ -262,7 +262,14 @@ def check_if_living_being(
     synset = wn.synset(synset)
     hypernyms = set()
 
-    def recursive_hypernyms(syn):
+    def recursive_hypernyms(
+        syn: wn.Synset,  # noqa
+    ):
+        """Recursively check the hypernyms of a given synset.
+
+        :param syn: The synset to check
+        :type syn: wn.Synset
+        """
         for hypernym in syn.hypernyms():
             hypernyms.add(hypernym)
             recursive_hypernyms(hypernym)
