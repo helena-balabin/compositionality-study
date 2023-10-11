@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import nltk
 import numpy as np
 import PIL
 import requests
@@ -263,7 +264,7 @@ def check_if_living_being(
     hypernyms = set()
 
     def recursive_hypernyms(
-        syn: wn.Synset,  # noqa
+        syn: nltk.corpus.reader.wordnet.Synset,
     ):
         """Recursively check the hypernyms of a given synset.
 
