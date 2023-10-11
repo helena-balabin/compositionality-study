@@ -240,3 +240,27 @@ def check_if_action_verb(
     if action_verb:
         name = rel["synsets"][0].split(".")[0]
     return action_verb, name
+
+
+def check_if_living_being(
+    synset: str,
+) -> bool:
+    """Check if a given synset is a living being by recursively checking its hypernyms.
+
+    :param synset: The synset to check, e.g., "dog.n.01"
+    :type synset: str
+    :return: True if the synset describes a living being
+    :rtype: bool
+    """
+    if len(synset) == 0:
+        return False
+    synset = wn.synset(synset)
+    hypernyms = set()
+
+    def recursive_hypernyms(syn):
+        for hypernym in syn.hypernyms():
+            hypernyms.add(hypernym)
+            recursive_hypernyms(hypernym)
+
+    recursive_hypernyms(synset)
+    return wn.synset("living_thing.n.01") in hypernyms
