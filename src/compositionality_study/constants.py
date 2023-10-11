@@ -68,5 +68,8 @@ os.makedirs(IC9000_IMG_COM_OUTPUT_DIR, exist_ok=True)
 
 # Excluded WordNet verb synsets for action-based filtering of relationships
 # Consumption had to be excluded because of food-related stimuli that had a high number of verbs but no actions
-WN_EXCLUDED_CATEGORIES = ["verb.possession", "verb.body", "verb.stative", "verb.consumption"]
-# "verb.contact", "verb.change", "verb.weather"
+# Body verbs mostly describe wearing clothes, which is static
+WN_EXCLUDED_CATEGORIES = ["verb.body", "verb.consumption"]
+WN_SYNSET_FILTER = ["be", "have", "along"]
+WN_PREDICATE_FILTER = ["with", "on", "in"]
+# "verb.contact", "verb.change", "verb.weather", "verb.stative", "verb.possession"

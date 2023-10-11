@@ -25,7 +25,7 @@ from compositionality_study.constants import (
     VG_COCO_PREP_TEXT_IMG_SEG_DIR,
     VG_DIR, VG_OBJECTS_FILE,
     VG_RELATIONSHIPS_FILE,
-    WN_EXCLUDED_CATEGORIES,
+    WN_EXCLUDED_CATEGORIES, WN_PREDICATE_FILTER, WN_SYNSET_FILTER,
 )
 from compositionality_study.utils import flatten_examples, walk_tree_hf_ds
 
@@ -472,13 +472,14 @@ def determine_graph_complexity_measures(
         for r in rel["relationships"]:
             graph.add_edge(r["object"]["object_id"], r["subject"]["object_id"])
 
-        # Count the number of (action) verbs in the image by check for predicate synsets that are (action) verbs
-        # One might need to install wordnet via nltk for this: nltk.download('wordnet')
-        all_verbs = [
-            r for r in rel["relationships"] if len(r["synsets"]) > 0 and ".v." in r["synsets"][0]
+        # Exlcude static verbs (e.g. be, have, ...) and prepositions that are used to describe static positions
+        # based on WN_SYNSET_FILTER and WN_PREDICATE_FILTER
+        filtered_rels = [
+            r for r in rel["relationships"] if len(r["synsets"]) > 0
+            and wn.synset(r["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES
+            and not any([w in r["synsets"][0] for w in WN_SYNSET_FILTER])
+            and not any([w in r["predicate"].lower() for w in WN_PREDICATE_FILTER])
         ]
-        # Exlcude static verbs (e.g. be, have, ...)
-        action_verbs = [v for v in all_verbs if wn.synset(v["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES]
 
         # Determine the characteristics + add the image id as well
         measures = {
@@ -493,11 +494,13 @@ def determine_graph_complexity_measures(
                 seed=42,
             ) if nx.number_of_nodes(graph) > 0 else 0,
             "density": nx.density(graph),
+            "max_depth": max(
+                [max(nx.shortest_path_length(graph, source=n).values()) for n in graph.nodes()]
+            ) if nx.number_of_nodes(graph) > 0 else 0,
             "n_connected_components": nx.number_connected_components(graph),
             "n_obj": len(obj["objects"]),
             "n_rel": len(rel["relationships"]),
-            "n_rel_verbs": len(all_verbs),
-            "n_rel_action_verbs": len(action_verbs),
+            "n_filtered_rel": len(filtered_rels),
         }
         # Append them to the list
         graph_measures.append(measures)

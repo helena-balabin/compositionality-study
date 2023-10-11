@@ -13,7 +13,12 @@ from labellines import labelLines
 from nltk.corpus import wordnet as wn
 from PIL import Image, ImageOps
 
-from compositionality_study.constants import VG_IMAGE_DIR, WN_EXCLUDED_CATEGORIES
+from compositionality_study.constants import (
+    VG_IMAGE_DIR,
+    WN_EXCLUDED_CATEGORIES,
+    WN_PREDICATE_FILTER,
+    WN_SYNSET_FILTER,
+)
 
 
 def walk_tree(
@@ -182,7 +187,7 @@ def draw_objs_and_rels(
 
     # Draw lines for relationships
     for rel in image_relationships:
-        action_verb = check_if_action_verb(rel)
+        action_verb = check_if_filtered_rel(rel)
         rel_color = "g-" if action_verb[0] else "r-"
         subject = rel["subject"]
         obj = rel["object"]
@@ -221,25 +226,25 @@ def draw_objs_and_rels(
     return PIL.Image.open(buffer)
 
 
-def check_if_action_verb(
+def check_if_filtered_rel(
     rel: Dict,
 ) -> Tuple[bool, str]:
-    """Check if the name of a given relationship is an action verb or not.
+    """Check if the name of a given relationship is a filtered relationship.
 
     :param rel: Relationship dictionary
     :type rel: Dict
-    :return: True and name if it is an action verb
+    :return: True and name if it is a filtered relationship, False and empty string otherwise
     :rtype: Tuple(bool, str)
     """
     name = ""
-    action_verb = (
-        len(rel["synsets"]) > 0
-        and ".v." in rel["synsets"][0]
-        and wn.synset(rel["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES
+    filtered_rel = (
+        wn.synset(rel["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES
+        and not any([w in rel["synsets"][0] for w in WN_SYNSET_FILTER])
+        and not any([w in rel["predicate"].lower() for w in WN_PREDICATE_FILTER])
     )
-    if action_verb:
+    if filtered_rel:
         name = rel["synsets"][0].split(".")[0]
-    return action_verb, name
+    return filtered_rel, name
 
 
 def check_if_living_being(
