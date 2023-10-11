@@ -14,12 +14,7 @@ from labellines import labelLines
 from nltk.corpus import wordnet as wn
 from PIL import Image, ImageOps
 
-from compositionality_study.constants import (
-    VG_IMAGE_DIR,
-    WN_EXCLUDED_CATEGORIES,
-    WN_PREDICATE_FILTER,
-    WN_SYNSET_FILTER,
-)
+from compositionality_study.constants import VG_IMAGE_DIR
 
 
 def walk_tree(
@@ -239,9 +234,8 @@ def check_if_filtered_rel(
     """
     name = ""
     filtered_rel = (
-        wn.synset(rel["synsets"][0]).lexname() not in WN_EXCLUDED_CATEGORIES
-        and not any([w in rel["synsets"][0] for w in WN_SYNSET_FILTER])
-        and not any([w in rel["predicate"].lower() for w in WN_PREDICATE_FILTER])
+        len(rel["object"]["synsets"]) > 0 and len(rel["subject"]["synsets"]) > 0
+        and (check_if_living_being(rel["object"]["synsets"][0]) or check_if_living_being(rel["subject"]["synsets"][0]))
     )
     if filtered_rel:
         name = rel["synsets"][0].split(".")[0]
@@ -276,4 +270,4 @@ def check_if_living_being(
             recursive_hypernyms(hypernym)
 
     recursive_hypernyms(synset)
-    return wn.synset("living_thing.n.01") in hypernyms
+    return wn.synset("animal.n.01") in hypernyms or wn.synset("person.n.01") in hypernyms
