@@ -234,8 +234,12 @@ def check_if_filtered_rel(
     """
     name = ""
     filtered_rel = (
-        len(rel["object"]["synsets"]) > 0 and len(rel["subject"]["synsets"]) > 0
-        and (check_if_living_being(rel["object"]["synsets"][0]) or check_if_living_being(rel["subject"]["synsets"][0]))
+        len(rel["object"]["synsets"]) > 0
+        and len(rel["subject"]["synsets"]) > 0
+        and (
+            check_if_living_being(rel["object"]["synsets"][0])
+            or check_if_living_being(rel["subject"]["synsets"][0])
+        )
     )
     if filtered_rel:
         name = rel["synsets"][0].split(".")[0] if "." in rel else rel["predicate"]
