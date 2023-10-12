@@ -69,6 +69,7 @@ def map_conditions(
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=True)
+@click.option("--binarized_conditions", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
@@ -84,6 +85,7 @@ def select_stimuli(
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = True,
+    binarized_conditions: bool = True,
     n_stimuli: int = 80,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
@@ -119,6 +121,8 @@ def select_stimuli(
     :type image_quality_threshold: int
     :param filter_text_on_images: Whether to filter out images with text on them, defaults to True
     :type filter_text_on_images: bool
+    :param binarized_conditions: Whether to use binarized conditions (only high img + high text complexity, low img + low
+        text complexity, rather than all 4 high/low combinations), defaults to True
     :param n_stimuli: The number of stimuli to select, must be divisible by 4
     :type n_stimuli: int
     """
@@ -258,17 +262,20 @@ def select_stimuli(
 
     # Select n_stimuli many stimuli, evenly distributed over the conditions
     vg_n_stim = []
-    for comp in ["low_text_low_image", "low_text_high_image", "high_text_low_image", "high_text_high_image"]:
+    conditions = ["low_text_low_image", "high_text_high_image"] if binarized_conditions else [
+        "low_text_low_image", "low_text_high_image", "high_text_low_image", "high_text_high_image"
+    ]
+    for comp in conditions:
         try:
             filtered_ds = vg_ds.filter(
                 lambda x: x["complexity"] == comp,
                 num_proc=24,
             )
-            if len(filtered_ds) < n_stimuli // 4:
+            if len(filtered_ds) < n_stimuli // len(conditions):
                 print(f"Not enough stimuli for the {comp} condition")
                 return
             # Select the remaining stimuli randomly
-            random_indices = np.random.choice(len(filtered_ds), size=n_stimuli // 4, replace=False)
+            random_indices = np.random.choice(len(filtered_ds), size=n_stimuli // len(conditions), replace=False)
             filtered_ds = filtered_ds.select(random_indices)
             vg_n_stim.append(filtered_ds)
         except:  # noqa
