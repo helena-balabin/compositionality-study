@@ -36,8 +36,8 @@ def check_quit_skip_exp() -> bool:
 def run_single_run(
     win: visual.Window,
     stimuli: List,
-    duration: float = 6.0,
-    inter_stimulus_interval: float = 2.0,
+    duration: float = 3.0,
+    inter_stimulus_interval: float = 5.5,
     dummy_scan_duration: float = 6.0,
     frame_rate: int = 60,
     mri_trigger_button: str = "t",
@@ -141,8 +141,8 @@ def run_single_run(
 @click.command()
 @click.option("--local_stimuli_dir", type=str, default=VG_COCO_LOCAL_STIMULI_DIR)
 @click.option("--practice_stimuli_dir", type=str, default=VG_COCO_PRACTICE_STIMULI_DIR)
-@click.option("--duration", type=float, default=6.0)
-@click.option("--inter_stimulus_interval", type=float, default=2.0)
+@click.option("--duration", type=float, default=3.0)
+@click.option("--inter_stimulus_interval", type=float, default=5.5)
 @click.option("--dummy_scan_duration", type=float, default=6.0)
 @click.option("--n_repetitions", type=int, default=3)
 @click.option("--n_runs", type=int, default=16)
@@ -154,8 +154,8 @@ def run_single_run(
 def run_psychopy_exp(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     practice_stimuli_dir: str = VG_COCO_PRACTICE_STIMULI_DIR,
-    duration: float = 6.0,
-    inter_stimulus_interval: float = 2.0,
+    duration: float = 3.0,
+    inter_stimulus_interval: float = 5.5,
     dummy_scan_duration: float = 6.0,
     n_repetitions: int = 3,
     n_runs: int = 16,
