@@ -2,7 +2,6 @@
 # Imports
 import json
 import os
-from collections import Counter
 from typing import Any, Dict, List, Optional, Union
 
 import click
@@ -87,7 +86,7 @@ def add_text_properties(
     :rtype: Dataset
     """
     vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
-    # Remove unnnecessary columns
+    # Remove unnecessary columns
     vg_coco_ds = vg_coco_ds.remove_columns(["sentences_tokens", "sentences_sentid", "image"])
     if "__index_level_0__" in vg_coco_ds.column_names:
         vg_coco_ds = vg_coco_ds.remove_columns(["__index_level_0__"])
@@ -531,34 +530,45 @@ def get_coco_obj_seg_df(
     """
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
-        coco_obj_seg_tr = [(ex["image_id"], ex["category_id"]) for ex in json.load(f)["annotations"]]
-        coco_cats_tr = {ex["category_id"]: ex["name"] for ex in json.load(f)["categories"]}
+        coco_data_tr = json.load(f)
+        coco_obj_seg_tr = [(ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]]
+        coco_cats_tr = {ex["id"]: ex["supercategory"] for ex in coco_data_tr["categories"]}
     with open(os.path.join(coco_obj_seg_dir, "instances_val2017.json"), "r") as f:
-        coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in json.load(f)["annotations"]]
-        coco_cats_val = {ex["category_id"]: ex["name"] for ex in json.load(f)["categories"]}
+        coco_data_val = json.load(f)
+        coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]]
+        coco_cats_val = {ex["id"]: ex["supercategory"] for ex in coco_data_val["categories"]}
 
     # Combine the two lists into a hf dataset
     coco_obj_seg = [i[0] for i in coco_obj_seg_tr] + [i[0] for i in coco_obj_seg_val]
     coco_cat = [i[1] for i in coco_obj_seg_tr] + [i[1] for i in coco_obj_seg_val]
     # Combine all the categories
     coco_cat_mappings = {**coco_cats_tr, **coco_cats_val}
-    # Get all the unique image_ids
-    coco_image_ids = coco_ids or set(coco_obj_seg)
 
     # Create a dictionary counting the number of objects per image id as well as a list of the categories
     coco_obj_seg_filtered = {
-        k: {"n_img_seg_obj": 0, "coco_categories": []} for k in coco_image_ids
+        k: {"n_img_seg_obj": 0, "coco_animal_person": False} for k in set(coco_obj_seg)
     }
-    for coco_id, coco_cat_id in zip(coco_obj_seg, coco_cat):
+
+    # Get all the COCO features
+    for coco_id, coco_cat_id in tqdm(
+        zip(coco_obj_seg, coco_cat),
+        desc="Adding COCO features",
+        total=len(coco_cat),
+    ):
         coco_obj_seg_filtered[coco_id]["n_img_seg_obj"] += 1  # type: ignore
-        coco_obj_seg_filtered[coco_id]["coco_categories"].append(coco_cat_mappings[coco_cat_id])  # type: ignore
+        # Check if the category is a person or animal
+        if coco_cat_mappings[coco_cat_id] in ["person", "animal"]:
+            coco_obj_seg_filtered[coco_id]["coco_animal_person"] = True  # type: ignore
 
     # Create a dataframe from the dictionary
     coco_obj_seg_df = pd.DataFrame.from_dict(
         coco_obj_seg_filtered,
         orient="index",
-        columns=["n_img_seg_obj", "coco_categories"],
+        columns=["n_img_seg_obj", "coco_animal_person"],
     )
+    # Select by coco_image_ids
+    if coco_ids:
+        coco_obj_seg_df = coco_obj_seg_df.loc[coco_obj_seg_df.index.isin(coco_ids)]
 
     return coco_obj_seg_df
 
