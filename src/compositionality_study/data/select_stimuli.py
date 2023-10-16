@@ -69,6 +69,7 @@ def map_conditions(
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=True)
+@click.option("--filter_by_animal_person", type=bool, default=True)
 @click.option("--binarized_conditions", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
@@ -85,6 +86,7 @@ def select_stimuli(
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = True,
+    filter_by_animal_person: bool = True,
     binarized_conditions: bool = True,
     n_stimuli: int = 80,
 ):
@@ -121,8 +123,11 @@ def select_stimuli(
     :type image_quality_threshold: int
     :param filter_text_on_images: Whether to filter out images with text on them, defaults to True
     :type filter_text_on_images: bool
-    :param binarized_conditions: Whether to use binarized conditions (only high img + high text complexity, low img + low
-        text complexity, rather than all 4 high/low combinations), defaults to True
+    :param filter_by_animal_person: Whether to filter out images that do not contain any animals or people based on the
+        COCO annotation data, defaults to True
+    :type filter_by_animal_person: bool
+    :param binarized_conditions: Whether to use binarized conditions (only high img + high text complexity, low img +
+        low text complexity, rather than all 4 high/low combinations), defaults to True
     :param n_stimuli: The number of stimuli to select, must be divisible by 4
     :type n_stimuli: int
     """
@@ -246,6 +251,12 @@ def select_stimuli(
         logger.info(
             f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} "
             f"entries remain."
+        )
+    if filter_by_animal_person:
+        # Filter out images that do not contain any animals or people based on the coco_animal_person column
+        vg_ds = vg_ds.filter(
+            lambda x: x["coco_animal_person"],
+            num_proc=24,
         )
 
     # 7. Map the conditions to the examples
