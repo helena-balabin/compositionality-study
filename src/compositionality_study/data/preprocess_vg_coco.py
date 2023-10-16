@@ -239,7 +239,7 @@ def add_graph_properties(
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
 @click.option("--output_dir", type=str, default=os.path.split(VG_COCO_OVERLAP_DIR)[0])
-def add_image_segmentation_properties_wrapper(
+def add_coco_properties_wrapper(
     vg_coco_overlap_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
     save_to_disk: bool = True,
@@ -247,7 +247,7 @@ def add_image_segmentation_properties_wrapper(
     dummy_subset_size: int = 1000,
     output_dir: str = os.path.split(VG_COCO_OVERLAP_DIR)[0],
 ):
-    """Wrapper for the add_image_segmentation_properties function.
+    """Wrapper for the add_coco_properties_properties function.
 
     :param vg_coco_overlap_graph_dir: Path to the directory where the Visual Genome + COCO overlap dataset with
         graph properties is stored.
@@ -264,7 +264,7 @@ def add_image_segmentation_properties_wrapper(
         os.path.split(VG_COCO_OVERLAP_DIR)[0]
     :type output_dir: str
     """
-    add_image_segmentation_properties(
+    add_coco_properties(
         vg_coco_overlap_graph=vg_coco_overlap_graph_dir,
         coco_obj_seg_dir=coco_obj_seg_dir,
         save_to_disk=save_to_disk,
@@ -274,7 +274,7 @@ def add_image_segmentation_properties_wrapper(
     )
 
 
-def add_image_segmentation_properties(
+def add_coco_properties(
     vg_coco_overlap_graph: Union[str, Dataset] = VG_COCO_PREP_TEXT_GRAPH_DIR,
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
     save_to_disk: bool = True,
@@ -520,7 +520,7 @@ def get_coco_obj_seg_df(
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
     coco_ids: Optional[List[str]] = None,
 ) -> pd.DataFrame:
-    """Get the number of objects based on the COCO annotations for image segmentation.
+    """Get the number of objects and the object categories based on the COCO annotations for image segmentation.
 
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
     :type coco_obj_seg_dir: str
@@ -531,21 +531,34 @@ def get_coco_obj_seg_df(
     """
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
-        coco_obj_seg_tr = [ex["image_id"] for ex in json.load(f)["annotations"]]
+        coco_obj_seg_tr = [(ex["image_id"], ex["category_id"]) for ex in json.load(f)["annotations"]]
+        coco_cats_tr = {ex["category_id"]: ex["name"] for ex in json.load(f)["categories"]}
     with open(os.path.join(coco_obj_seg_dir, "instances_val2017.json"), "r") as f:
-        coco_obj_seg_val = [ex["image_id"] for ex in json.load(f)["annotations"]]
+        coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in json.load(f)["annotations"]]
+        coco_cats_val = {ex["category_id"]: ex["name"] for ex in json.load(f)["categories"]}
 
     # Combine the two lists into a hf dataset
-    coco_obj_seg = coco_obj_seg_tr + coco_obj_seg_val
+    coco_obj_seg = [i[0] for i in coco_obj_seg_tr] + [i[0] for i in coco_obj_seg_val]
+    coco_cat = [i[1] for i in coco_obj_seg_tr] + [i[1] for i in coco_obj_seg_val]
+    # Combine all the categories
+    coco_cat_mappings = {**coco_cats_tr, **coco_cats_val}
     # Get all the unique image_ids
     coco_image_ids = coco_ids or set(coco_obj_seg)
 
-    # Create a dictionary with the number of objects per image id
-    coco_obj_seg_counter = Counter(coco_obj_seg)
-    coco_obj_seg_filtered = {k: coco_obj_seg_counter.get(k, 0) for k in coco_image_ids}
+    # Create a dictionary counting the number of objects per image id as well as a list of the categories
+    coco_obj_seg_filtered = {
+        k: {"n_img_seg_obj": 0, "coco_categories": []} for k in coco_image_ids
+    }
+    for coco_id, coco_cat_id in zip(coco_obj_seg, coco_cat):
+        coco_obj_seg_filtered[coco_id]["n_img_seg_obj"] += 1  # type: ignore
+        coco_obj_seg_filtered[coco_id]["coco_categories"].append(coco_cat_mappings[coco_cat_id])  # type: ignore
 
     # Create a dataframe from the dictionary
-    coco_obj_seg_df = pd.DataFrame.from_dict(coco_obj_seg_filtered, orient="index", columns=["n_img_seg_obj"])
+    coco_obj_seg_df = pd.DataFrame.from_dict(
+        coco_obj_seg_filtered,
+        orient="index",
+        columns=["n_img_seg_obj", "coco_categories"],
+    )
 
     return coco_obj_seg_df
 
@@ -616,15 +629,15 @@ def add_all_properties(
         dummy_subset_size=dummy_subset_size,
     )
     logger.info(f"Added graph properties for {len(text_ds)} entries")
-    # 3. Add image segmentation properties
-    image_segmentation_ds = add_image_segmentation_properties(
+    # 3. Add COCO image segmentation + category properties
+    image_segmentation_ds = add_coco_properties(
         vg_coco_overlap_graph=graph_ds,
         coco_obj_seg_dir=coco_obj_seg_dir,
         save_to_disk=save_intermediate_steps,
         save_dummy_subset=save_dummy_subset,
         dummy_subset_size=dummy_subset_size,
     )
-    logger.info(f"Added image segmentation properties for {len(text_ds)} entries")
+    logger.info(f"Added image segmentation and category properties for {len(text_ds)} entries")
     # 4. Add IC scores
     ic_scores_ds = add_ic_scores(
         vg_coco_overlap_graph=image_segmentation_ds,
@@ -695,7 +708,7 @@ def cli() -> None:
 if __name__ == "__main__":
     cli.add_command(add_text_properties_wrapper)
     cli.add_command(add_graph_properties_wrapper)
-    cli.add_command(add_image_segmentation_properties_wrapper)
+    cli.add_command(add_coco_properties_wrapper)
     cli.add_command(add_ic_scores_wrapper)
     cli.add_command(add_all_properties)
     cli.add_command(create_searchable_vg_rel_obj_idx)
