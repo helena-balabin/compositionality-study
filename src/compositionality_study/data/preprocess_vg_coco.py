@@ -15,7 +15,7 @@ from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
-    IC_SCORES_FILE,
+    COCO_A_ANNOT_FILE, IC_SCORES_FILE,
     VG_COCO_OBJ_SEG_DIR,
     VG_COCO_OVERLAP_DIR,
     VG_COCO_PREPROCESSED_TEXT_DIR,
@@ -276,6 +276,7 @@ def add_coco_properties_wrapper(
 def add_coco_properties(
     vg_coco_overlap_graph: Union[str, Dataset] = VG_COCO_PREP_TEXT_GRAPH_DIR,
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
@@ -288,6 +289,8 @@ def add_coco_properties(
     :type vg_coco_overlap_graph: Union[str, Dataset]
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
     :type coco_obj_seg_dir: str
+    :param coco_a_annot_file: Path to the COCO action annotations file, defaults to COCO_A_ANNOT_FILE
+    :type coco_a_annot_file: str
     :param save_to_disk: Whether to save the dataset to disk, defaults to True
     :type save_to_disk: bool
     :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
@@ -304,12 +307,16 @@ def add_coco_properties(
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Get the number of objects based on the COCO annotations for image segmentation
-    coco_obj_seg_df = get_coco_obj_seg_df(coco_obj_seg_dir, coco_ids=list(preprocessed_df["cocoid"].unique()))
+    coco_obj_seg_df = get_coco_obj_seg_df(
+        coco_obj_seg_dir,
+        coco_a_annot_file,
+        coco_ids=list(preprocessed_df["cocoid"].unique()),
+    )
 
     # Speed up the merge by setting the ids as index
     preprocessed_df = preprocessed_df.set_index("cocoid")
     # Merge the two datasets
-    joined_df = preprocessed_df.join(coco_obj_seg_df)
+    joined_df = preprocessed_df.join(coco_obj_seg_df, how="inner")
     vg_img_seg_ds = Dataset.from_pandas(joined_df)
     # Rename the index column back to cocoid
     if "__index_level_0__" in vg_img_seg_ds.column_names:
@@ -517,12 +524,15 @@ def determine_graph_complexity_measures(
 
 def get_coco_obj_seg_df(
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     coco_ids: Optional[List[str]] = None,
 ) -> pd.DataFrame:
-    """Get the number of objects and the object categories based on the COCO annotations for image segmentation.
+    """Get the number of objects, object categories based on the COCO annotations for image segmentation.
 
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
     :type coco_obj_seg_dir: str
+    :param coco_a_annot_file: Path to the file where the COCO-A action annotations are stored.
+    :type coco_a_annot_file: str
     :param coco_ids: List of COCO ids to get the number of objects for, defaults to None
     :type coco_ids: Optional[List[str]]
     :return: Dataframe with the number of objects per coco id
@@ -537,6 +547,10 @@ def get_coco_obj_seg_df(
         coco_data_val = json.load(f)
         coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]]
         coco_cats_val = {ex["id"]: ex["supercategory"] for ex in coco_data_val["categories"]}
+    with open(coco_a_annot_file, "r") as f:
+        # Load the version of the dataset with an annotator agreement of 3 persons
+        coco_a_data = json.load(f)["annotations"]["3"]
+        coco_a_ids = [ex["image_id"] for ex in coco_a_data]
 
     # Combine the two lists into a hf dataset
     coco_obj_seg = [i[0] for i in coco_obj_seg_tr] + [i[0] for i in coco_obj_seg_val]
@@ -561,12 +575,31 @@ def get_coco_obj_seg_df(
         if coco_cat_mappings[coco_cat_id] in ["person", "animal"]:
             coco_obj_seg_filtered[coco_id]["coco_animal_person"] += 1  # type: ignore
 
-    # Create a dataframe from the dictionary
+    # Create a dictionary with the number of actions from the COCO action annotations
+    coco_a_filtered = {k: {"n_coco_a_actions": 0} for k in set(coco_a_ids)}
+
+    # Get all the COCO-A features
+    for coco_a_entry in tqdm(
+        coco_a_data,
+        desc="Adding COCO-A features",
+        total=len(coco_a_data),
+    ):
+        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])
+
+    # Create dataframes from the dictionaries
     coco_obj_seg_df = pd.DataFrame.from_dict(
         coco_obj_seg_filtered,
         orient="index",
         columns=["n_img_seg_obj", "coco_animal_person", "coco_categories"],
     )
+    coco_a_df = pd.DataFrame.from_dict(
+        coco_a_filtered,
+        orient="index",
+        columns=["n_coco_a_actions"],
+    )
+    # Merge the two dataframes (rows where there is data for both)
+    coco_obj_seg_df = coco_obj_seg_df.join(coco_a_df, how="inner")
+
     # Select by coco_image_ids
     if coco_ids:
         coco_obj_seg_df = coco_obj_seg_df.loc[coco_obj_seg_df.index.isin(coco_ids)]
@@ -580,6 +613,7 @@ def get_coco_obj_seg_df(
 @click.option("--vg_objects_file", default=VG_OBJECTS_FILE)
 @click.option("--vg_relationships_file", default=VG_RELATIONSHIPS_FILE)
 @click.option("--coco_obj_seg_dir", default=VG_COCO_OBJ_SEG_DIR)
+@click.option("--coco_a_annot_file", default=COCO_A_ANNOT_FILE)
 @click.option("--ic_scores_file", default=IC_SCORES_FILE)
 @click.option("--save_intermediate_steps", default=False)
 @click.option("--save_dummy_subset", default=True)
@@ -591,6 +625,7 @@ def add_all_properties(
     vg_objects_file: str = VG_OBJECTS_FILE,
     vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     ic_scores_file: str = IC_SCORES_FILE,
     save_intermediate_steps: bool = False,
     save_dummy_subset: bool = True,
@@ -610,6 +645,8 @@ def add_all_properties(
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json),
         defaults to VG_COCO_OBJ_SEG_DIR
     :type coco_obj_seg_dir: str
+    :param coco_a_annot_file: File with the COCO action annotations, defaults to COCO_A_ANNOT_FILE
+    :type coco_a_annot_file: str
     :param ic_scores_file: File with the IC scores, defaults to IC_SCORES_FILE
     :type ic_scores_file: str
     :param save_intermediate_steps: Whether to save the intermediate steps, defaults to False
@@ -644,6 +681,7 @@ def add_all_properties(
     image_segmentation_ds = add_coco_properties(
         vg_coco_overlap_graph=graph_ds,
         coco_obj_seg_dir=coco_obj_seg_dir,
+        coco_a_annot_file=coco_a_annot_file,
         save_to_disk=save_intermediate_steps,
         save_dummy_subset=save_dummy_subset,
         dummy_subset_size=dummy_subset_size,

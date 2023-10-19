@@ -55,6 +55,8 @@ VG_COCO_PREP_TEXT_GRAPH_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_graph")
 VG_COCO_PREP_TEXT_IMG_SEG_DIR = os.path.join(VG_DIR, "vg_coco_preprocessed_img_seg")
 VG_COCO_PREP_ALL = os.path.join(VG_DIR, "vg_coco_preprocessed_all")
 VG_COCO_SELECTED_STIMULI_DIR = os.path.join(VG_DIR, "vg_coco_80_stimuli")
+# Path to COCO action annotations
+COCO_A_ANNOT_FILE = os.path.join(VG_DIR, "coco_annotations", "cocoa_beta2015.json")
 # Directory for stimuli converted into local files for psychopy
 VG_COCO_LOCAL_STIMULI_DIR = os.path.join(VG_DIR, "vg_coco_local_stimuli")
 VG_COCO_PRACTICE_STIMULI_DIR = os.path.join(VG_DIR, "vg_coco_practice_stimuli")
