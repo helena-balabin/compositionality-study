@@ -546,7 +546,7 @@ def get_coco_obj_seg_df(
 
     # Create a dictionary counting the number of objects per image id as well as a list of the categories
     coco_obj_seg_filtered = {
-        k: {"n_img_seg_obj": 0, "coco_animal_person": False} for k in set(coco_obj_seg)
+        k: {"n_img_seg_obj": 0, "coco_animal_person": 0, "coco_categories": []} for k in set(coco_obj_seg)
     }
 
     # Get all the COCO features
@@ -556,15 +556,16 @@ def get_coco_obj_seg_df(
         total=len(coco_cat),
     ):
         coco_obj_seg_filtered[coco_id]["n_img_seg_obj"] += 1  # type: ignore
+        coco_obj_seg_filtered[coco_id]["coco_categories"].append(coco_cat_mappings[coco_cat_id])  # type: ignore
         # Check if the category is a person or animal
         if coco_cat_mappings[coco_cat_id] in ["person", "animal"]:
-            coco_obj_seg_filtered[coco_id]["coco_animal_person"] = True  # type: ignore
+            coco_obj_seg_filtered[coco_id]["coco_animal_person"] += 1
 
     # Create a dataframe from the dictionary
     coco_obj_seg_df = pd.DataFrame.from_dict(
         coco_obj_seg_filtered,
         orient="index",
-        columns=["n_img_seg_obj", "coco_animal_person"],
+        columns=["n_img_seg_obj", "coco_animal_person", "coco_categories"],
     )
     # Select by coco_image_ids
     if coco_ids:

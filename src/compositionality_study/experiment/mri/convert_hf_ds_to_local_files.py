@@ -184,6 +184,7 @@ def convert_hf_dataset_to_local_stimuli(
                             "complexity": ex["complexity"],
                             "parse_tree_depth": ex["parse_tree_depth"],
                             "sg_filtered_depth": ex["sg_filtered_depth"],
+                            "cocoid": ex["cocoid"],
                         },
                         index=[0],
                     ),

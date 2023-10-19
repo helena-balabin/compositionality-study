@@ -5,6 +5,7 @@ import os
 from typing import Any, Dict
 
 import click
+import datasets
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -64,8 +65,8 @@ def map_conditions(
 @click.option("--img_comp_tol", type=float, default=0.15)
 @click.option("--asp_min", type=float, default=1.2)
 @click.option("--asp_max", type=float, default=1.8)
-@click.option("--dep_quantile", type=float, default=0.01)
-@click.option("--sg_filtered_depth_quantile", type=float, default=0.05)
+@click.option("--dep_quantile", type=float, default=0.1)
+@click.option("--sg_filtered_depth_quantile", type=float, default=0.1)
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=True)
@@ -81,8 +82,8 @@ def select_stimuli(
     img_comp_tol: float = 0.15,
     asp_min: float = 1.2,
     asp_max: float = 1.8,
-    dep_quantile: float = 0.01,
-    sg_filtered_depth_quantile: float = 0.05,
+    dep_quantile: float = 0.1,
+    sg_filtered_depth_quantile: float = 0.1,
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = True,
@@ -137,7 +138,7 @@ def select_stimuli(
     # Set a random seed for reproducibility
     np.random.seed(42)
 
-    # 1. Filter by sentence length (within a tolerance)
+    # Filter by sentence length (within a tolerance)
     vg_ds = vg_ds.filter(
         lambda x: abs(x["sentence_length"] - sent_len) <= sent_len_tol,
         num_proc=24,
@@ -154,7 +155,7 @@ def select_stimuli(
         )
         logger.info(f"Controlled the dataset for captions with verbs, {len(vg_ds)} entries remain.")
 
-    # 2. Filter by image complexity (within a tolerance)
+    # Filter by image complexity (within a tolerance)
     vg_ds = vg_ds.filter(
         lambda x: abs(x["ic_score"] - img_comp) <= img_comp_tol,
         num_proc=24,
@@ -174,10 +175,23 @@ def select_stimuli(
             lambda x: asp_min <= get_image_aspect_ratio_from_local_path(x["filepath"]) <= asp_max,
             num_proc=24,
         )
-    logger.info(f"Controlled the dataset for the aspect ratio of the images (between {asp_min} and {asp_max}), "
-                f"{len(vg_ds)} entries remain.")
+    logger.info(
+        f"Controlled the dataset for the aspect ratio of the images (between {asp_min} and {asp_max}), "
+        f"{len(vg_ds)} entries remain."
+    )
+    # And filter by animal/person annotations, make sure there are two animal/human actors in the image
+    if filter_by_animal_person:
+        # Filter out examples with "vehicle" and "food" in the "coco_categories"
+        vg_ds = vg_ds.filter(
+            lambda x: x["coco_animal_person"] == 2,
+            num_proc=24,
+        )
+        logger.info(
+            f"Controlled the dataset for exactly two human/animal actors (based on the COCO segmentation data), "
+            f"{len(vg_ds)} entries remain."
+        )
 
-    # 3. Filter out any outliers for dep parse tree depth and number of filtered verbs
+    # Filter out any outliers for dep parse tree depth and number of filtered verbs
     if filter_outliers:
         dep_m = pd.Series(vg_ds["parse_tree_depth"]).mean()
         dep_std = pd.Series(vg_ds["parse_tree_depth"]).std()
@@ -195,7 +209,7 @@ def select_stimuli(
         )
         logger.info(f"Filtered out outliers for the number of filtered verbs values, {len(vg_ds)} entries remain.")
 
-    # 4. Select by dependency parse tree depth that match max and min quantile
+    # Select by dependency parse tree depth that match max and min quantile
     dep_min = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(dep_quantile))
     dep_max = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(1 - dep_quantile))
     vg_ds = vg_ds.filter(
@@ -207,7 +221,7 @@ def select_stimuli(
         f">={dep_max}, {len(vg_ds)} entries remain."
     )
 
-    # 5. Select by number scene graph depths that match max and min quantiles (min 1 filtered verb)
+    # Select by number scene graph depths that match max and min quantiles (min 1 filtered verb)
     ac_min = max(1, int(pd.Series(vg_ds["sg_filtered_depth"]).quantile(sg_filtered_depth_quantile)))
     ac_max = int(pd.Series(vg_ds["sg_filtered_depth"]).quantile(1 - sg_filtered_depth_quantile))
     vg_ds = vg_ds.filter(
@@ -220,8 +234,13 @@ def select_stimuli(
         f"Filtered the dataset for a number of filtered verbs of either <= {ac_min} or "
         f">={ac_max}, {len(vg_ds)} entries remain."
     )
+    # Filter out image duplicates
+    vg_df = pd.DataFrame(vg_ds)
+    vg_df = vg_df.drop_duplicates(subset=["vg_image_id"])
+    vg_ds = datasets.Dataset.from_pandas(vg_df)
+    logger.info(f"Filtered out duplicate images, {len(vg_ds)} entries remain.")
 
-    # 6. Filter out black and white images and images with text on them and images with low quality
+    # Filter out black and white images and images with text on them and images with low quality
     # Add the images to the dataset, load based on the filenames
     # Avoid PIL-related bugs by copying the images
     vg_ds = vg_ds.map(
@@ -252,14 +271,8 @@ def select_stimuli(
             f"Filtered out black and white images, images with text and low quality images, {len(vg_ds)} "
             f"entries remain."
         )
-    if filter_by_animal_person:
-        # Filter out images that do not contain any animals or people based on the coco_animal_person column
-        vg_ds = vg_ds.filter(
-            lambda x: x["coco_animal_person"],
-            num_proc=24,
-        )
 
-    # 7. Map the conditions to the examples
+    # Map the conditions to the examples
     vg_ds = vg_ds.map(
         lambda x: map_conditions(
             x,
@@ -295,7 +308,7 @@ def select_stimuli(
 
     vg_ds_n_stimuli = concatenate_datasets(vg_n_stim)
 
-    # 8. Save the dataset
+    # Save the dataset
     output_dir = os.path.split(vg_coco_preprocessed_dir)[0]
     vg_ds_n_stimuli.save_to_disk(
         os.path.join(
