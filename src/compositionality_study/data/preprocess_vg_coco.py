@@ -559,7 +559,7 @@ def get_coco_obj_seg_df(
         coco_obj_seg_filtered[coco_id]["coco_categories"].append(coco_cat_mappings[coco_cat_id])  # type: ignore
         # Check if the category is a person or animal
         if coco_cat_mappings[coco_cat_id] in ["person", "animal"]:
-            coco_obj_seg_filtered[coco_id]["coco_animal_person"] += 1
+            coco_obj_seg_filtered[coco_id]["coco_animal_person"] += 1  # type: ignore
 
     # Create a dataframe from the dictionary
     coco_obj_seg_df = pd.DataFrame.from_dict(
