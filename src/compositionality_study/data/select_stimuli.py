@@ -139,6 +139,13 @@ def select_stimuli(
     # Set a random seed for reproducibility
     np.random.seed(42)
 
+    # Calculate min/max depth values for the dependency parse tree depth and the COCO action graph depth
+    dep_min = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(dep_quantile))
+    dep_max = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(1 - dep_quantile))
+
+    ac_min = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(coco_a_graph_depth_quantile))
+    ac_max = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(1 - coco_a_graph_depth_quantile))
+
     # Filter by sentence length (within a tolerance)
     vg_ds = vg_ds.filter(
         lambda x: abs(x["sentence_length"] - sent_len) <= sent_len_tol,
@@ -184,11 +191,11 @@ def select_stimuli(
     if filter_by_person:
         # Filter out examples with "vehicle" and "food" in the "coco_categories"
         vg_ds = vg_ds.filter(
-            lambda x: x["coco_person"] == 3 or x["coco_person"] == 4,
+            lambda x: x["coco_person"] == 2 or x["coco_person"] == 3,
             num_proc=24,
         )
         logger.info(
-            f"Controlled the dataset for exactly two human actors (based on the COCO segmentation data), "
+            f"Controlled the dataset for a fixed number of human actors (based on the COCO segmentation data), "
             f"{len(vg_ds)} entries remain."
         )
 
@@ -211,8 +218,6 @@ def select_stimuli(
         logger.info(f"Filtered out outliers for the number of COCO action values, {len(vg_ds)} entries remain.")
 
     # Select by dependency parse tree depth that match max and min quantile
-    dep_min = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(dep_quantile))
-    dep_max = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(1 - dep_quantile))
     vg_ds = vg_ds.filter(
         lambda x: x["parse_tree_depth"] <= dep_min or x["parse_tree_depth"] >= dep_max,
         num_proc=24,
@@ -222,9 +227,7 @@ def select_stimuli(
         f">={dep_max}, {len(vg_ds)} entries remain."
     )
 
-    # Select by depth of COCO actions that match max and min quantiles (min 1)
-    ac_min = max(1, int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(coco_a_graph_depth_quantile)))
-    ac_max = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(1 - coco_a_graph_depth_quantile))
+    # Select by depth of COCO actions that match max and min quantiles
     vg_ds = vg_ds.filter(
         lambda x: x["coco_a_graph_depth"] > 0 and (
             x["coco_a_graph_depth"] <= ac_min or x["coco_a_graph_depth"] >= ac_max
