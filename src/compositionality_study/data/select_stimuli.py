@@ -33,9 +33,9 @@ def map_conditions(
     :type min_dep_parse_tree_depth: int
     :param max_dep_parse_tree_depth: The maximum dependency parse tree depth
     :type max_dep_parse_tree_depth: int
-    :param min_n_coco_a_actions: The minimum scene graph depth
+    :param min_n_coco_a_actions: The minimum COCO action graph depth
     :type min_n_coco_a_actions: int
-    :param max_n_coco_a_actions: The maximum scene graph depth
+    :param max_n_coco_a_actions: The maximum COCO action graph depth
     :type max_n_coco_a_actions: int
     :return: The example with the mapped conditions, i.e., extra features for the conditions
     :rtype: Dict
@@ -47,7 +47,7 @@ def map_conditions(
 
     # Map the visual complexity condition
     middle_n_actions = (min_n_coco_a_actions + max_n_coco_a_actions) / 2
-    img_seg_complexity = "high" if example["n_coco_a_actions"] >= middle_n_actions else "low"
+    img_seg_complexity = "high" if example["coco_a_graph_depth"] >= middle_n_actions else "low"
     example["img_act_complexity"] = img_seg_complexity
 
     # Combine the two
@@ -58,7 +58,7 @@ def map_conditions(
 
 @click.command()
 @click.option("--vg_coco_preprocessed_dir", type=str, default=VG_COCO_PREP_ALL)
-@click.option("--sent_len", type=int, default=15)
+@click.option("--sent_len", type=int, default=10)
 @click.option("--sent_len_tol", type=int, default=2)
 @click.option("--verbs", type=bool, default=True)
 @click.option("--img_comp", type=float, default=0.5)
@@ -66,16 +66,16 @@ def map_conditions(
 @click.option("--asp_min", type=float, default=1.2)
 @click.option("--asp_max", type=float, default=1.8)
 @click.option("--dep_quantile", type=float, default=0.1)
-@click.option("--n_coco_actions_quantile", type=float, default=0.1)
+@click.option("--coco_a_graph_depth_quantile", type=float, default=0.1)
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=False)
-@click.option("--filter_by_animal_person", type=bool, default=False)
+@click.option("--filter_by_person", type=bool, default=True)
 @click.option("--binarized_conditions", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=80)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
-    sent_len: int = 15,
+    sent_len: int = 10,
     sent_len_tol: int = 2,
     verbs: bool = True,
     img_comp: float = 0.5,
@@ -83,11 +83,11 @@ def select_stimuli(
     asp_min: float = 1.2,
     asp_max: float = 1.8,
     dep_quantile: float = 0.1,
-    n_coco_actions_quantile: float = 0.1,
+    coco_a_graph_depth_quantile: float = 0.1,
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = False,
-    filter_by_animal_person: bool = False,
+    filter_by_person: bool = True,
     binarized_conditions: bool = True,
     n_stimuli: int = 80,
 ):
@@ -114,23 +114,23 @@ def select_stimuli(
     :param dep_quantile: The quantile of the dependency parse tree depth to select stimuli for, e.g., 0.1 means
         that the stimuli with the lowest 10% and highest 10% dependency parse tree depth are selected, defaults to 0.1
     :type dep_quantile: float
-    :param n_coco_actions_quantile: The quantile of the number of action verbs from COCO action annotations
-        to select stimuli for, e.g., 0.1 means that the stimuli with the lowest 5% and highest 10% number of actions
+    :param coco_a_graph_depth_quantile: The quantile of the depth of action verbs from COCO action annotations
+        to select stimuli for, e.g., 0.1 means that the stimuli with the lowest 5% and highest 10% depth of actions
         are selected, defaults to 0.1
-    :type n_coco_actions_quantile: float
+    :type coco_a_graph_depth_quantile: float
     :param filter_outliers: Whether to filter out outliers (more than 3x of the standard deviation) for the dependency
-        parse tree depth and number of filtered verbs, defaults to True
+        parse tree depth and depth of COCO actions, defaults to True
     :type filter_outliers: bool
     :param image_quality_threshold: Minimum number of pixels (height) of the image, defaults to 400
     :type image_quality_threshold: int
     :param filter_text_on_images: Whether to filter out images with text on them, defaults to False
     :type filter_text_on_images: bool
-    :param filter_by_animal_person: Whether to filter out images that do not contain any animals or people based on the
-        COCO annotation data, defaults to False
-    :type filter_by_animal_person: bool
+    :param filter_by_person: Whether to filter out images that do not contain any people based on the COCO annotation
+        data, defaults to True
+    :type filter_by_person: bool
     :param binarized_conditions: Whether to use binarized conditions (only high img + high text complexity, low img +
         low text complexity, rather than all 4 high/low combinations), defaults to True
-    :param n_stimuli: The number of stimuli to select, must be divisible by 4
+    :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     """
     # Load the dataset
@@ -180,15 +180,15 @@ def select_stimuli(
         f"Controlled the dataset for the aspect ratio of the images (between {asp_min} and {asp_max}), "
         f"{len(vg_ds)} entries remain."
     )
-    # And filter by animal/person annotations, make sure there are two animal/human actors in the image
-    if filter_by_animal_person:
+    # And filter by person annotations, make sure there are three or four human actors in the image
+    if filter_by_person:
         # Filter out examples with "vehicle" and "food" in the "coco_categories"
         vg_ds = vg_ds.filter(
-            lambda x: x["coco_animal_person"] == 2,
+            lambda x: x["coco_person"] == 3 or x["coco_person"] == 4,
             num_proc=24,
         )
         logger.info(
-            f"Controlled the dataset for exactly two human/animal actors (based on the COCO segmentation data), "
+            f"Controlled the dataset for exactly two human actors (based on the COCO segmentation data), "
             f"{len(vg_ds)} entries remain."
         )
 
@@ -222,17 +222,17 @@ def select_stimuli(
         f">={dep_max}, {len(vg_ds)} entries remain."
     )
 
-    # Select by number of COCO actions that match max and min quantiles (min 1)
-    ac_min = max(1, int(pd.Series(vg_ds["n_coco_a_actions"]).quantile(n_coco_actions_quantile)))
-    ac_max = int(pd.Series(vg_ds["n_coco_a_actions"]).quantile(1 - n_coco_actions_quantile))
+    # Select by depth of COCO actions that match max and min quantiles (min 1)
+    ac_min = max(1, int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(coco_a_graph_depth_quantile)))
+    ac_max = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(1 - coco_a_graph_depth_quantile))
     vg_ds = vg_ds.filter(
-        lambda x: x["n_coco_a_actions"] > 0 and (
-            x["n_coco_a_actions"] <= ac_min or x["n_coco_a_actions"] >= ac_max
+        lambda x: x["coco_a_graph_depth"] > 0 and (
+            x["coco_a_graph_depth"] <= ac_min or x["coco_a_graph_depth"] >= ac_max
         ),
         num_proc=24,
     )
     logger.info(
-        f"Filtered the dataset for a number of COCO actions of either <= {ac_min} or "
+        f"Filtered the dataset for a depth of COCO actions of either <= {ac_min} or "
         f">={ac_max}, {len(vg_ds)} entries remain."
     )
     # Filter out image duplicates

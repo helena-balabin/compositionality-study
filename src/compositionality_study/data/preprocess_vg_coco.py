@@ -234,6 +234,7 @@ def add_graph_properties(
 @click.command()
 @click.option("--vg_coco_overlap_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
 @click.option("--coco_obj_seg_dir", type=str, default=VG_COCO_OBJ_SEG_DIR)
+@click.option("--coco_a_annot_file", type=str, default=COCO_A_ANNOT_FILE)
 @click.option("--save_to_disk", type=bool, default=True)
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
@@ -241,6 +242,7 @@ def add_graph_properties(
 def add_coco_properties_wrapper(
     vg_coco_overlap_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
@@ -253,6 +255,8 @@ def add_coco_properties_wrapper(
     :type vg_coco_overlap_graph_dir: str
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
     :type coco_obj_seg_dir: str
+    :param coco_a_annot_file: Path to the COCO action annotations file, defaults to COCO_A_ANNOT_FILE
+    :type coco_a_annot_file: str
     :param save_to_disk: Whether to save the dataset to disk, defaults to True
     :type save_to_disk: bool
     :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
@@ -266,6 +270,7 @@ def add_coco_properties_wrapper(
     add_coco_properties(
         vg_coco_overlap_graph=vg_coco_overlap_graph_dir,
         coco_obj_seg_dir=coco_obj_seg_dir,
+        coco_a_annot_file=coco_a_annot_file,
         save_to_disk=save_to_disk,
         save_dummy_subset=save_dummy_subset,
         dummy_subset_size=dummy_subset_size,
@@ -522,6 +527,40 @@ def determine_graph_complexity_measures(
     return graph_measures
 
 
+def create_coco_a_sub_graph(
+    data: Dict,
+) -> nx.DiGraph:
+    """Create a directed graph from the COCO-A annotations.
+
+    :param data: A single COCO-A annotation entry
+    :type data: Dict
+    :return: The directed graph
+    :rtype: nx.DiGraph
+    """
+    # Initialize a directed graph
+    g = nx.DiGraph()
+
+    # Create a one-relation graph
+    object_id = data["object_id"]
+    subject_id = data["subject_id"]
+
+    # Handle the special case of object_id: -1 (treat as a unique node each time)
+    if object_id == -1:
+        # Create a unique node for each object with object_id -1
+        object_node = str(data["id"])
+    else:
+        object_node = str(object_id)
+
+    subject_node = str(subject_id)
+
+    # Add nodes and edges to the graph
+    g.add_node(subject_node)
+    g.add_node(object_node)
+    g.add_edge(subject_node, object_node)
+
+    return g
+
+
 def get_coco_obj_seg_df(
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
@@ -560,7 +599,7 @@ def get_coco_obj_seg_df(
 
     # Create a dictionary counting the number of objects per image id as well as a list of the categories
     coco_obj_seg_filtered = {
-        k: {"n_img_seg_obj": 0, "coco_animal_person": 0, "coco_categories": []} for k in set(coco_obj_seg)
+        k: {"n_img_seg_obj": 0, "coco_person": 0, "coco_categories": []} for k in set(coco_obj_seg)
     }
 
     # Get all the COCO features
@@ -571,12 +610,12 @@ def get_coco_obj_seg_df(
     ):
         coco_obj_seg_filtered[coco_id]["n_img_seg_obj"] += 1  # type: ignore
         coco_obj_seg_filtered[coco_id]["coco_categories"].append(coco_cat_mappings[coco_cat_id])  # type: ignore
-        # Check if the category is a person or animal
-        if coco_cat_mappings[coco_cat_id] in ["person", "animal"]:
-            coco_obj_seg_filtered[coco_id]["coco_animal_person"] += 1  # type: ignore
+        # Check if the category is a person
+        if coco_cat_mappings[coco_cat_id] in ["person"]:
+            coco_obj_seg_filtered[coco_id]["coco_person"] += 1  # type: ignore
 
-    # Create a dictionary with the number of actions from the COCO action annotations
-    coco_a_filtered = {k: {"n_coco_a_actions": 0} for k in set(coco_a_ids)}
+    # Create a dictionary with the number of actions/graph depth from the COCO action annotations
+    coco_a_filtered = {k: {"n_coco_a_actions": 0, "coco_a_graph_depth": None} for k in set(coco_a_ids)}
 
     # Get all the COCO-A features
     for coco_a_entry in tqdm(
@@ -584,18 +623,43 @@ def get_coco_obj_seg_df(
         desc="Adding COCO-A features",
         total=len(coco_a_data),
     ):
-        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])
+        coco_a_filtered[  # type: ignore
+            coco_a_entry["image_id"]
+        ]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])  # type: ignore
+
+        if coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"]:
+            # If there is already a graph, add the entry to the existing graph
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"].add_edges_from(  # type: ignore
+                create_coco_a_sub_graph(coco_a_entry).edges()
+            )
+        else:
+            # If there is no graph data for that image_id yet, create a new graph
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"] = create_coco_a_sub_graph(coco_a_entry)
+
+    # Determine the depths of the graphs
+    for coco_a_id, coco_a_graph in coco_a_filtered.items():
+        max_longest_shortest_path = 0
+        # Iterate over all connected components
+        for comp_nodes in nx.weakly_connected_components(coco_a_graph["coco_a_graph_depth"]):
+            # Get the longest shortest path for each connected component
+            subgraph = coco_a_graph["coco_a_graph_depth"].subgraph(comp_nodes)  # type: ignore
+            shortest_path_lengths = dict(nx.all_pairs_shortest_path_length(subgraph))
+            longest_path = max(max(shortest_path_lengths[source].values()) for source in comp_nodes)  # type: ignore
+            max_longest_shortest_path = max(max_longest_shortest_path, longest_path)
+
+        # Add the longest shortest path to the image id
+        coco_a_filtered[coco_a_id]["coco_a_graph_depth"] = max_longest_shortest_path
 
     # Create dataframes from the dictionaries
     coco_obj_seg_df = pd.DataFrame.from_dict(
         coco_obj_seg_filtered,
         orient="index",
-        columns=["n_img_seg_obj", "coco_animal_person", "coco_categories"],
+        columns=["n_img_seg_obj", "coco_person", "coco_categories"],
     )
     coco_a_df = pd.DataFrame.from_dict(
         coco_a_filtered,
         orient="index",
-        columns=["n_coco_a_actions"],
+        columns=["n_coco_a_actions", "coco_a_graph_depth"],
     )
     # Merge the two dataframes (rows where there is data for both)
     coco_obj_seg_df = coco_obj_seg_df.join(coco_a_df, how="inner")

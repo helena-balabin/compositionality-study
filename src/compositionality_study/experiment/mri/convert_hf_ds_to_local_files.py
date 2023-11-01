@@ -147,7 +147,7 @@ def convert_hf_dataset_to_local_stimuli(
                             "img_id": f"{ex['vg_image_id']}_{ex['sentids']}",
                             "complexity": ex["complexity"],
                             "parse_tree_depth": ex["parse_tree_depth"],
-                            "n_coco_a_actions": ex["n_coco_a_actions"],
+                            "coco_a_graph_depth": ex["coco_a_graph_depth"],
                             "cocoid": ex["cocoid"],
                         },
                         index=[0],
