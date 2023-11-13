@@ -127,21 +127,33 @@ def infer_img_source(
     except FileNotFoundError:
         imgs = os.listdir(img_source)
 
+    # Check if results already exist for some images (no need to recompute)
+    results_path = os.path.join(output_dir, "ic_scores.json")
+    if os.path.exists(results_path):
+        with open(results_path, "r") as f:
+            results = json.load(f)
+    else:
+        # Define a new results dict
+        results = {}
+
     col_name = ""
     # Define a col name in the case of a dataset
     if isinstance(imgs, Dataset):
         col_name = "cocoid" if "cocoid" in imgs.column_names else "__index_level_0__"
-
-    # Define a results dict
-    results = {}
 
     # Loop over images
     for img in tqdm(imgs, desc="Infering images"):
         # Get the image path/data
         if isinstance(img, Dict):
             img_path = img["image"]
+            # Check if the image has already been processed
+            if img[col_name] in results:
+                continue
         else:
             img_path = os.path.join(img_source, img)  # noqa
+            # Check if the image has already been processed
+            if img.strip(".jpg") in results:
+                continue
         # Infer the image complexity
         ic_score = infer_one_image(img_path, output_dir, device=device, save_ic_map=save_ic_map)
         if isinstance(img, Dict):
