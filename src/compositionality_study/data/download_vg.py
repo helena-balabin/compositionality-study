@@ -91,10 +91,20 @@ def preprocess_local_vg_files_coco_overlap(
     vg_ds = vg_ds.cast(new_features)
 
     # Get the COCO images that are in VG and have captions
-    coco_ds_train = load_dataset(hf_coco_name, split="train", cache_dir=coco_cache_dir)
-    # Load the validation set as well
-    coco_ds_val = load_dataset(hf_coco_name, split="validation", cache_dir=coco_cache_dir)
-    coco_ds = datasets.concatenate_datasets([coco_ds_train, coco_ds_val])
+    coco_ds_train_splits = load_dataset(hf_coco_name, cache_dir=coco_cache_dir)
+    coco_ds = datasets.concatenate_datasets(
+        [coco_ds_train_splits["train"], coco_ds_train_splits["validation"]]
+    )
+    if "Multimodal-Fatima" in hf_coco_name:
+        # Also add the separate validation splits in this case
+        coco_ds_val_splits = load_dataset(
+            hf_coco_name.replace("_train", "_validation"),
+            cache_dir=coco_cache_dir,
+        )
+        coco_ds = datasets.concatenate_datasets(
+            [coco_ds, coco_ds_val_splits["train"], coco_ds_val_splits["validation"]]
+        )
+
     coco_ids = set(coco_ds["cocoid"]).intersection(set(vg_ds["cocoid"]))
     coco_ds = coco_ds.filter(lambda example: example["cocoid"] in coco_ids, num_proc=4)
     vg_ds = vg_ds.filter(lambda example: example["cocoid"] in coco_ids, num_proc=4)
