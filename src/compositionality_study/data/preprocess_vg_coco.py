@@ -116,6 +116,8 @@ def add_text_properties(
         return doc
 
     # Add dependency parse tree depth
+    # Prefer GPU if available
+    spacy.prefer_gpu()
     nlp = spacy.load(spacy_model)
     nlp.add_pipe("force_single_sentence", before="parser")
     # This cannot be parallelized because of the spacy model/GPU issues

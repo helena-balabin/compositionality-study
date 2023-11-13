@@ -16,6 +16,9 @@ from PIL import Image, ImageOps
 
 from compositionality_study.constants import VG_IMAGE_DIR
 
+# Prefer GPU if available
+spacy.prefer_gpu()
+
 
 def walk_tree(
     node: spacy.tokens.token.Token,  # noqa
