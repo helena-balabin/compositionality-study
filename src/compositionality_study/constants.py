@@ -68,6 +68,9 @@ IC_SCORES_FILE = os.path.join(IC9000_IMG_COM_OUTPUT_DIR, "ic_scores.json")
 IMG_DUMMY_DIR = os.path.join(DATA_DIR, "dummy_images")
 os.makedirs(IC9000_IMG_COM_OUTPUT_DIR, exist_ok=True)
 
+# Directory for text-to-image model outputs
+TEXT_TO_IMAGE_OUTPUT_DIR = os.path.join(VG_DIR, "text_to_image")
+
 # Excluded WordNet verb synsets for action-based filtering of relationships
 # Consumption had to be excluded because of food-related stimuli that had a high number of verbs but no actions
 # Body verbs mostly describe wearing clothes, which is static
