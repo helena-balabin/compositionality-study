@@ -101,8 +101,13 @@ def preprocess_local_vg_files_coco_overlap(
             hf_coco_name.replace("_train", "_validation"),
             cache_dir=coco_cache_dir,
         )
+        # As well as the test splits
+        coco_ds_test_splits = load_dataset(
+            hf_coco_name.replace("_train", "_test"),
+            cache_dir=coco_cache_dir,
+        )
         coco_ds = datasets.concatenate_datasets(
-            [coco_ds, coco_ds_val_splits["train"], coco_ds_val_splits["validation"]]
+            [coco_ds, coco_ds_val_splits["train"], coco_ds_val_splits["validation"], coco_ds_test_splits["test"]]
         )
 
     coco_ids = set(coco_ds["cocoid"]).intersection(set(vg_ds["cocoid"]))
