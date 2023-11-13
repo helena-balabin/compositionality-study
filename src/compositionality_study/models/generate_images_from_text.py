@@ -8,7 +8,6 @@ from diffusers import DiffusionPipeline
 from tqdm import tqdm
 
 from compositionality_study.constants import (
-    LARGE_DATASET_STORAGE_PATH,
     LARGE_MODELS_STORAGE_PATH,
     TEXT_TO_IMAGE_OUTPUT_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
@@ -31,7 +30,6 @@ from compositionality_study.constants import (
 @click.option("--prompt_prefix", default="", type=str)
 @click.option("--n_images", default=5, type=int)
 @click.option("--large_model_dir", default=LARGE_MODELS_STORAGE_PATH, type=str)
-@click.option("--large_dataset_dir", default=LARGE_DATASET_STORAGE_PATH, type=str)
 @click.option("--output_dir", default=TEXT_TO_IMAGE_OUTPUT_DIR, type=str)
 def generate_images_from_text(
     stimuli_ds_path: str,
@@ -39,7 +37,6 @@ def generate_images_from_text(
     prompt_prefix: str = "",
     n_images: int = 5,
     large_model_dir: str = LARGE_MODELS_STORAGE_PATH,
-    large_dataset_dir: str = LARGE_DATASET_STORAGE_PATH,
     output_dir: str = TEXT_TO_IMAGE_OUTPUT_DIR,
 ) -> None:
     """Generate images from the text stimuli in the dataset using a text-to-image model.
@@ -54,8 +51,6 @@ def generate_images_from_text(
     :type n_images: int
     :param large_model_dir: Directory for saving large models, defaults to LARGE_MODELS_STORAGE_PATH
     :type large_model_dir: str
-    :param large_dataset_dir: Directory for saving large datasets, defaults to LARGE_DATASET_STORAGE_PATH
-    :type large_dataset_dir: str
     :param output_dir: Output directory for saving the generated images, defaults to TEXT_TO_IMAGE_OUTPUT_DIR
     :type output_dir: str
     """
