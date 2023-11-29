@@ -91,24 +91,28 @@ def preprocess_local_vg_files_coco_overlap(
     vg_ds = vg_ds.cast(new_features)
 
     # Get the COCO images that are in VG and have captions
-    coco_ds_train_splits = load_dataset(hf_coco_name, cache_dir=coco_cache_dir)
-    coco_ds = datasets.concatenate_datasets(
-        [coco_ds_train_splits["train"], coco_ds_train_splits["validation"]]
-    )
+    coco_ds = load_dataset(hf_coco_name, cache_dir=coco_cache_dir)["train"]
+
     if "Multimodal-Fatima" in hf_coco_name:
         # Also add the separate validation splits in this case
         coco_ds_val_splits = load_dataset(
             hf_coco_name.replace("_train", "_validation"),
             cache_dir=coco_cache_dir,
-        )
+        )["validation"]
         # As well as the test splits
         coco_ds_test_splits = load_dataset(
             hf_coco_name.replace("_train", "_test"),
             cache_dir=coco_cache_dir,
-        )
+        )["test"]
         coco_ds = datasets.concatenate_datasets(
-            [coco_ds, coco_ds_val_splits["train"], coco_ds_val_splits["validation"], coco_ds_test_splits["test"]]
+            [coco_ds, coco_ds_val_splits, coco_ds_test_splits]
         )
+
+    # Subset relevant columns
+    coco_ds = coco_ds.select_columns(["filepath", "sentids", "imgid", "cocoid", "sentences_raw", "id"])
+    # Flatten the sentences_raw column
+    # Save the COCO dataset to disk
+    coco_ds.save_to_disk(os.path.join(output_dir, "coco_complete"))
 
     coco_ids = set(coco_ds["cocoid"]).intersection(set(vg_ds["cocoid"]))
     coco_ds = coco_ds.filter(lambda example: example["cocoid"] in coco_ids, num_proc=4)

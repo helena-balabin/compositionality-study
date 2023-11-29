@@ -86,10 +86,6 @@ def add_text_properties(
     :rtype: Dataset
     """
     vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
-    # Remove unnecessary columns
-    vg_coco_ds = vg_coco_ds.remove_columns(["sentences_tokens", "sentences_sentid", "image"])
-    if "__index_level_0__" in vg_coco_ds.column_names:
-        vg_coco_ds = vg_coco_ds.remove_columns(["__index_level_0__"])
 
     # Flatten the dataset so that there is one caption per example
     vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=24)
