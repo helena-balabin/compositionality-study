@@ -85,6 +85,12 @@ def add_text_properties(
     :return: The dataset with the text properties added
     :rtype: Dataset
     """
+    if isinstance(vg_coco_overlap, str) and "vg_" in vg_coco_overlap:
+        vg_in_file_name = "vg_"
+    elif isinstance(vg_coco_overlap, Dataset) and "vg_image_id" in vg_coco_overlap.column_names:
+        vg_in_file_name = "vg_"
+    else:
+        vg_in_file_name = ""
     vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
 
     # Flatten the dataset so that there is one caption per example
@@ -114,20 +120,27 @@ def add_text_properties(
     # Add dependency parse tree depth and AMR depth
     # Prefer GPU if available
     spacy.prefer_gpu()
-    nlp = spacy.load(spacy_model)
+    # Disable unnecessary components
+    nlp = spacy.load(spacy_model, disable=["tok2vec", "tagger", "attribute_ruler", "lemmatizer"])
     nlp.add_pipe("force_single_sentence", before="parser")
     # This cannot be parallelized because of the spacy model/GPU issues
-    preprocessed_ds = preprocessed_ds.map(derive_text_depth_features, fn_kwargs={"nlp": nlp}, num_proc=1)
+    preprocessed_ds = preprocessed_ds.map(
+        derive_text_depth_features,
+        fn_kwargs={"nlp": nlp},
+        num_proc=1,
+        batched=True,
+        batch_size=64,
+    )
 
     # Save to disk
     if save_to_disk:
         output_dir = os.path.split(vg_coco_overlap)[0]
-        preprocessed_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_text"))
+        preprocessed_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
             preprocessed_ds.select(
                 list(range(dummy_subset_size))
-            ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_text_dummy"))
+            ).save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text_dummy"))
 
     return preprocessed_ds
 
@@ -303,6 +316,14 @@ def add_coco_properties(
     :param output_dir: Directory where the dataset should be saved
     :type output_dir: str
     """
+    # Set the output name
+    if isinstance(vg_coco_overlap_graph, str) and "vg_" in vg_coco_overlap_graph:
+        vg_in_file_name = "vg_"
+    elif isinstance(vg_coco_overlap_graph, Dataset) and "vg_image_id" in vg_coco_overlap_graph.column_names:
+        vg_in_file_name = "vg_"
+    else:
+        vg_in_file_name = ""
+
     # Load the dataset
     preprocessed_ds = load_from_disk(
         vg_coco_overlap_graph
@@ -327,12 +348,12 @@ def add_coco_properties(
 
     # Save to disk
     if save_to_disk:
-        vg_img_seg_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg"))
+        vg_img_seg_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
             vg_img_seg_ds.select(
                 list(range(dummy_subset_size))
-            ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg_dummy"))
+            ).save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg_dummy"))
 
     return vg_img_seg_ds
 

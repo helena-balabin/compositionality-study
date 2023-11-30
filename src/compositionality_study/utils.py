@@ -1,7 +1,7 @@
 """Utils for the compositionality project."""
 import os
 from io import BytesIO
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import amrlib
 import matplotlib.patches as patches
@@ -72,28 +72,36 @@ def walk_tree(
 
 
 def derive_text_depth_features(
-    example: Dict[str, Any],
+    examples: Dict[str, List],
     nlp: spacy.lang,  # noqa
-) -> Dict[str, Any]:
+) -> Dict[str, List]:
     """Get the depth of the dep parse tree, number of verbs and "depth" of the AMR graph of an example caption.
 
-    :param example: A hf dataset example
-    :type example: Dict[str, Any]
+    The AMR model needs to be downloaded separately, see https://github.com/bjascob/amrlib-models.
+
+    :param examples: A batch of hf dataset examples
+    :type examples: Dict[str, List]
     :param nlp: Spacy pipeline to use, initialized using nlp = spacy.load("en_core_web_trf")
     :type nlp: spacy.lang
-    :return: The example with the added features
-    :rtype: Dict
+    :return: The batch with the added features
+    :rtype: Dict[str, List]
     """
-    doc = nlp(example["sentences_raw"])
-    # Also derive the AMR graph for the caption and derive its depth
-    amr_graph = doc._.to_amr()[0]  # noqa
-    amr_depth = get_amr_graph_depth(amr_graph)
-    new_features = {
-        "parse_tree_depth": walk_tree(next(doc.sents).root, 0),
-        "n_verbs": len([token for token in doc if token.pos_ == "VERB"]),
-        "amr_graph_depth": amr_depth,
-    }
-    return example | new_features
+    result: Dict = {"parse_tree_depth": [], "n_verbs": [], "amr_graph_depth": []}
+    doc_batched = nlp.pipe(examples["sentences_raw"])
+
+    for doc in doc_batched:
+        # Also derive the AMR graph for the caption and derive its depth
+        amr_graph = doc._.to_amr()[0]  # noqa
+        try:
+            amr_depth = get_amr_graph_depth(amr_graph)
+        except penman.exceptions.DecodeError:
+            amr_depth = 0
+        # Determine the depth of the dependency parse tree
+        result["parse_tree_depth"].append(walk_tree(next(doc.sents).root, 0))
+        result["n_verbs"].append(len([token for token in doc if token.pos_ == "VERB"]))
+        result["amr_graph_depth"].append(amr_depth)
+
+    return examples | result
 
 
 def flatten_examples(
