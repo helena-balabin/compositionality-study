@@ -19,8 +19,8 @@ from compositionality_study.utils import get_image_aspect_ratio_from_local_path
 
 def map_conditions(
     example: Dict[str, Any],
-    min_dep_parse_tree_depth: int = 5,
-    max_dep_parse_tree_depth: int = 10,
+    min_dep_amr_graph_depth: int = 5,
+    max_dep_amr_graph_depth: int = 10,
     min_n_coco_a_actions: int = 3,
     max_n_coco_a_actions: int = 18,
 ) -> Dict:
@@ -29,10 +29,10 @@ def map_conditions(
     :param example: The hf dataset example to map the conditions to (high/low textual complexity,
         high/low visual complexity)
     :type example: Dict[str, Any]
-    :param min_dep_parse_tree_depth: The minimum dependency parse tree depth
-    :type min_dep_parse_tree_depth: int
-    :param max_dep_parse_tree_depth: The maximum dependency parse tree depth
-    :type max_dep_parse_tree_depth: int
+    :param min_dep_amr_graph_depth: The minimum dependency parse tree depth
+    :type min_dep_amr_graph_depth: int
+    :param max_dep_amr_graph_depth: The maximum dependency parse tree depth
+    :type max_dep_amr_graph_depth: int
     :param min_n_coco_a_actions: The minimum COCO action graph depth
     :type min_n_coco_a_actions: int
     :param max_n_coco_a_actions: The maximum COCO action graph depth
@@ -41,8 +41,8 @@ def map_conditions(
     :rtype: Dict
     """
     # Map the textual complexity condition
-    middle_dep_parse_tree_depth = (min_dep_parse_tree_depth + max_dep_parse_tree_depth) / 2
-    textual_complexity = "high" if example["parse_tree_depth"] >= middle_dep_parse_tree_depth else "low"
+    middle_dep_amr_graph_depth = (min_dep_amr_graph_depth + max_dep_amr_graph_depth) / 2
+    textual_complexity = "high" if example["amr_graph_depth"] >= middle_dep_amr_graph_depth else "low"
     example["textual_complexity"] = textual_complexity
 
     # Map the visual complexity condition
@@ -140,8 +140,8 @@ def select_stimuli(
     np.random.seed(42)
 
     # Calculate min/max depth values for the dependency parse tree depth and the COCO action graph depth
-    dep_min = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(dep_quantile))
-    dep_max = int(pd.Series(vg_ds["parse_tree_depth"]).quantile(1 - dep_quantile))
+    dep_min = int(pd.Series(vg_ds["amr_graph_depth"]).quantile(dep_quantile))
+    dep_max = int(pd.Series(vg_ds["amr_graph_depth"]).quantile(1 - dep_quantile))
 
     ac_min = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(coco_a_graph_depth_quantile))
     ac_max = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(1 - coco_a_graph_depth_quantile))
@@ -187,11 +187,12 @@ def select_stimuli(
         f"Controlled the dataset for the aspect ratio of the images (between {asp_min} and {asp_max}), "
         f"{len(vg_ds)} entries remain."
     )
-    # And filter by person annotations, make sure there are three or four human actors in the image
+    # And filter by person annotations, make sure there are a fixed number of people in the image
     if filter_by_person:
-        # Filter out examples with "vehicle" and "food" in the "coco_categories"
+        # Get the average number of people in the images
+        av_n_people = int(np.mean(list(vg_ds["coco_person"])))
         vg_ds = vg_ds.filter(
-            lambda x: x["coco_person"] == 2 or x["coco_person"] == 3,
+            lambda x: x["coco_person"] == av_n_people or x["coco_person"] == av_n_people - 1,
             num_proc=24,
         )
         logger.info(
@@ -201,10 +202,10 @@ def select_stimuli(
 
     # Filter out any outliers for dep parse tree depth and number of filtered verbs
     if filter_outliers:
-        dep_m = pd.Series(vg_ds["parse_tree_depth"]).mean()
-        dep_std = pd.Series(vg_ds["parse_tree_depth"]).std()
+        dep_m = pd.Series(vg_ds["amr_graph_depth"]).mean()
+        dep_std = pd.Series(vg_ds["amr_graph_depth"]).std()
         vg_ds = vg_ds.filter(
-            lambda x: abs(x["parse_tree_depth"] - dep_m) <= 3 * dep_std,
+            lambda x: abs(x["amr_graph_depth"] - dep_m) <= 3 * dep_std,
             num_proc=24,
         )
         logger.info(f"Filtered out outlier dependency parse tree depth values, {len(vg_ds)} entries remain.")
@@ -219,7 +220,7 @@ def select_stimuli(
 
     # Select by dependency parse tree depth that match max and min quantile
     vg_ds = vg_ds.filter(
-        lambda x: x["parse_tree_depth"] <= dep_min or x["parse_tree_depth"] >= dep_max,
+        lambda x: x["amr_graph_depth"] <= dep_min or x["amr_graph_depth"] >= dep_max,
         num_proc=24,
     )
     logger.info(
@@ -280,8 +281,8 @@ def select_stimuli(
     vg_ds = vg_ds.map(
         lambda x: map_conditions(
             x,
-            min_dep_parse_tree_depth=dep_min,
-            max_dep_parse_tree_depth=dep_max,
+            min_dep_amr_graph_depth=dep_min,
+            max_dep_amr_graph_depth=dep_max,
             min_n_coco_a_actions=ac_min,
             max_n_coco_a_actions=ac_max,
         ),
