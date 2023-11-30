@@ -3,10 +3,13 @@ import os
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
+import amrlib
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import networkx as nx
 import nltk
 import numpy as np
+import penman
 import PIL
 import requests
 import spacy
@@ -18,6 +21,35 @@ from compositionality_study.constants import VG_IMAGE_DIR
 
 # Prefer GPU if available
 spacy.prefer_gpu()
+# Set up the spacy amrlib extension
+amrlib.setup_spacy_extension()
+
+
+def get_amr_graph_depth(
+    amr_graph: str,
+) -> int:
+    """Get the depth of the AMR graph for a given example.
+
+    :param amr_graph: The AMR graph to get the depth for (output of a spacy doc._.to_amr()[0] call)
+    :type amr_graph: str
+    :return: The maximum "depth" of the AMR graph (longest shortest path)
+    :rtype: int
+    """
+    # Convert to a Penman graph (with de-inverted edges)
+    penman_graph = penman.decode(amr_graph)
+    # Convert to a nx graph, first initialize the nx graph
+    nx_graph = nx.DiGraph()
+    # Add edges
+    for e in penman_graph.edges():
+        nx_graph.add_edge(e.source, e.target)
+    # Get the characteristic path length of the graph
+    amr_graph_depth = (
+        max([max(nx.shortest_path_length(nx_graph, source=n).values()) for n in nx_graph.nodes()])
+        if nx.number_of_nodes(nx_graph) > 0
+        else 0
+    )
+
+    return amr_graph_depth
 
 
 def walk_tree(
@@ -39,23 +71,27 @@ def walk_tree(
         return depth
 
 
-def walk_tree_hf_ds(
+def derive_text_depth_features(
     example: Dict[str, Any],
     nlp: spacy.lang,  # noqa
 ) -> Dict[str, Any]:
-    """Walk the dependency parse tree and return the maximum depth as well as the number of verbs.
+    """Get the depth of the dep parse tree, number of verbs and "depth" of the AMR graph of an example caption.
 
     :param example: A hf dataset example
     :type example: Dict[str, Any]
     :param nlp: Spacy pipeline to use, initialized using nlp = spacy.load("en_core_web_trf")
     :type nlp: spacy.lang
-    :return: The maximum depth in the tree and the number of verbs
+    :return: The example with the added features
     :rtype: Dict
     """
     doc = nlp(example["sentences_raw"])
+    # Also derive the AMR graph for the caption and derive its depth
+    amr_graph = doc._.to_amr()[0]  # noqa
+    amr_depth = get_amr_graph_depth(amr_graph)
     new_features = {
         "parse_tree_depth": walk_tree(next(doc.sents).root, 0),
         "n_verbs": len([token for token in doc if token.pos_ == "VERB"]),
+        "amr_graph_depth": amr_depth,
     }
     return example | new_features
 

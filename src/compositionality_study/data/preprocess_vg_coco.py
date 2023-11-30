@@ -24,7 +24,7 @@ from compositionality_study.constants import (
     VG_DIR, VG_OBJECTS_FILE,
     VG_RELATIONSHIPS_FILE,
 )
-from compositionality_study.utils import check_if_living_being, flatten_examples, walk_tree_hf_ds
+from compositionality_study.utils import check_if_living_being, flatten_examples, derive_text_depth_features
 
 
 @click.command()
@@ -111,13 +111,13 @@ def add_text_properties(
             doc[i].sent_start = False
         return doc
 
-    # Add dependency parse tree depth
+    # Add dependency parse tree depth and AMR depth
     # Prefer GPU if available
     spacy.prefer_gpu()
     nlp = spacy.load(spacy_model)
     nlp.add_pipe("force_single_sentence", before="parser")
     # This cannot be parallelized because of the spacy model/GPU issues
-    preprocessed_ds = preprocessed_ds.map(walk_tree_hf_ds, fn_kwargs={"nlp": nlp}, num_proc=1)
+    preprocessed_ds = preprocessed_ds.map(derive_text_depth_features, fn_kwargs={"nlp": nlp}, num_proc=1)
 
     # Save to disk
     if save_to_disk:
