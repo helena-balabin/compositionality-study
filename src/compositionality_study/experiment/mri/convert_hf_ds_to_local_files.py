@@ -80,6 +80,7 @@ def generate_non_word_sentence(
 @click.command()
 @click.option("--hf_stimuli_dir", default=VG_COCO_SELECTED_STIMULI_DIR, type=str)
 @click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
+@click.option("--text_feature", default="amr_graph_depth", type=str)
 @click.option("--delete_existing", default=True, type=bool)
 @click.option("--random_seed", default=42, type=int)
 @click.option("--only_control", default=False, type=bool, is_flag=True)
@@ -87,6 +88,7 @@ def generate_non_word_sentence(
 def convert_hf_dataset_to_local_stimuli(
     hf_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    text_feature: str = "amr_graph_depth",
     delete_existing: bool = True,
     random_seed: int = 42,
     only_control: bool = False,
@@ -98,6 +100,8 @@ def convert_hf_dataset_to_local_stimuli(
     :type hf_stimuli_dir: str
     :param local_stimuli_dir: The directory to save the locally stimuli to.
     :type local_stimuli_dir: str
+    :param text_feature: The text feature to use for the description of the local stimuli.
+    :type text_feature: str
     :param delete_existing: Whether to delete the existing stimuli in the local stimuli directory.
     :type delete_existing: bool
     :param random_seed: The random seed to use for reproducibility.
@@ -146,7 +150,7 @@ def convert_hf_dataset_to_local_stimuli(
                             "img_path": output_name + ".png",
                             "img_id": f"{ex['sentids']}",
                             "complexity": ex["complexity"],
-                            "parse_tree_depth": ex["parse_tree_depth"],
+                            text_feature: ex[text_feature],
                             "coco_a_graph_depth": ex["coco_a_graph_depth"],
                             "cocoid": ex["cocoid"],
                         },
