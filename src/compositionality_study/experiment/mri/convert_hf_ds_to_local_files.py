@@ -128,7 +128,7 @@ def convert_hf_dataset_to_local_stimuli(
         for ex in tqdm(dataset, desc="Loading images"):
             # Load the image
             img = ex["img"]
-            output_name = f"{ex['vg_image_id']}_{ex['sentids']}_{ex['complexity']}"
+            output_name = f"{ex['sentids']}_{ex['complexity']}"
 
             # Apply gamma correction to the image
             img = apply_gamma_correction(img)
@@ -144,7 +144,7 @@ def convert_hf_dataset_to_local_stimuli(
                         {
                             "text": ex["sentences_raw"],
                             "img_path": output_name + ".png",
-                            "img_id": f"{ex['vg_image_id']}_{ex['sentids']}",
+                            "img_id": f"{ex['sentids']}",
                             "complexity": ex["complexity"],
                             "parse_tree_depth": ex["parse_tree_depth"],
                             "coco_a_graph_depth": ex["coco_a_graph_depth"],
