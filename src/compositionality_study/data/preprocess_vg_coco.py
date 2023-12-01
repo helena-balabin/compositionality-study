@@ -94,7 +94,11 @@ def add_text_properties(
     vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
 
     # Flatten the dataset so that there is one caption per example
-    vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=24)
+    # Check if any of the features are lists
+    if any([isinstance(vg_coco_ds[0][feature], List) for feature in vg_coco_ds.features]):
+        vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=24)
+    else:
+        vs_coco_ds_flattened = vg_coco_ds
 
     # Add sentence length
     preprocessed_ds = vs_coco_ds_flattened.map(
@@ -434,10 +438,16 @@ def add_ic_scores(
     # Load the image complexity scores, give it a column name
     ic_scores_df = pd.read_json(ic_scores_file, orient="index")
     ic_scores_df.columns = ["ic_score"]
+    # In case that the index contains "COCO": Only take the last numbers of the file name without leading zeros
+    ic_scores_df.index = ic_scores_df.index.map(lambda x: int(x.split("_")[-1]) if type(x) == str else x)
+    # Convert the index to int
+    ic_scores_df.index = ic_scores_df.index.astype(int)
     # Rename the index column to cocoid
     ic_scores_df.index.name = "cocoid"
     # Merge the two datasets based on the cocoid
-    joined_df = preprocessed_df.join(ic_scores_df, on="cocoid")
+    joined_df = preprocessed_df.merge(ic_scores_df, on="cocoid")
+    joined_df["ic_score"] = joined_df["ic_score_x"].combine_first(joined_df["ic_score_y"])
+    joined_df.drop(columns=["ic_score_x", "ic_score_y"], inplace=True)
     # If present, remove the "__index_level_0__", "id" and "split" columns
     if "__index_level_0__" in joined_df.columns:
         joined_df = joined_df.drop(columns=["__index_level_0__"])
