@@ -2,7 +2,7 @@
 import io
 import json
 import os
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 
 import click
 import cv2
@@ -106,6 +106,7 @@ def infer_one_image(
 
 def infer_img_source(
     img_source: str,
+    dataset_path: str,
     output_dir: str,
     device: str = "cpu",
     save_ic_map: bool = False,
@@ -114,6 +115,8 @@ def infer_img_source(
 
     :param img_source: Path to directory of images or to a saved hf dataset.
     :type img_source: str
+    :param dataset_path: Path to hf dataset to predict IC scores for
+    :type dataset_path: str
     :param output_dir: Path to output_dir directory.
     :type output_dir: str
     :param device: Device to use for inference, defaults to "cpu".
@@ -124,8 +127,16 @@ def infer_img_source(
     # Get images (either as hf dataset or from directory)
     try:
         imgs = load_from_disk(img_source)
+        # Optionally filter images by those that are in hf_ds
+        if dataset_path is not None:
+            hf_ds = load_from_disk(dataset_path)
+            imgs = imgs.filter(lambda x: x["filepath"] in hf_ds["filepath"])
     except FileNotFoundError:
         imgs = os.listdir(img_source)
+        # Optionally filter images by those that are in hf_ds
+        if dataset_path is not None:
+            hf_ds = load_from_disk(dataset_path)
+            imgs = list(set(imgs).intersection(set(hf_ds["filepath"])))
 
     # Check if results already exist for some images (no need to recompute)
     results_path = os.path.join(output_dir, "ic_scores.json")
@@ -166,11 +177,13 @@ def infer_img_source(
 
 @click.command()
 @click.option("--input_dir", default=IMG_DUMMY_DIR, type=str, help="Path to the directory of images.")
+@click.option("--dataset_path", default=None, type=str, help="Path to the hf dataset.")
 @click.option("--output_dir", default=IC9000_IMG_COM_OUTPUT_DIR, type=str, help="Output directory.")
 @click.option("--device", default="cpu", type=str, help="Device to use for inference.")
 @click.option("--save_ic_map", default=False, type=bool, help="Whether to save the IC and blend maps.")
 def characterize_img_comp(
     input_dir: str = IMG_DUMMY_DIR,
+    dataset_path: Optional[str] = None,
     output_dir: str = IC9000_IMG_COM_OUTPUT_DIR,
     device: str = "cpu",
     save_ic_map: bool = False,
@@ -179,6 +192,8 @@ def characterize_img_comp(
 
     :param input_dir: Path to directory of images.
     :type input_dir: str
+    :param dataset_path: Optional path to hf dataset to predict IC scores for
+    :type dataset_path: Optional[str]
     :param output_dir: Path to output_dir directory.
     :type output_dir: str
     :param device: Device to use for inference, defaults to "cpu".
@@ -188,7 +203,7 @@ def characterize_img_comp(
     """
     model.to(torch.device(device))
 
-    results = infer_img_source(input_dir, output_dir, device=device, save_ic_map=save_ic_map)
+    results = infer_img_source(input_dir, dataset_path, output_dir, device=device, save_ic_map=save_ic_map)
 
     # Save the results to a json file
     results_path = os.path.join(output_dir, "ic_scores.json")
