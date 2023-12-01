@@ -19,8 +19,9 @@ from compositionality_study.utils import get_image_aspect_ratio_from_local_path
 
 def map_conditions(
     example: Dict[str, Any],
-    min_dep_amr_graph_depth: int = 5,
-    max_dep_amr_graph_depth: int = 10,
+    text_feature: str = "parse_tree_depth",
+    min_text_feature_depth: int = 5,
+    max_text_feature_depth: int = 10,
     min_n_coco_a_actions: int = 3,
     max_n_coco_a_actions: int = 18,
 ) -> Dict:
@@ -29,10 +30,12 @@ def map_conditions(
     :param example: The hf dataset example to map the conditions to (high/low textual complexity,
         high/low visual complexity)
     :type example: Dict[str, Any]
-    :param min_dep_amr_graph_depth: The minimum dependency parse tree depth
-    :type min_dep_amr_graph_depth: int
-    :param max_dep_amr_graph_depth: The maximum dependency parse tree depth
-    :type max_dep_amr_graph_depth: int
+    :param text_feature: The text feature to parameterize with
+    :type text_feature: str
+    :param min_text_feature_depth: The minimum text feature depth
+    :type min_text_feature_depth: int
+    :param max_text_feature_depth: The maximum text feature tree depth
+    :type max_text_feature_depth: int
     :param min_n_coco_a_actions: The minimum COCO action graph depth
     :type min_n_coco_a_actions: int
     :param max_n_coco_a_actions: The maximum COCO action graph depth
@@ -41,8 +44,8 @@ def map_conditions(
     :rtype: Dict
     """
     # Map the textual complexity condition
-    middle_dep_amr_graph_depth = (min_dep_amr_graph_depth + max_dep_amr_graph_depth) / 2
-    textual_complexity = "high" if example["amr_graph_depth"] >= middle_dep_amr_graph_depth else "low"
+    middle_text_feature_depth = (min_text_feature_depth + max_text_feature_depth) / 2
+    textual_complexity = "high" if example[text_feature] >= middle_text_feature_depth else "low"
     example["textual_complexity"] = textual_complexity
 
     # Map the visual complexity condition
@@ -65,6 +68,7 @@ def map_conditions(
 @click.option("--img_comp_tol", type=float, default=0.15)
 @click.option("--asp_min", type=float, default=1.2)
 @click.option("--asp_max", type=float, default=1.8)
+@click.option("--text_feature", type=str, default="amr_graph_depth")
 @click.option("--dep_quantile", type=float, default=0.1)
 @click.option("--coco_a_graph_depth_quantile", type=float, default=0.1)
 @click.option("--filter_outliers", type=bool, default=True)
@@ -82,6 +86,7 @@ def select_stimuli(
     img_comp_tol: float = 0.15,
     asp_min: float = 1.2,
     asp_max: float = 1.8,
+    text_feature: str = "amr_graph_depth",
     dep_quantile: float = 0.1,
     coco_a_graph_depth_quantile: float = 0.1,
     filter_outliers: bool = True,
@@ -111,6 +116,9 @@ def select_stimuli(
     :type asp_min: float
     :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 1.8
     :type asp_max: float
+    :param text_feature: The text feature to parameterize with, defaults to "amr_graph_depth", alternatively one can use
+        "parse_tree_depth"
+    :type text_feature: str
     :param dep_quantile: The quantile of the dependency parse tree depth to select stimuli for, e.g., 0.1 means
         that the stimuli with the lowest 10% and highest 10% dependency parse tree depth are selected, defaults to 0.1
     :type dep_quantile: float
@@ -135,13 +143,14 @@ def select_stimuli(
     """
     # Load the dataset
     vg_ds = load_from_disk(vg_coco_preprocessed_dir)
+    file_prefix = "vg_" if "vg_" in vg_coco_preprocessed_dir else ""
     logger.info(f"Loaded the preprocessed VG + COCO overlap dataset with {len(vg_ds)} entries.")
     # Set a random seed for reproducibility
     np.random.seed(42)
 
     # Calculate min/max depth values for the dependency parse tree depth and the COCO action graph depth
-    dep_min = int(pd.Series(vg_ds["amr_graph_depth"]).quantile(dep_quantile))
-    dep_max = int(pd.Series(vg_ds["amr_graph_depth"]).quantile(1 - dep_quantile))
+    dep_min = int(pd.Series(vg_ds[text_feature]).quantile(dep_quantile))
+    dep_max = int(pd.Series(vg_ds[text_feature]).quantile(1 - dep_quantile))
 
     ac_min = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(coco_a_graph_depth_quantile))
     ac_max = int(pd.Series(vg_ds["coco_a_graph_depth"]).quantile(1 - coco_a_graph_depth_quantile))
@@ -196,19 +205,19 @@ def select_stimuli(
             num_proc=24,
         )
         logger.info(
-            f"Controlled the dataset for a fixed number of human actors (based on the COCO segmentation data), "
-            f"{len(vg_ds)} entries remain."
+            f"Controlled the dataset for a fixed number ({av_n_people} or {av_n_people - 1}) of human actors "
+            f"(based on the COCO segmentation data), {len(vg_ds)} entries remain."
         )
 
     # Filter out any outliers for dep parse tree depth and number of filtered verbs
     if filter_outliers:
-        dep_m = pd.Series(vg_ds["amr_graph_depth"]).mean()
-        dep_std = pd.Series(vg_ds["amr_graph_depth"]).std()
+        dep_m = pd.Series(vg_ds[text_feature]).mean()
+        dep_std = pd.Series(vg_ds[text_feature]).std()
         vg_ds = vg_ds.filter(
-            lambda x: abs(x["amr_graph_depth"] - dep_m) <= 3 * dep_std,
+            lambda x: abs(x[text_feature] - dep_m) <= 3 * dep_std,
             num_proc=24,
         )
-        logger.info(f"Filtered out outlier dependency parse tree depth values, {len(vg_ds)} entries remain.")
+        logger.info(f"Filtered out outlier text feature depth values, {len(vg_ds)} entries remain.")
 
         ac_m = pd.Series(vg_ds["n_coco_a_actions"]).mean()
         ac_std = pd.Series(vg_ds["n_coco_a_actions"]).std()
@@ -218,13 +227,13 @@ def select_stimuli(
         )
         logger.info(f"Filtered out outliers for the number of COCO action values, {len(vg_ds)} entries remain.")
 
-    # Select by dependency parse tree depth that match max and min quantile
+    # Select by text feature depth that match max and min quantile
     vg_ds = vg_ds.filter(
-        lambda x: x["amr_graph_depth"] <= dep_min or x["amr_graph_depth"] >= dep_max,
+        lambda x: x[text_feature] <= dep_min or x[text_feature] >= dep_max,
         num_proc=24,
     )
     logger.info(
-        f"Filtered the dataset for dependency parse tree depths of either <= {dep_min} or "
+        f"Filtered the dataset for {text_feature} depths of either <= {dep_min} or "
         f">={dep_max}, {len(vg_ds)} entries remain."
     )
 
@@ -241,7 +250,7 @@ def select_stimuli(
     )
     # Filter out image duplicates
     vg_df = pd.DataFrame(vg_ds)
-    vg_df = vg_df.drop_duplicates(subset=["vg_image_id"])
+    vg_df = vg_df.drop_duplicates(subset=["filepath"])
     vg_ds = datasets.Dataset.from_pandas(vg_df)
     logger.info(f"Filtered out duplicate images, {len(vg_ds)} entries remain.")
 
@@ -249,7 +258,7 @@ def select_stimuli(
     # Add the images to the dataset, load based on the filenames
     # Avoid PIL-related bugs by copying the images
     vg_ds = vg_ds.map(
-        lambda x: {**x, "img": copy.deepcopy(Image.open(os.path.join(VG_IMAGE_DIR, x["filename"])))},
+        lambda x: {**x, "img": copy.deepcopy(Image.open(os.path.join(VG_IMAGE_DIR, x["filepath"])))},
         num_proc=24,
     )
     # Filter out images with low quality
@@ -281,8 +290,9 @@ def select_stimuli(
     vg_ds = vg_ds.map(
         lambda x: map_conditions(
             x,
-            min_dep_amr_graph_depth=dep_min,
-            max_dep_amr_graph_depth=dep_max,
+            text_feature=text_feature,
+            min_text_feature_depth=dep_min,
+            max_text_feature_depth=dep_max,
             min_n_coco_a_actions=ac_min,
             max_n_coco_a_actions=ac_max,
         ),
@@ -318,7 +328,7 @@ def select_stimuli(
     vg_ds_n_stimuli.save_to_disk(
         os.path.join(
             output_dir,
-            f"vg_coco_{n_stimuli}_stimuli",
+            f"{file_prefix}coco_{n_stimuli}_stimuli",
         )
     )
 
