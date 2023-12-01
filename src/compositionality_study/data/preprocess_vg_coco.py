@@ -121,7 +121,7 @@ def add_text_properties(
     # Prefer GPU if available
     spacy.prefer_gpu()
     # Disable unnecessary components
-    nlp = spacy.load(spacy_model, disable=["tok2vec", "tagger", "attribute_ruler", "lemmatizer"])
+    nlp = spacy.load(spacy_model, disable=["tok2vec", "attribute_ruler", "lemmatizer"])
     nlp.add_pipe("force_single_sentence", before="parser")
     # This cannot be parallelized because of the spacy model/GPU issues
     preprocessed_ds = preprocessed_ds.map(
