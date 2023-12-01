@@ -106,7 +106,7 @@ def infer_one_image(
 
 def infer_img_source(
     img_source: str,
-    dataset_path: str,
+    dataset_path: Optional[str],
     output_dir: str,
     device: str = "cpu",
     save_ic_map: bool = False,
@@ -115,8 +115,8 @@ def infer_img_source(
 
     :param img_source: Path to directory of images or to a saved hf dataset.
     :type img_source: str
-    :param dataset_path: Path to hf dataset to predict IC scores for
-    :type dataset_path: str
+    :param dataset_path: Optional path to hf dataset to predict IC scores for
+    :type dataset_path: Optional[str]
     :param output_dir: Path to output_dir directory.
     :type output_dir: str
     :param device: Device to use for inference, defaults to "cpu".
