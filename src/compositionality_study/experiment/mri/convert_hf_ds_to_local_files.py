@@ -240,7 +240,11 @@ def generate_subject_specific_stimulus_files(
         os.makedirs(subj_output_dir)
 
     # Replace "scrambled_*" with "scrambled" in the complexity column
-    stimuli_df["complexity"] = stimuli_df["complexity"].str.replace("scrambled_.*", "scrambled", regex=True)
+    stimuli_df["complexity"] = stimuli_df["complexity"].str.replace(
+        "scrambled_.*",
+        "scrambled",
+        regex=True,
+    )
     # Repeat each stimulus twice to separate image and text
     stimuli_df = stimuli_df.loc[stimuli_df.index.repeat(2)].reset_index(drop=True)
     # Separate text and images
@@ -272,7 +276,7 @@ def generate_subject_specific_stimulus_files(
             else:
                 # This is probably overly complicated, but it works
                 run_order = np.concatenate(
-                    [np.arange(n_runs)[n_runs // 2:], np.arange(n_runs)[:n_runs // 2]]
+                    [np.arange(n_runs)[n_runs // 2 :], np.arange(n_runs)[: n_runs // 2]]
                 )
                 group["run"] = np.tile(run_order, len(group) // n_runs)
 
@@ -284,12 +288,14 @@ def generate_subject_specific_stimulus_files(
         # Randomly change the run order by mapping the run numbers to a random permutation of the run numbers, using
         # the subject number as the random seed
         new_run_order = np.random.RandomState(subject).permutation(np.arange(n_runs))
-        stimuli_rep_df["run"] = stimuli_rep_df["run"].map(lambda x: new_run_order[x])
+        stimuli_rep_df["run"] = stimuli_rep_df["run"].map(lambda x: new_run_order[x])  # noqa
 
         # Within each run, shuffle the stimuli, using the subject number as the random seed
-        stimuli_rep_df = stimuli_rep_df.groupby("run").apply(
-            lambda x: x.sample(frac=1, random_state=subject)
-        ).reset_index(drop=True)
+        stimuli_rep_df = (
+            stimuli_rep_df.groupby("run")
+            .apply(lambda x: x.sample(frac=1, random_state=subject))  # noqa
+            .reset_index(drop=True)
+        )
 
         # Save the dataframe to disk
         stimuli_rep_df.to_csv(os.path.join(subj_output_dir, f"subj_{subject}.csv"), index=False)
