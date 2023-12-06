@@ -5,6 +5,7 @@ import string
 from typing import List
 
 import click
+import numpy as np
 import pandas as pd
 from datasets import load_from_disk
 from PIL import Image
@@ -206,6 +207,94 @@ def convert_hf_dataset_to_local_stimuli(
     return stimuli_df
 
 
+@click.command()
+@click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
+@click.option("--n_subjects", default=48, type=int)
+@click.option("--n_runs", default=8, type=int)
+@click.option("--n_repetitions", default=3, type=int)
+def generate_subject_specific_stimulus_files(
+    local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    n_subjects: int = 48,
+    n_runs: int = 8,
+    n_repetitions: int = 3,
+) -> None:
+    """Generate subject specific stimulus files with the correct randomization and repetitions across runs.
+
+    :param local_stimuli_dir: The directory containing the filtered stimuli images and text.
+    :type local_stimuli_dir: str
+    :param n_subjects: The number of subjects to generate stimulus files for.
+    :type n_subjects: int
+    :param n_runs: The number of runs to generate stimulus files for.
+    :type n_runs: int
+    :param n_repetitions: The number of repetitions of each stimulus across runs.
+    :type n_repetitions: int
+    """
+    # Load the stimuli dataframe
+    stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
+    # Drop empty rows
+    stimuli_df.dropna(inplace=True, how="all")
+
+    # Create the output directory
+    subj_output_dir = os.path.join(local_stimuli_dir, "subject_specific_stimuli")
+    if not os.path.exists(subj_output_dir):
+        os.makedirs(subj_output_dir)
+
+    # Replace "scrambled_*" with "scrambled" in the complexity column
+    stimuli_df["complexity"] = stimuli_df["complexity"].str.replace("scrambled_.*", "scrambled", regex=True)
+    # Repeat each stimulus twice to separate image and text
+    stimuli_df = stimuli_df.loc[stimuli_df.index.repeat(2)].reset_index(drop=True)
+    # Separate text and images
+    # Create a new column for the stimulus, every 2nd row is the image, every 2nd row is the text
+    stimuli_df["stimulus"] = ""
+    stimuli_df["stimulus"][::2] = stimuli_df["img_path"][::2]
+    stimuli_df["stimulus"][1::2] = stimuli_df["text"][1::2]
+    stimuli_df["modality"] = ""
+    stimuli_df["modality"][::2] = ["image"] * len(stimuli_df[::2])
+    stimuli_df["modality"][1::2] = ["text"] * len(stimuli_df[1::2])
+    # Drop the text and image columns
+    stimuli_df.drop(columns=["text", "img_path"], inplace=True)
+
+    # Repeat each stimulus n_repetitions times right after each other
+    stimuli_rep_df = stimuli_df.loc[stimuli_df.index.repeat(n_repetitions)].reset_index(drop=True)
+
+    # Iterate through the subjects and generate the stimulus files
+    for subject in tqdm(range(n_subjects), desc="Generating subject specific stimulus files"):
+        # Group by complexity and modality
+        stimuli_rep_df_grouped = stimuli_rep_df.groupby(["complexity", "modality"])
+        # Create separate dataframes for the groups
+        stimuli_rep_dfs = [group for _, group in stimuli_rep_df_grouped]
+        # For each group, add a run column that counts from 0, 1 ..., n_runs - 1 and then repeats 0, 1, ..., n_runs - 1
+        for i, group in enumerate(stimuli_rep_dfs):
+            # If the modality is "image", add the run numbers in a different order to avoid having paired images and
+            # text in the same run
+            if group["modality"].iloc[0] == "image":
+                group["run"] = np.tile(np.arange(n_runs), len(group) // n_runs)
+            else:
+                # This is probably overly complicated, but it works
+                run_order = np.concatenate(
+                    [np.arange(n_runs)[n_runs // 2:], np.arange(n_runs)[:n_runs // 2]]
+                )
+                group["run"] = np.tile(run_order, len(group) // n_runs)
+
+            stimuli_rep_dfs[i] = group
+
+        # Concatenate the dataframes back together
+        stimuli_rep_df = pd.concat(stimuli_rep_dfs, ignore_index=True)
+
+        # Randomly change the run order by mapping the run numbers to a random permutation of the run numbers, using
+        # the subject number as the random seed
+        new_run_order = np.random.RandomState(subject).permutation(np.arange(n_runs))
+        stimuli_rep_df["run"] = stimuli_rep_df["run"].map(lambda x: new_run_order[x])
+
+        # Within each run, shuffle the stimuli, using the subject number as the random seed
+        stimuli_rep_df = stimuli_rep_df.groupby("run").apply(
+            lambda x: x.sample(frac=1, random_state=subject)
+        ).reset_index(drop=True)
+
+        # Save the dataframe to disk
+        stimuli_rep_df.to_csv(os.path.join(subj_output_dir, f"subj_{subject}.csv"), index=False)
+
+
 @click.group()
 def cli() -> None:
     """Convert the HF dataset with the selected stimuli into locally saved images and text."""
@@ -213,4 +302,5 @@ def cli() -> None:
 
 if __name__ == "__main__":
     cli.add_command(convert_hf_dataset_to_local_stimuli)
+    cli.add_command(generate_subject_specific_stimulus_files)
     cli()
