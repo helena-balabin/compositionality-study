@@ -141,11 +141,10 @@ def run_single_run(
 @click.command()
 @click.option("--local_stimuli_dir", type=str, default=VG_COCO_LOCAL_STIMULI_DIR)
 @click.option("--practice_stimuli_dir", type=str, default=VG_COCO_PRACTICE_STIMULI_DIR)
+@click.option("--subject_id", type=int, default=0)
 @click.option("--duration", type=float, default=3.0)
 @click.option("--inter_stimulus_interval", type=float, default=5.5)
 @click.option("--dummy_scan_duration", type=float, default=6.0)
-@click.option("--n_repetitions", type=int, default=3)
-@click.option("--n_runs", type=int, default=16)
 @click.option("--frame_rate", type=int, default=60)
 @click.option("--fullscreen", type=bool, default=False)
 @click.option("--manual_trigger_button", type=str, default="space")
@@ -154,11 +153,10 @@ def run_single_run(
 def run_psychopy_exp(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     practice_stimuli_dir: str = VG_COCO_PRACTICE_STIMULI_DIR,
+    subject_id: int = 0,
     duration: float = 3.0,
     inter_stimulus_interval: float = 5.5,
     dummy_scan_duration: float = 6.0,
-    n_repetitions: int = 3,
-    n_runs: int = 16,
     frame_rate: int = 60,
     fullscreen: bool = False,
     manual_trigger_button: str = "space",
@@ -171,16 +169,14 @@ def run_psychopy_exp(
     :type local_stimuli_dir: str
     :param practice_stimuli_dir: The directory containing the practice stimuli.
     :type practice_stimuli_dir: str
+    :param subject_id: The subject ID
+    :type subject_id: int
     :param duration: The duration of the image/text presentation in seconds.
     :type duration: float
     :param inter_stimulus_interval: The interval between stimuli in seconds.
     :type inter_stimulus_interval: float
     :param dummy_scan_duration: The duration of the dummy scans in seconds.
     :type dummy_scan_duration: float
-    :param n_repetitions: The number of repetitions of each stimulus.
-    :type n_repetitions: int
-    :param n_runs: The number of runs to present the stimuli.
-    :type n_runs: int
     :param frame_rate: The frame rate of the psychopy window in Hz.
     :type frame_rate: int
     :param fullscreen: Whether to run the experiment in fullscreen mode.
@@ -191,30 +187,25 @@ def run_psychopy_exp(
     :type mri_trigger_button: str
     :param break_duration: The duration of the break after every two runs in seconds.
     :type break_duration: float
-    :raises ValueError: If the number of stimuli is not divisible by the number of runs.
     """
     # Load the csv file for the stimuli
-    stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
-    # Load the captions and images from the URL in the dataset
-    stimuli: List = []
+    stimuli_df = pd.read_csv(
+        os.path.join(local_stimuli_dir, "subject_specific_stimuli", f"subj_{subject_id}.csv")
+    )
+    # Determine the number of unique runs
+    n_runs = len(stimuli_df["run"].unique())
+
+    # Load the captions and images from the dataset
+    stimuli_runs: List = [[] for _ in range(n_runs)]
     for _, row in tqdm(stimuli_df.iterrows(), desc="Loading stimuli"):
-        # Load the image from disk and resize it
-        img = Image.open(os.path.join(local_stimuli_dir, row["img_path"]))
-        # Add the image to the stimuli list (n_repetitions times)
-        stimuli = stimuli + [ImageOps.contain(img, (800, 600))] * n_repetitions
-        # Add the text to the stimuli list (n_repetitions times)
-        stimuli = stimuli + [row["text"]] * n_repetitions
-
-    # Shuffle the stimuli (deterministically, because we set the random seed)
-    random.shuffle(stimuli)
-
-    # Make sure the number of stimuli is divisible by the number of runs, throw an error otherwise
-    if len(stimuli) % n_runs != 0:
-        raise ValueError(
-            f"{len(stimuli)} stimuli (including {n_repetitions} repetitions) are not divisible into {n_runs} runs."
-        )
-    # Split the stimuli into runs
-    stimuli_runs = [stimuli[i::n_runs] for i in range(n_runs)]
+        if ".jpg" in row["stimulus"] or ".png" in row["stimulus"]:
+            # Load the image from disk and resize it
+            img = Image.open(os.path.join(local_stimuli_dir, row["stimulus"]))
+            # Add the image to the stimuli list
+            stimuli_runs[row["run"]].append(ImageOps.contain(img, (800, 600)))
+        else:
+            # Add the text to the stimuli list
+            stimuli_runs[row["run"]].append(row["stimulus"])
 
     # Load the practice stimuli
     practice_stimuli: List = []
