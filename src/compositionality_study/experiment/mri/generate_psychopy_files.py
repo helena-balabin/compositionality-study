@@ -144,7 +144,7 @@ def run_single_run(
 @click.option("--subject_id", type=int, default=1)
 @click.option("--duration", type=float, default=3.0)
 @click.option("--inter_stimulus_interval", type=float, default=5.5)
-@click.option("--dummy_scan_duration", type=float, default=6.0)
+@click.option("--dummy_scan_duration", type=float, default=8.0)
 @click.option("--frame_rate", type=int, default=60)
 @click.option("--fullscreen", type=bool, default=False)
 @click.option("--manual_trigger_button", type=str, default="space")
@@ -156,7 +156,7 @@ def run_psychopy_exp(
     subject_id: int = 1,
     duration: float = 3.0,
     inter_stimulus_interval: float = 5.5,
-    dummy_scan_duration: float = 6.0,
+    dummy_scan_duration: float = 8.0,
     frame_rate: int = 60,
     fullscreen: bool = False,
     manual_trigger_button: str = "space",

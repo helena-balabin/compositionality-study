@@ -264,7 +264,7 @@ def convert_hf_dataset_to_local_stimuli(
 @click.option("--n_repetitions", default=3, type=int)
 @click.option("--duration", default=3.0, type=float)
 @click.option("--isi", default=5.5, type=float)
-@click.option("--dummy_scan_duration", default=6.0, type=float)
+@click.option("--dummy_scan_duration", default=8.0, type=float)
 def generate_subject_specific_stimulus_files(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     n_subjects: int = 48,
@@ -273,7 +273,7 @@ def generate_subject_specific_stimulus_files(
     n_repetitions: int = 3,
     duration: float = 3.0,
     isi: float = 5.5,
-    dummy_scan_duration: float = 6.0,
+    dummy_scan_duration: float = 8.0,
 ) -> None:
     """Generate subject specific stimulus files with the correct randomization and repetitions across runs.
 
