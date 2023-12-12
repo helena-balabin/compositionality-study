@@ -23,8 +23,57 @@ from compositionality_study.experiment.mri.create_fourier_scrambled_images impor
 )
 from compositionality_study.utils import apply_gamma_correction, draw_objs_and_rels  # noqa
 
-# Set a random seed for reproducibility  # noqa
-random.seed(42)  # noqa
+# Set a random seed for reproducibility
+random.seed(42)
+
+
+def create_balanced_conditions(
+    df: pd.DataFrame,
+    n_groups: int = 8,
+    new_group_key: str = "runs",
+    avoid_pairings: bool = False,
+) -> pd.DataFrame:
+    """Randomize the order of the stimuli, while keeping the number of stimuli per condition balanced.
+
+    :param df: The dataframe to randomize.
+    :type df: pd.DataFrame
+    :param n_groups: The number of groups to randomize the stimuli into.
+    :type n_groups: int
+    :param new_group_key: The name of the column to add to the dataframe that contains the group number.
+    :type new_group_key: str
+    :param avoid_pairings: Whether to avoid having paired images and text in the same run.
+    :type avoid_pairings: bool
+    :return: The randomized dataframe.
+    :rtype: pd.DataFrame
+    """
+    # Group by complexity and modality
+    stimuli_rep_df_grouped = df.groupby(["complexity", "modality"])
+    # Create separate dataframes for the groups
+    stimuli_rep_dfs = [group for _, group in stimuli_rep_df_grouped]
+    # For each group, add a run column that counts from 0, 1 ..., n_runs - 1 and then repeats 0, 1, ..., n_runs - 1
+    for i, group in enumerate(stimuli_rep_dfs):
+        if avoid_pairings and group["modality"].iloc[0] == "image":
+            # If the modality is "image", add the run numbers in a different order to avoid having paired images and
+            # text in the same run
+            # This is probably overly complicated, but it works
+            effective_group_size = min(n_groups, len(group))
+            run_order = np.concatenate(
+                [
+                    np.arange(effective_group_size)[effective_group_size // 2 :],
+                    np.arange(effective_group_size)[: effective_group_size // 2],
+                ]
+            )
+            group[new_group_key] = np.tile(run_order, len(group) // effective_group_size)
+        else:
+            effective_group_size = min(n_groups, len(group))
+            group[new_group_key] = np.tile(
+                np.arange(effective_group_size), len(group) // effective_group_size
+            )
+
+        stimuli_rep_dfs[i] = group
+
+    # Stitch the dataframe together
+    return pd.concat(stimuli_rep_dfs, ignore_index=True)
 
 
 def estimate_letter_frequency(
@@ -211,12 +260,20 @@ def convert_hf_dataset_to_local_stimuli(
 @click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
 @click.option("--n_subjects", default=48, type=int)
 @click.option("--n_runs", default=8, type=int)
+@click.option("--n_run_blocks", default=6, type=int)
 @click.option("--n_repetitions", default=3, type=int)
+@click.option("--duration", default=3.0, type=float)
+@click.option("--isi", default=5.5, type=float)
+@click.option("--dummy_scan_duration", default=6.0, type=float)
 def generate_subject_specific_stimulus_files(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     n_subjects: int = 48,
     n_runs: int = 8,
+    n_run_blocks: int = 6,
     n_repetitions: int = 3,
+    duration: float = 3.0,
+    isi: float = 5.5,
+    dummy_scan_duration: float = 6.0,
 ) -> None:
     """Generate subject specific stimulus files with the correct randomization and repetitions across runs.
 
@@ -226,8 +283,16 @@ def generate_subject_specific_stimulus_files(
     :type n_subjects: int
     :param n_runs: The number of runs to generate stimulus files for.
     :type n_runs: int
+    :param n_run_blocks: The number of blocks per run (only relevant for randomization).
+    :type n_run_blocks: int
     :param n_repetitions: The number of repetitions of each stimulus across runs.
     :type n_repetitions: int
+    :param duration: The duration of each stimulus in seconds.
+    :type duration: float
+    :param isi: The duration of the inter stimulus interval in seconds.
+    :type isi: float
+    :param dummy_scan_duration: The duration of the dummy scan in seconds.
+    :type dummy_scan_duration: float
     """
     # Load the stimuli dataframe
     stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
@@ -261,44 +326,69 @@ def generate_subject_specific_stimulus_files(
     # Repeat each stimulus n_repetitions times right after each other
     stimuli_rep_df = stimuli_df.loc[stimuli_df.index.repeat(n_repetitions)].reset_index(drop=True)
 
+    # Randomize the order of the stimuli, while keeping the number of stimuli per condition balanced
+    stimuli_rep_df_rd = create_balanced_conditions(
+        stimuli_rep_df,
+        n_groups=n_runs,
+        new_group_key="run",
+        avoid_pairings=True,
+    )
+
     # Iterate through the subjects and generate the stimulus files
-    for subject in tqdm(range(n_subjects), desc="Generating subject specific stimulus files"):
-        # Group by complexity and modality
-        stimuli_rep_df_grouped = stimuli_rep_df.groupby(["complexity", "modality"])
-        # Create separate dataframes for the groups
-        stimuli_rep_dfs = [group for _, group in stimuli_rep_df_grouped]
-        # For each group, add a run column that counts from 0, 1 ..., n_runs - 1 and then repeats 0, 1, ..., n_runs - 1
-        for i, group in enumerate(stimuli_rep_dfs):
-            # If the modality is "image", add the run numbers in a different order to avoid having paired images and
-            # text in the same run
-            if group["modality"].iloc[0] == "image":
-                group["run"] = np.tile(np.arange(n_runs), len(group) // n_runs)
-            else:
-                # This is probably overly complicated, but it works
-                run_order = np.concatenate(
-                    [np.arange(n_runs)[n_runs // 2 :], np.arange(n_runs)[: n_runs // 2]]
-                )
-                group["run"] = np.tile(run_order, len(group) // n_runs)
-
-            stimuli_rep_dfs[i] = group
-
-        # Concatenate the dataframes back together
-        stimuli_rep_df = pd.concat(stimuli_rep_dfs, ignore_index=True)
+    for subject in tqdm(
+        range(1, n_subjects + 1), desc="Generating subject specific stimulus files"
+    ):
+        # Create a copy of the stimuli dataframe
+        subj_stimuli_rep_df = stimuli_rep_df_rd
 
         # Randomly change the run order by mapping the run numbers to a random permutation of the run numbers, using
         # the subject number as the random seed
         new_run_order = np.random.RandomState(subject).permutation(np.arange(n_runs))
-        stimuli_rep_df["run"] = stimuli_rep_df["run"].map(lambda x: new_run_order[x])  # noqa
+        subj_stimuli_rep_df["run"] = subj_stimuli_rep_df["run"].map(
+            lambda x: new_run_order[x]  # noqa
+        )
 
-        # Within each run, shuffle the stimuli, using the subject number as the random seed
-        stimuli_rep_df = (
-            stimuli_rep_df.groupby("run")
+        # Within each run, create blocks of stimuli
+        subj_stimuli_rep_df = (
+            subj_stimuli_rep_df.groupby("run")
+            .apply(
+                lambda x: create_balanced_conditions(
+                    x,
+                    n_groups=n_run_blocks,
+                    new_group_key="block",
+                    avoid_pairings=False,
+                )
+            )
+            .reset_index(drop=True)
+        )
+
+        # Shuffle within each block within each run
+        subj_stimuli_rep_df = (
+            subj_stimuli_rep_df.groupby(["run", "block"])
             .apply(lambda x: x.sample(frac=1, random_state=subject))  # noqa
             .reset_index(drop=True)
         )
 
+        # Sort the dataframe by run, then by block
+        subj_stimuli_rep_df.sort_values(by=["run", "block"], inplace=True)
+        # Reset the index
+        subj_stimuli_rep_df.reset_index(drop=True, inplace=True)
+
+        # Add the onset and duration columns
+        # The onset is relative to the start of the run and starts with the dummy scan duration
+        subj_stimuli_rep_df["onset"] = np.arange(len(subj_stimuli_rep_df)) % (
+            len(subj_stimuli_rep_df) // n_runs
+        )
+        subj_stimuli_rep_df["onset"] *= duration + isi
+        subj_stimuli_rep_df["onset"] += dummy_scan_duration
+        subj_stimuli_rep_df["duration"] = duration
+
         # Save the dataframe to disk
-        stimuli_rep_df.to_csv(os.path.join(subj_output_dir, f"subj_{subject}.csv"), index=False)
+        subj_stimuli_rep_df.to_csv(
+            os.path.join(subj_output_dir, f"sub-{subject}_task-comp_events.tsv"),
+            index=False,
+            sep="\t",
+        )
 
 
 @click.group()

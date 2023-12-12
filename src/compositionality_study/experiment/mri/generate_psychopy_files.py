@@ -190,7 +190,10 @@ def run_psychopy_exp(
     """
     # Load the csv file for the stimuli
     stimuli_df = pd.read_csv(
-        os.path.join(local_stimuli_dir, "subject_specific_stimuli", f"subj_{subject_id}.csv")
+        os.path.join(
+            local_stimuli_dir, "subject_specific_stimuli", f"sub-{subject_id}_task-comp_events.tsv"
+        ),
+        sep="\t",
     )
     # Determine the number of unique runs
     n_runs = len(stimuli_df["run"].unique())
