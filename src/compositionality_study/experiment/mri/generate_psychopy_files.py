@@ -17,6 +17,49 @@ random.seed(42)
 logging.console.setLevel(logging.INFO)
 
 
+def add_line_break(
+    input_string: str,
+) -> str:
+    """Add a line break to the input string at the optimal position.
+
+    :param input_string: The input string.
+    :type input_string: str
+    :return: The input string with a line break at the optimal position.
+    :rtype: str
+    """
+    # Check if the input string is empty
+    if not input_string:
+        return "Error: Input string is empty."
+
+    # Find the midpoint of the input string
+    midpoint = len(input_string) // 2
+
+    # Find the nearest space character before or after the midpoint
+    space_before_midpoint = input_string.rfind(" ", 0, midpoint)
+    space_after_midpoint = input_string.find(" ", midpoint)
+
+    # Choose the nearest space
+    if space_before_midpoint == -1:
+        optimal_position = space_after_midpoint
+    elif space_after_midpoint == -1:
+        optimal_position = space_before_midpoint + 1
+    else:
+        optimal_position = (
+            space_before_midpoint + 1
+            if midpoint - space_before_midpoint < space_after_midpoint - midpoint
+            else space_after_midpoint
+        )
+
+    # If no space is found, insert a line break at the midpoint
+    if optimal_position == -1:
+        optimal_position = midpoint
+
+    # Insert the line break at the optimal position
+    result_string = input_string[:optimal_position] + "\n" + input_string[optimal_position:]
+
+    return result_string
+
+
 def check_quit_skip_exp() -> bool:
     """Check if the experiment should be exited or whether the stimulus should be skipped (press space/right arrow).
 
@@ -68,7 +111,9 @@ def run_single_run(
         if isinstance(stim, Image.Image):
             stim_objects.append(visual.ImageStim(win, image=stim))
         else:
-            stim_objects.append(visual.TextStim(win, text=stim, color=(0.0, 0.0, 0.0)))
+            stim_objects.append(
+                visual.TextStim(win, text=add_line_break(stim), color=(0.0, 0.0, 0.0), wrapWidth=2)
+            )
 
     # Get the number of frames for time durations in seconds
     n_frames_stimuli = int(duration * frame_rate)
@@ -78,8 +123,11 @@ def run_single_run(
     # Start screen
     start_text = visual.TextStim(
         win,
-        text=f"Press {manual_trigger_button} to start \n (before starting the MRI sequence)",
+        text=add_line_break(
+            f"Press {manual_trigger_button} to start (before starting the MRI sequence)"
+        ),
         color=(0.0, 0.0, 0.0),
+        wrapWidth=2,
     )
     # Wait for the input
     while True:
@@ -94,8 +142,9 @@ def run_single_run(
     # Wait for the MRI trigger
     mri_trigger_text = visual.TextStim(
         win,
-        text="Waiting for the trigger to start",
+        text=add_line_break("Waiting for the trigger to start"),
         color=(0.0, 0.0, 0.0),
+        wrapWidth=2,
     )
     # Wait for the experiment to start
     while True:
