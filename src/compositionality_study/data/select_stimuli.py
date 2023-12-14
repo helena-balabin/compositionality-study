@@ -70,7 +70,7 @@ def map_conditions(
 @click.option("--asp_max", type=float, default=1.8)
 @click.option("--text_feature", type=str, default="amr_graph_depth")
 @click.option("--dep_quantile", type=float, default=0.1)
-@click.option("--coco_a_graph_depth_quantile", type=float, default=0.1)
+@click.option("--coco_a_graph_depth_quantile", type=float, default=0.05)
 @click.option("--filter_outliers", type=bool, default=True)
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=False)
@@ -88,7 +88,7 @@ def select_stimuli(
     asp_max: float = 1.8,
     text_feature: str = "amr_graph_depth",
     dep_quantile: float = 0.1,
-    coco_a_graph_depth_quantile: float = 0.1,
+    coco_a_graph_depth_quantile: float = 0.05,
     filter_outliers: bool = True,
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = False,
@@ -124,7 +124,7 @@ def select_stimuli(
     :type dep_quantile: float
     :param coco_a_graph_depth_quantile: The quantile of the depth of action verbs from COCO action annotations
         to select stimuli for, e.g., 0.1 means that the stimuli with the lowest 5% and highest 10% depth of actions
-        are selected, defaults to 0.1
+        are selected, defaults to 0.05
     :type coco_a_graph_depth_quantile: float
     :param filter_outliers: Whether to filter out outliers (more than 3x of the standard deviation) for the dependency
         parse tree depth and depth of COCO actions, defaults to True
@@ -196,18 +196,6 @@ def select_stimuli(
         f"Controlled the dataset for the aspect ratio of the images (between {asp_min} and {asp_max}), "
         f"{len(vg_ds)} entries remain."
     )
-    # And filter by person annotations, make sure there are a fixed number of people in the image
-    if filter_by_person:
-        # Get the average number of people in the images
-        av_n_people = int(np.mean(list(vg_ds["coco_person"])))
-        vg_ds = vg_ds.filter(
-            lambda x: x["coco_person"] == av_n_people or x["coco_person"] == av_n_people - 1,
-            num_proc=24,
-        )
-        logger.info(
-            f"Controlled the dataset for a fixed number ({av_n_people} or {av_n_people - 1}) of human actors "
-            f"(based on the COCO segmentation data), {len(vg_ds)} entries remain."
-        )
 
     # Filter out any outliers for dep parse tree depth and number of filtered verbs
     if filter_outliers:
@@ -299,6 +287,20 @@ def select_stimuli(
         num_proc=24,
     )
 
+    if binarized_conditions:
+        # Filter out the other conditions
+        vg_ds = vg_ds.filter(
+            lambda x: x["complexity"] == "low_text_low_image" or x["complexity"] == "high_text_high_image",
+            num_proc=24,
+        )
+        logger.info(f"Filtered for the two binary conditions, {len(vg_ds)} entries remain.")
+
+    logger.info(f"Distribution of the conditions:\n{pd.Series(vg_ds['complexity']).value_counts()}")
+
+    max_n_persons = 0
+    if filter_by_person:
+        max_n_persons = max(vg_ds["coco_person"])
+
     # Select n_stimuli many stimuli, evenly distributed over the conditions
     vg_n_stim = []
     conditions = ["low_text_low_image", "high_text_high_image"] if binarized_conditions else [
@@ -313,9 +315,23 @@ def select_stimuli(
             if len(filtered_ds) < n_stimuli // len(conditions):
                 print(f"Not enough stimuli for the {comp} condition")
                 return
-            # Select the remaining stimuli randomly
-            random_indices = np.random.choice(len(filtered_ds), size=n_stimuli // len(conditions), replace=False)
-            filtered_ds = filtered_ds.select(random_indices)
+            if filter_by_person:
+                # Create a linspace of the number of persons
+                person_parameterized_idx = []
+                linspace = np.linspace(1, max_n_persons, n_stimuli // len(conditions), dtype=int)
+                for elem in linspace:
+                    # Get the distance of all elements to the linspace element
+                    distances = np.abs(np.array(filtered_ds["coco_person"]) - elem)
+                    # Choose the element with the smallest distance that is not already in the list
+                    idx = np.argmin(
+                        [distances[i] if i not in person_parameterized_idx else np.inf for i in range(len(distances))]
+                    )
+                    person_parameterized_idx.append(idx)
+                filtered_ds = filtered_ds.select(person_parameterized_idx)
+            else:
+                # Select the remaining stimuli randomly
+                random_indices = np.random.choice(len(filtered_ds), size=n_stimuli // len(conditions), replace=False)
+                filtered_ds = filtered_ds.select(random_indices)
             vg_n_stim.append(filtered_ds)
         except:  # noqa
             print(f"Not enough stimuli for the {comp} condition")

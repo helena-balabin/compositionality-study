@@ -182,6 +182,8 @@ def convert_hf_dataset_to_local_stimuli(
         for ex in tqdm(dataset, desc="Loading images"):
             # Load the image
             img = ex["img"]
+            # Get the aspect ratio of the image
+            aspect_ratio = img.size[0] / img.size[1]
             output_name = f"{ex['sentids']}_{ex['complexity']}"
 
             # Apply gamma correction to the image
@@ -203,6 +205,8 @@ def convert_hf_dataset_to_local_stimuli(
                             text_feature: ex[text_feature],
                             "coco_a_graph_depth": ex["coco_a_graph_depth"],
                             "cocoid": ex["cocoid"],
+                            "coco_person": ex["coco_person"],
+                            "aspect_ratio": aspect_ratio,
                         },
                         index=[0],
                     ),
