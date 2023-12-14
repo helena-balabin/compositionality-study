@@ -316,9 +316,14 @@ def select_stimuli(
                 print(f"Not enough stimuli for the {comp} condition")
                 return
             if filter_by_person:
+                # Use at least two persons in the image
+                filtered_ds = filtered_ds.filter(
+                    lambda x: x["coco_person"] >= 2,
+                    num_proc=24,
+                )
                 # Create a linspace of the number of persons
                 person_parameterized_idx = []
-                linspace = np.linspace(1, max_n_persons, n_stimuli // len(conditions), dtype=int)
+                linspace = np.linspace(2, max_n_persons, n_stimuli // len(conditions), dtype=int)
                 for elem in linspace:
                     # Get the distance of all elements to the linspace element
                     distances = np.abs(np.array(filtered_ds["coco_person"]) - elem)
