@@ -62,7 +62,11 @@ VG_COCO_LOCAL_STIMULI_DIR = os.path.join(VG_DIR, "coco_64_amr_filtered")
 VG_COCO_PRACTICE_STIMULI_DIR = os.path.join(VG_DIR, "vg_coco_practice_stimuli")
 # Directory for the AMT experiment
 AMT_DIR = os.path.join(DATA_DIR, "amt")
+AMT_INPUT_DIR = os.path.join(AMT_DIR, "input")
+AMT_OUTPUT_DIR = os.path.join(AMT_DIR, "output")
 os.makedirs(AMT_DIR, exist_ok=True)
+os.makedirs(AMT_INPUT_DIR, exist_ok=True)
+os.makedirs(AMT_OUTPUT_DIR, exist_ok=True)
 
 # Directory for the image complexity models and outputs
 IC9000_MODEL_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or MODELS_DIR, "IC9600")

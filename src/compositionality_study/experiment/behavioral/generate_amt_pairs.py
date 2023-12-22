@@ -5,7 +5,7 @@ from itertools import product
 import click
 import pandas as pd
 
-from compositionality_study.constants import AMT_DIR, VG_COCO_LOCAL_STIMULI_DIR
+from compositionality_study.constants import AMT_INPUT_DIR, VG_COCO_LOCAL_STIMULI_DIR
 
 
 def create_all_stim_pairings(
@@ -37,10 +37,10 @@ def create_all_stim_pairings(
 
 @click.command()
 @click.option("--filtered_stimuli_dir", type=str, default=VG_COCO_LOCAL_STIMULI_DIR)
-@click.option("--output_dir", type=str, default=AMT_DIR)
+@click.option("--output_dir", type=str, default=AMT_INPUT_DIR)
 def create_amt_files(
     filtered_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
-    output_dir: str = AMT_DIR,
+    output_dir: str = AMT_INPUT_DIR,
 ) -> pd.DataFrame:
     """Create the AMT files.
 
