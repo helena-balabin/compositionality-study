@@ -11,25 +11,25 @@
            correct answer to your question -->
     <crowd-classifier
       name="more-complex"
-      categories="['Input 1', 'Input 2']"
+      categories="['A', 'B']"
       header="Which of the two inputs is more complex?"
     >
         <classification-target>
             <div style="display: flex; justify-content: space-between;">
                 <div>
-                    <h3>Input 1</h3>
+                    <h3>Input A</h3>
                     <p>
-                        <!-- The first item's image URL will be substituted for the "item1_image_url" variable below
+                        <!-- The first item's image URL will be substituted for the "A" variable below
                               when you publish a batch with a CSV input file containing multiple item comparisons -->
-                        <img style="max-width: 200px; max-height: 400px; object-fit: cover;" src="https://cs.stanford.edu/people/rak248/VG_100K/2324030.jpg"  alt=""/>
+                        ${A}
                     </p>
                 </div>
                 <div>
-                    <h3>Input 2</h3>
+                    <h3>Input B</h3>
                     <p>
-                        <!-- The second item's image URL will be substituted for the "item2_image_url" variable below
+                        <!-- The second item's image URL will be substituted for the "B" variable below
                              when you publish a batch with a CSV input file containing multiple item comparisons -->
-                        <img style="max-width: 200px; max-height: 400px; object-fit: cover;" src="https://cs.stanford.edu/people/rak248/VG_100K/1160129.jpg"  alt=""/>
+                        ${B}
                     </p>
                 </div>
             </div>
