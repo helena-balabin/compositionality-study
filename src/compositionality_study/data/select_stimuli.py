@@ -1,5 +1,7 @@
 """Select stimuli from the VG + COCO overlap dataset."""
+
 import copy
+
 # Imports
 import os
 from typing import Any, Dict
@@ -8,9 +10,9 @@ import click
 import datasets
 import numpy as np
 import pandas as pd
-from PIL import Image
 from datasets import concatenate_datasets, load_from_disk
 from loguru import logger
+from PIL import Image
 from pytesseract import image_to_string
 
 from compositionality_study.constants import VG_COCO_PREP_ALL, VG_IMAGE_DIR
@@ -213,7 +215,9 @@ def select_stimuli(
             lambda x: abs(x["n_coco_a_actions"] - ac_m) <= 3 * ac_std,
             num_proc=24,
         )
-        logger.info(f"Filtered out outliers for the number of COCO action values, {len(vg_ds)} entries remain.")
+        logger.info(
+            f"Filtered out outliers for the number of COCO action values, {len(vg_ds)} entries remain."
+        )
 
     # Select by text feature depth that match max and min quantile
     vg_ds = vg_ds.filter(
@@ -227,9 +231,8 @@ def select_stimuli(
 
     # Select by depth of COCO actions that match max and min quantiles
     vg_ds = vg_ds.filter(
-        lambda x: x["coco_a_graph_depth"] > 0 and (
-            x["coco_a_graph_depth"] <= ac_min or x["coco_a_graph_depth"] >= ac_max
-        ),
+        lambda x: x["coco_a_graph_depth"] > 0
+        and (x["coco_a_graph_depth"] <= ac_min or x["coco_a_graph_depth"] >= ac_max),
         num_proc=24,
     )
     logger.info(
@@ -246,20 +249,23 @@ def select_stimuli(
     # Add the images to the dataset, load based on the filenames
     # Avoid PIL-related bugs by copying the images
     vg_ds = vg_ds.map(
-        lambda x: {**x, "img": copy.deepcopy(Image.open(os.path.join(VG_IMAGE_DIR, x["filepath"])))},
+        lambda x: {
+            **x,
+            "img": copy.deepcopy(Image.open(os.path.join(VG_IMAGE_DIR, x["filepath"]))),
+        },
         num_proc=24,
     )
     # Filter out images with low quality
     vg_ds = vg_ds.filter(
-        lambda x: x["img"].size[0] > 1.5 * image_quality_threshold and x["img"].size[1] > image_quality_threshold,
+        lambda x: x["img"].size[0] > 1.5 * image_quality_threshold
+        and x["img"].size[1] > image_quality_threshold,
         num_proc=24,
     )
     # Take a 20 x 20 patch and if it's equal across two RGB channels, it's a black and white image
     vg_ds = vg_ds.filter(
         # Take possibly faulty images into account
-        lambda x: np.array(x["img"]).ndim > 2 and not np.all(
-            np.array(x["img"])[:20, :20, 0] == np.array(x["img"])[:20, :20, 1]
-        ),
+        lambda x: np.array(x["img"]).ndim > 2
+        and not np.all(np.array(x["img"])[:20, :20, 0] == np.array(x["img"])[:20, :20, 1]),
         num_proc=24,
     )
     if filter_text_on_images:
@@ -290,7 +296,8 @@ def select_stimuli(
     if binarized_conditions:
         # Filter out the other conditions
         vg_ds = vg_ds.filter(
-            lambda x: x["complexity"] == "low_text_low_image" or x["complexity"] == "high_text_high_image",
+            lambda x: x["complexity"] == "low_text_low_image"
+            or x["complexity"] == "high_text_high_image",
             num_proc=24,
         )
         logger.info(f"Filtered for the two binary conditions, {len(vg_ds)} entries remain.")
@@ -303,9 +310,16 @@ def select_stimuli(
 
     # Select n_stimuli many stimuli, evenly distributed over the conditions
     vg_n_stim = []
-    conditions = ["low_text_low_image", "high_text_high_image"] if binarized_conditions else [
-        "low_text_low_image", "low_text_high_image", "high_text_low_image", "high_text_high_image"
-    ]
+    conditions = (
+        ["low_text_low_image", "high_text_high_image"]
+        if binarized_conditions
+        else [
+            "low_text_low_image",
+            "low_text_high_image",
+            "high_text_low_image",
+            "high_text_high_image",
+        ]
+    )
     for comp in conditions:
         try:
             filtered_ds = vg_ds.filter(
@@ -329,13 +343,18 @@ def select_stimuli(
                     distances = np.abs(np.array(filtered_ds["coco_person"]) - elem)
                     # Choose the element with the smallest distance that is not already in the list
                     idx = np.argmin(
-                        [distances[i] if i not in person_parameterized_idx else np.inf for i in range(len(distances))]
+                        [
+                            distances[i] if i not in person_parameterized_idx else np.inf
+                            for i in range(len(distances))
+                        ]
                     )
                     person_parameterized_idx.append(idx)
                 filtered_ds = filtered_ds.select(person_parameterized_idx)
             else:
                 # Select the remaining stimuli randomly
-                random_indices = np.random.choice(len(filtered_ds), size=n_stimuli // len(conditions), replace=False)
+                random_indices = np.random.choice(
+                    len(filtered_ds), size=n_stimuli // len(conditions), replace=False
+                )
                 filtered_ds = filtered_ds.select(random_indices)
             vg_n_stim.append(filtered_ds)
         except:  # noqa

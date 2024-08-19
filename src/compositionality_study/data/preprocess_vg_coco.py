@@ -1,4 +1,5 @@
 """Preprocesses the Visual Genome + COCO overlap dataset."""
+
 # Imports
 import json
 import os
@@ -15,16 +16,22 @@ from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
-    COCO_A_ANNOT_FILE, IC_SCORES_FILE,
+    COCO_A_ANNOT_FILE,
+    IC_SCORES_FILE,
     VG_COCO_OBJ_SEG_DIR,
     VG_COCO_OVERLAP_DIR,
-    VG_COCO_PREPROCESSED_TEXT_DIR,
     VG_COCO_PREP_TEXT_GRAPH_DIR,
     VG_COCO_PREP_TEXT_IMG_SEG_DIR,
-    VG_DIR, VG_OBJECTS_FILE,
+    VG_COCO_PREPROCESSED_TEXT_DIR,
+    VG_DIR,
+    VG_OBJECTS_FILE,
     VG_RELATIONSHIPS_FILE,
 )
-from compositionality_study.utils import check_if_living_being, flatten_examples, derive_text_depth_features
+from compositionality_study.utils import (
+    check_if_living_being,
+    derive_text_depth_features,
+    flatten_examples,
+)
 
 
 @click.command()
@@ -91,7 +98,9 @@ def add_text_properties(
         vg_in_file_name = "vg_"
     else:
         vg_in_file_name = ""
-    vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
+    vg_coco_ds = (
+        load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
+    )
 
     # Flatten the dataset so that there is one caption per example
     # Check if any of the features are lists
@@ -102,7 +111,8 @@ def add_text_properties(
 
     # Add sentence length
     preprocessed_ds = vs_coco_ds_flattened.map(
-        lambda example: example | {"sentence_length": len(example["sentences_raw"].split())}, num_proc=24,
+        lambda example: example | {"sentence_length": len(example["sentences_raw"].split())},
+        num_proc=24,
     )
 
     @Language.component("force_single_sentence")
@@ -139,12 +149,14 @@ def add_text_properties(
     # Save to disk
     if save_to_disk:
         output_dir = os.path.split(vg_coco_overlap)[0]
-        preprocessed_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text"))
+        preprocessed_ds.save_to_disk(
+            os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text")
+        )
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            preprocessed_ds.select(
-                list(range(dummy_subset_size))
-            ).save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text_dummy"))
+            preprocessed_ds.select(list(range(dummy_subset_size))).save_to_disk(
+                os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text_dummy")
+            )
 
     return preprocessed_ds
 
@@ -217,14 +229,18 @@ def add_graph_properties(
     :rtype: Dataset
     """
     # Load the dataset
-    preprocessed_ds = load_from_disk(
-        vg_coco_overlap_text
-    ) if isinstance(vg_coco_overlap_text, str) else vg_coco_overlap_text
+    preprocessed_ds = (
+        load_from_disk(vg_coco_overlap_text)
+        if isinstance(vg_coco_overlap_text, str)
+        else vg_coco_overlap_text
+    )
     image_ids = list(set(preprocessed_ds["vg_image_id"]))
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Get the graph characteristics
-    vg_graph_dict = determine_graph_complexity_measures(vg_objects_file, vg_relationships_file, image_ids)
+    vg_graph_dict = determine_graph_complexity_measures(
+        vg_objects_file, vg_relationships_file, image_ids
+    )
     vg_graph_df = pd.DataFrame(vg_graph_dict).rename(columns={"image_id": "vg_image_id"})
 
     # Speed up the merge by setting the ids as index
@@ -235,13 +251,17 @@ def add_graph_properties(
 
     # Save to disk
     if save_to_disk:
-        output_dir = os.path.split(vg_coco_overlap_text)[0] if isinstance(vg_coco_overlap_text, str) else VG_DIR
+        output_dir = (
+            os.path.split(vg_coco_overlap_text)[0]
+            if isinstance(vg_coco_overlap_text, str)
+            else VG_DIR
+        )
         vg_graph_merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_graph"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            vg_graph_merged_ds.select(
-                list(range(dummy_subset_size))
-            ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_graph_dummy"))
+            vg_graph_merged_ds.select(list(range(dummy_subset_size))).save_to_disk(
+                os.path.join(output_dir, "vg_coco_preprocessed_graph_dummy")
+            )
 
     return vg_graph_merged_ds
 
@@ -300,7 +320,7 @@ def add_coco_properties(
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
-    output_dir: str = os.path.split(VG_COCO_OVERLAP_DIR)[0]
+    output_dir: str = os.path.split(VG_COCO_OVERLAP_DIR)[0],
 ) -> Dataset:
     """Add image segmentation properties to the dataset.
 
@@ -323,15 +343,20 @@ def add_coco_properties(
     # Set the output name
     if isinstance(vg_coco_overlap_graph, str) and "vg_" in vg_coco_overlap_graph:
         vg_in_file_name = "vg_"
-    elif isinstance(vg_coco_overlap_graph, Dataset) and "vg_image_id" in vg_coco_overlap_graph.column_names:
+    elif (
+        isinstance(vg_coco_overlap_graph, Dataset)
+        and "vg_image_id" in vg_coco_overlap_graph.column_names
+    ):
         vg_in_file_name = "vg_"
     else:
         vg_in_file_name = ""
 
     # Load the dataset
-    preprocessed_ds = load_from_disk(
-        vg_coco_overlap_graph
-    ) if isinstance(vg_coco_overlap_graph, str) else vg_coco_overlap_graph
+    preprocessed_ds = (
+        load_from_disk(vg_coco_overlap_graph)
+        if isinstance(vg_coco_overlap_graph, str)
+        else vg_coco_overlap_graph
+    )
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Get the number of objects based on the COCO annotations for image segmentation
@@ -352,12 +377,14 @@ def add_coco_properties(
 
     # Save to disk
     if save_to_disk:
-        vg_img_seg_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg"))
+        vg_img_seg_ds.save_to_disk(
+            os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg")
+        )
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            vg_img_seg_ds.select(
-                list(range(dummy_subset_size))
-            ).save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg_dummy"))
+            vg_img_seg_ds.select(list(range(dummy_subset_size))).save_to_disk(
+                os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg_dummy")
+            )
 
     return vg_img_seg_ds
 
@@ -430,16 +457,20 @@ def add_ic_scores(
     :rtype: Dataset
     """
     # Load the dataset
-    preprocessed_ds = load_from_disk(vg_coco_overlap_graph) if isinstance(
-        vg_coco_overlap_graph, str
-    ) else vg_coco_overlap_graph
+    preprocessed_ds = (
+        load_from_disk(vg_coco_overlap_graph)
+        if isinstance(vg_coco_overlap_graph, str)
+        else vg_coco_overlap_graph
+    )
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Load the image complexity scores, give it a column name
     ic_scores_df = pd.read_json(ic_scores_file, orient="index")
     ic_scores_df.columns = ["ic_score"]
     # In case that the index contains "COCO": Only take the last numbers of the file name without leading zeros
-    ic_scores_df.index = ic_scores_df.index.map(lambda x: int(x.split("_")[-1]) if type(x) == str else x)
+    ic_scores_df.index = ic_scores_df.index.map(
+        lambda x: int(x.split("_")[-1]) if type(x) == str else x
+    )
     # Convert the index to int
     ic_scores_df.index = ic_scores_df.index.astype(int)
     # Rename the index column to cocoid
@@ -462,9 +493,9 @@ def add_ic_scores(
         vg_img_seg_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg_ic"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            vg_img_seg_ds.select(
-                list(range(dummy_subset_size))
-            ).save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg_ic_dummy"))
+            vg_img_seg_ds.select(list(range(dummy_subset_size))).save_to_disk(
+                os.path.join(output_dir, "vg_coco_preprocessed_img_seg_ic_dummy")
+            )
 
     return vg_img_seg_ds
 
@@ -516,12 +547,20 @@ def determine_graph_complexity_measures(
 
         # Filter for relationships that have at least one living being as subject/object
         filtered_rels = [
-            r for r in rel["relationships"] if len(r["object"]["synsets"]) > 0 and len(r["subject"]["synsets"]) > 0
-            and (check_if_living_being(r["object"]["synsets"][0]) or check_if_living_being(r["subject"]["synsets"][0]))
+            r
+            for r in rel["relationships"]
+            if len(r["object"]["synsets"]) > 0
+            and len(r["subject"]["synsets"]) > 0
+            and (
+                check_if_living_being(r["object"]["synsets"][0])
+                or check_if_living_being(r["subject"]["synsets"][0])
+            )
         ]
         filtered_rel_ids = [r["relationship_id"] for r in filtered_rels]
         filtered_edges = [
-            (u, v, data) for u, v, data in graph.edges(data=True) if data.get("rel_id") in filtered_rel_ids
+            (u, v, data)
+            for u, v, data in graph.edges(data=True)
+            if data.get("rel_id") in filtered_rel_ids
         ]
         # Create a new graph with the filtered edges
         filtered_graph = nx.Graph(filtered_edges)
@@ -529,22 +568,39 @@ def determine_graph_complexity_measures(
         # Determine the characteristics + add the image id as well
         measures = {
             "image_id": obj["image_id"],
-            "avg_node_degree": np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0,
-            "avg_node_connectivity": nx.algorithms.connectivity.average_node_connectivity(
-                graph
-            ) if nx.number_of_nodes(graph) > 0 else 0,
-            "avg_clustering_coefficient": nx.algorithms.approximation.average_clustering(
-                graph,
-                trials=1000,
-                seed=42,
-            ) if nx.number_of_nodes(graph) > 0 else 0,
+            "avg_node_degree": (
+                np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0
+            ),
+            "avg_node_connectivity": (
+                nx.algorithms.connectivity.average_node_connectivity(graph)
+                if nx.number_of_nodes(graph) > 0
+                else 0
+            ),
+            "avg_clustering_coefficient": (
+                nx.algorithms.approximation.average_clustering(
+                    graph,
+                    trials=1000,
+                    seed=42,
+                )
+                if nx.number_of_nodes(graph) > 0
+                else 0
+            ),
             "density": nx.density(graph),
-            "sg_depth": max(
-                [max(nx.shortest_path_length(graph, source=n).values()) for n in graph.nodes()]
-            ) if nx.number_of_nodes(graph) > 0 else 0,
-            "sg_filtered_depth": max(
-                [max(nx.shortest_path_length(filtered_graph, source=n).values()) for n in filtered_graph.nodes()]
-            ) if nx.number_of_nodes(filtered_graph) > 0 else 0,
+            "sg_depth": (
+                max([max(nx.shortest_path_length(graph, source=n).values()) for n in graph.nodes()])
+                if nx.number_of_nodes(graph) > 0
+                else 0
+            ),
+            "sg_filtered_depth": (
+                max(
+                    [
+                        max(nx.shortest_path_length(filtered_graph, source=n).values())
+                        for n in filtered_graph.nodes()
+                    ]
+                )
+                if nx.number_of_nodes(filtered_graph) > 0
+                else 0
+            ),
             "n_connected_components": nx.number_connected_components(graph),
             "n_obj": len(obj["objects"]),
             "n_rel": len(rel["relationships"]),
@@ -609,11 +665,15 @@ def get_coco_obj_seg_df(
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
         coco_data_tr = json.load(f)
-        coco_obj_seg_tr = [(ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]]
+        coco_obj_seg_tr = [
+            (ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]
+        ]
         coco_cats_tr = {ex["id"]: ex["supercategory"] for ex in coco_data_tr["categories"]}
     with open(os.path.join(coco_obj_seg_dir, "instances_val2017.json"), "r") as f:
         coco_data_val = json.load(f)
-        coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]]
+        coco_obj_seg_val = [
+            (ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]
+        ]
         coco_cats_val = {ex["id"]: ex["supercategory"] for ex in coco_data_val["categories"]}
     with open(coco_a_annot_file, "r") as f:
         # Load the version of the dataset with an annotator agreement of 3 persons
@@ -644,7 +704,9 @@ def get_coco_obj_seg_df(
             coco_obj_seg_filtered[coco_id]["coco_person"] += 1  # type: ignore
 
     # Create a dictionary with the number of actions/graph depth from the COCO action annotations
-    coco_a_filtered = {k: {"n_coco_a_actions": 0, "coco_a_graph_depth": None} for k in set(coco_a_ids)}
+    coco_a_filtered = {
+        k: {"n_coco_a_actions": 0, "coco_a_graph_depth": None} for k in set(coco_a_ids)
+    }
 
     # Get all the COCO-A features
     for coco_a_entry in tqdm(
@@ -652,9 +714,9 @@ def get_coco_obj_seg_df(
         desc="Adding COCO-A features",
         total=len(coco_a_data),
     ):
-        coco_a_filtered[  # type: ignore
-            coco_a_entry["image_id"]
-        ]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])  # type: ignore
+        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(  # type: ignore
+            coco_a_entry["visual_actions"]
+        )  # type: ignore
 
         if coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"]:
             # If there is already a graph, add the entry to the existing graph
@@ -663,7 +725,9 @@ def get_coco_obj_seg_df(
             )
         else:
             # If there is no graph data for that image_id yet, create a new graph
-            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"] = create_coco_a_sub_graph(coco_a_entry)
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"] = (
+                create_coco_a_sub_graph(coco_a_entry)
+            )
 
     # Determine the depths of the graphs
     for coco_a_id, coco_a_graph in coco_a_filtered.items():
@@ -825,8 +889,12 @@ def create_searchable_vg_rel_obj_idx(
     with open(vg_rels_file, "r") as f:
         vg_rels = json.load(f)
     # Initialize the result
-    all_ids = set([x["image_id"] for x in vg_objs]).intersection(set([x["image_id"] for x in vg_rels]))
-    res_dict: Dict[str, Dict[str, List]] = {vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids}
+    all_ids = set([x["image_id"] for x in vg_objs]).intersection(
+        set([x["image_id"] for x in vg_rels])
+    )
+    res_dict: Dict[str, Dict[str, List]] = {
+        vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids
+    }
 
     # Iterate over all objects
     for i, obj in tqdm(enumerate(vg_objs), desc="Iterating through all objects"):

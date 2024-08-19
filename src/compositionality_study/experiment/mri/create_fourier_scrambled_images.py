@@ -1,4 +1,5 @@
 """Create Fourier-scrambled versions of some images in the selected stimuli directory."""
+
 import cv2
 import numpy as np
 

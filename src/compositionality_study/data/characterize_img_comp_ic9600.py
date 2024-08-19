@@ -1,33 +1,40 @@
 """Characterization of image complexity based on https://github.com/tinglyfeng/IC9600."""
+
 import io
 import json
 import os
-from typing import Dict, Union, Optional
+from typing import Dict, Optional, Union
 
 import click
 import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F  # noqa
-import numpy as np
 from datasets import Dataset, load_from_disk
-from torchvision import transforms
-from PIL import Image
 from matplotlib import pyplot as plt
+from PIL import Image
+from torchvision import transforms
 from tqdm import tqdm
 
-from compositionality_study.constants import IC9000_IMG_COM_OUTPUT_DIR, IC9000_MODEL_DIR, IMG_DUMMY_DIR
+from compositionality_study.constants import (
+    IC9000_IMG_COM_OUTPUT_DIR,
+    IC9000_MODEL_DIR,
+    IMG_DUMMY_DIR,
+)
 from compositionality_study.models.icnet import ICNet
 
 # Load the ICNet model
 model = ICNet()
-model.load_state_dict(torch.load(os.path.join(IC9000_MODEL_DIR, "ck.pth"), map_location=torch.device('cpu')))
+model.load_state_dict(
+    torch.load(os.path.join(IC9000_MODEL_DIR, "ck.pth"), map_location=torch.device("cpu"))
+)
 model.eval()
 # Define inference transform
 inference_transform = transforms.Compose(
     [
         transforms.Resize((512, 512)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
 )
 
@@ -67,7 +74,7 @@ def infer_one_image(
         out_name = input_img_data["path"].strip(".jpg")
     else:
         img_data = input_img_data  # type: ignore
-        out_name = os.path.basename(input_img_data).split('.')[0]
+        out_name = os.path.basename(input_img_data).split(".")[0]
 
     with torch.no_grad():
         # Load the image
@@ -86,18 +93,18 @@ def infer_one_image(
 
         # Save the IC/blend maps
         if save_ic_map:
-            ic_map = F.interpolate(ic_map, (ori_height, ori_width), mode='bilinear')
+            ic_map = F.interpolate(ic_map, (ori_height, ori_width), mode="bilinear")
 
             # gene ic map
             ic_map_np = ic_map.squeeze().detach().cpu().numpy()
-            out_ic_map_name = out_name + '_' + str(ic_score)[:7] + '.npy'
+            out_ic_map_name = out_name + "_" + str(ic_score)[:7] + ".npy"
             out_ic_map_path = os.path.join(output_dir, out_ic_map_name)
             np.save(out_ic_map_path, ic_map_np)
 
             # gene blend map
-            ic_map_img = (ic_map * 255).round().squeeze().detach().cpu().numpy().astype('uint8')
+            ic_map_img = (ic_map * 255).round().squeeze().detach().cpu().numpy().astype("uint8")
             blend_img = blend(np.array(ori_img), ic_map_img)  # noqa
-            out_blend_img_name = out_name + '.png'
+            out_blend_img_name = out_name + ".png"
             out_blend_img_path = os.path.join(output_dir, out_blend_img_name)
             cv2.imwrite(out_blend_img_path, blend_img)  # noqa
 
@@ -176,11 +183,15 @@ def infer_img_source(
 
 
 @click.command()
-@click.option("--input_dir", default=IMG_DUMMY_DIR, type=str, help="Path to the directory of images.")
+@click.option(
+    "--input_dir", default=IMG_DUMMY_DIR, type=str, help="Path to the directory of images."
+)
 @click.option("--dataset_path", default=None, type=str, help="Path to the hf dataset.")
 @click.option("--output_dir", default=IC9000_IMG_COM_OUTPUT_DIR, type=str, help="Output directory.")
 @click.option("--device", default="cpu", type=str, help="Device to use for inference.")
-@click.option("--save_ic_map", default=False, type=bool, help="Whether to save the IC and blend maps.")
+@click.option(
+    "--save_ic_map", default=False, type=bool, help="Whether to save the IC and blend maps."
+)
 def characterize_img_comp(
     input_dir: str = IMG_DUMMY_DIR,
     dataset_path: Optional[str] = None,
@@ -203,7 +214,9 @@ def characterize_img_comp(
     """
     model.to(torch.device(device))
 
-    results = infer_img_source(input_dir, dataset_path, output_dir, device=device, save_ic_map=save_ic_map)
+    results = infer_img_source(
+        input_dir, dataset_path, output_dir, device=device, save_ic_map=save_ic_map
+    )
 
     # Save the results to a json file
     results_path = os.path.join(output_dir, "ic_scores.json")

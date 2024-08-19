@@ -1,4 +1,5 @@
 """Visualize the category distribution in the selected stimuli."""
+
 # Imports
 import os
 

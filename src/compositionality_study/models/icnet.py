@@ -1,4 +1,5 @@
 """ICNet model directly taken from https://github.com/tinglyfeng/IC9600/blob/master/ICNet.py."""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F  # noqa
@@ -13,17 +14,19 @@ class slam(nn.Module):  # noqa
         super(slam, self).__init__()
         self.spatial_dim = spatial_dim
         self.linear = nn.Sequential(
-            nn.Linear(spatial_dim ** 2, 512),  # noqa
-            nn.ReLU(),
-            nn.Linear(512, 1),
-            nn.Sigmoid()
+            nn.Linear(spatial_dim**2, 512), nn.ReLU(), nn.Linear(512, 1), nn.Sigmoid()  # noqa
         )
 
     def forward(self, feature):
         """Forward pass."""
         n, c, h, w = feature.shape
         if h != self.spatial_dim:
-            x = F.interpolate(feature, size=(self.spatial_dim, self.spatial_dim), mode="bilinear", align_corners=True)
+            x = F.interpolate(
+                feature,
+                size=(self.spatial_dim, self.spatial_dim),
+                mode="bilinear",
+                align_corners=True,
+            )
         else:
             x = feature
 
@@ -35,15 +38,14 @@ class slam(nn.Module):  # noqa
         return out
 
 
-class to_map(nn.Module): # noqa
+class to_map(nn.Module):  # noqa
     """Feature map to attention map."""
 
     def __init__(self, channels):
         """Convert feature map to attention map."""
         super(to_map, self).__init__()
         self.to_map = nn.Sequential(
-            nn.Conv2d(in_channels=channels, out_channels=1, kernel_size=1, stride=1),
-            nn.Sigmoid()
+            nn.Conv2d(in_channels=channels, out_channels=1, kernel_size=1, stride=1), nn.Sigmoid()
         )
 
     def forward(self, feature):
@@ -51,14 +53,18 @@ class to_map(nn.Module): # noqa
         return self.to_map(feature)
 
 
-class conv_bn_relu(nn.Module): # noqa
+class conv_bn_relu(nn.Module):  # noqa
     """Convolutional block with batch normalization and ReLU activation."""
 
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, stride=1):
         """Convolutional block with batch normalization and ReLU activation."""
         super(conv_bn_relu, self).__init__()
         self.conv = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding, stride=stride
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            stride=stride,
         )
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
@@ -71,7 +77,7 @@ class conv_bn_relu(nn.Module): # noqa
         return x
 
 
-class up_conv_bn_relu(nn.Module): # noqa
+class up_conv_bn_relu(nn.Module):  # noqa
     """Upsample block with convolutional layer, batch normalization, and ReLU activation."""
 
     def __init__(self, up_size, in_channels, out_channels=64, kernal_size=1, padding=0, stride=1):
@@ -79,7 +85,11 @@ class up_conv_bn_relu(nn.Module): # noqa
         super(up_conv_bn_relu, self).__init__()
         self.upSample = nn.Upsample(size=(up_size, up_size), mode="bilinear", align_corners=True)
         self.conv = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels, kernel_size=kernal_size, stride=stride, padding=padding
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernal_size,
+            stride=stride,
+            padding=padding,
         )
         self.bn = nn.BatchNorm2d(num_features=out_channels)
         self.act = nn.ReLU()
@@ -99,8 +109,8 @@ class ICNet(nn.Module):
     def __init__(self, is_pretrain=True, size1=512, size2=256):
         """Initialize the ICNet model."""
         super(ICNet, self).__init__()
-        resnet18Pretrained1 = torchvision.models.resnet18(pretrained=is_pretrain) # noqa
-        resnet18Pretrained2 = torchvision.models.resnet18(pretrained=is_pretrain) # noqa
+        resnet18Pretrained1 = torchvision.models.resnet18(pretrained=is_pretrain)  # noqa
+        resnet18Pretrained2 = torchvision.models.resnet18(pretrained=is_pretrain)  # noqa
 
         self.size1 = size1
         self.size2 = size2
@@ -139,16 +149,13 @@ class ICNet(nn.Module):
         self.to_score_f = conv_bn_relu(256 * 2, 256 * 2)
         self.to_score_f_slam = slam(32)
         self.head = nn.Sequential(
-            nn.Linear(256 * 2, 512),
-            nn.ReLU(),
-            nn.Linear(512, 1),
-            nn.Sigmoid()
+            nn.Linear(256 * 2, 512), nn.ReLU(), nn.Linear(512, 1), nn.Sigmoid()
         )
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
     def forward(self, x1):
         """Forward pass."""
-        assert (x1.shape[2] == x1.shape[3] == self.size1)  # noqa
+        assert x1.shape[2] == x1.shape[3] == self.size1  # noqa
         x2 = F.interpolate(x1, size=(self.size2, self.size2), mode="bilinear", align_corners=True)
 
         x1 = self.b1_2_slam(self.b1_2(self.b1_1_slam(self.b1_1(x1))))

@@ -1,4 +1,5 @@
 """Utils for the compositionality project."""
+
 import os
 from io import BytesIO
 from typing import Dict, List, Tuple

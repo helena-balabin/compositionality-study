@@ -1,4 +1,5 @@
 """Run some basic statistics on the VG + COCO overlap captions."""
+
 # Imports
 import os
 from typing import List
@@ -44,7 +45,7 @@ def sent_len_histogram(
     sent_lens = [len(sent.split()) for sent in captions]
 
     # Set seaborn theme
-    plt.rcParams['font.family'] = ['sans-serif']  # noqa
+    plt.rcParams["font.family"] = ["sans-serif"]  # noqa
     sns.set_style("ticks")
 
     # Create the histogram
@@ -165,7 +166,12 @@ def sent_len_dep_depth_correlation(
 
 @click.command()
 @click.option("--vg_coco_text_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
-@click.option("--columns", type=str, multiple=True, default=["sentence_length", "parse_tree_depth", "n_obj", "n_rel"])
+@click.option(
+    "--columns",
+    type=str,
+    multiple=True,
+    default=["sentence_length", "parse_tree_depth", "n_obj", "n_rel"],
+)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#6C8EBF")
 def all_properties_corr(
@@ -211,7 +217,13 @@ def all_properties_corr(
     for i, (ax_row, correlation_row) in enumerate(zip(pairplot.axes, correlation_matrix.values)):
         for j, (ax, correlation) in enumerate(zip(ax_row, correlation_row)):
             if i != j:
-                ax.annotate(f"r = {correlation:.2f}", (0.5, 0.9), xycoords='axes fraction', ha='center', fontsize=10)
+                ax.annotate(
+                    f"r = {correlation:.2f}",
+                    (0.5, 0.9),
+                    xycoords="axes fraction",
+                    ha="center",
+                    fontsize=10,
+                )
 
     # Create the output directory
     vis_statistics_dir = os.path.join(vis_output_dir, "statistics")

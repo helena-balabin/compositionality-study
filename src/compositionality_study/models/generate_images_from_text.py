@@ -1,4 +1,5 @@
 """Generate images from the text stimuli in the dataset using a text-to-image model (as a qualitative evaluation)."""
+
 import os
 
 import click

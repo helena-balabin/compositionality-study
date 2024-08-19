@@ -1,4 +1,5 @@
 """Generate pairings of text or image stimuli for the AMT experiment."""
+
 import os
 from itertools import product
 

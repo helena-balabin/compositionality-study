@@ -1,4 +1,5 @@
 """Download the Visual Genome dataset."""
+
 import json
 import os
 
@@ -82,7 +83,8 @@ def preprocess_local_vg_files_coco_overlap(
             "vg_url": m["url"],
             "aspect_ratio": m["width"] / m["height"],
         }
-        for m in vg_metadata if m["coco_id"] is not None
+        for m in vg_metadata
+        if m["coco_id"] is not None
     ]
     vg_ds = datasets.Dataset.from_pandas(pd.DataFrame(data=vg))
     # Change the datatype of the cocoid column to int32
@@ -104,12 +106,12 @@ def preprocess_local_vg_files_coco_overlap(
             hf_coco_name.replace("_train", "_test"),
             cache_dir=coco_cache_dir,
         )["test"]
-        coco_ds = datasets.concatenate_datasets(
-            [coco_ds, coco_ds_val_splits, coco_ds_test_splits]
-        )
+        coco_ds = datasets.concatenate_datasets([coco_ds, coco_ds_val_splits, coco_ds_test_splits])
 
     # Subset relevant columns
-    coco_ds = coco_ds.select_columns(["filepath", "sentids", "imgid", "cocoid", "sentences_raw", "id"])
+    coco_ds = coco_ds.select_columns(
+        ["filepath", "sentids", "imgid", "cocoid", "sentences_raw", "id"]
+    )
     # Flatten the sentences_raw column
     # Save the COCO dataset to disk
     coco_ds.save_to_disk(os.path.join(output_dir, "coco_complete"))
@@ -129,9 +131,9 @@ def preprocess_local_vg_files_coco_overlap(
     merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_overlap"))
     # Also save a small dummy subset of dummy_subset_size many entries
     if save_dummy_subset:
-        merged_ds.select(
-            list(range(dummy_subset_size))
-        ).save_to_disk(os.path.join(output_dir, "vg_coco_overlap_dummy"))
+        merged_ds.select(list(range(dummy_subset_size))).save_to_disk(
+            os.path.join(output_dir, "vg_coco_overlap_dummy")
+        )
     return
 
 
