@@ -1,4 +1,5 @@
 """Generate the psychopy experiment files for the fMRI experiment based on the chosen stimuli."""
+
 import os
 import random
 from typing import List
@@ -161,6 +162,7 @@ def run_single_run(
         # Check if the experiment should be exited or the stimuli skipped
         if check_quit_skip_exp():
             break
+        win.flip()
 
     # Have a global timer to log the time
     timer = core.Clock()
