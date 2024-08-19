@@ -86,6 +86,7 @@ def run_single_run(
     frame_rate: int = 60,
     mri_trigger_button: str = "t",
     manual_trigger_button: str = "space",
+    run_nr: int = 0,
 ):
     """Present a given stimuli list in a psychopy window.
 
@@ -105,6 +106,8 @@ def run_single_run(
     :type mri_trigger_button: str
     :param manual_trigger_button: The manual trigger button that starts each run.
     :type manual_trigger_button: str
+    :param run_nr: The run number.
+    :type run_nr: int
     """
     # Create either TextStim or ImageStim objects
     stim_objects = []
@@ -125,7 +128,7 @@ def run_single_run(
     start_text = visual.TextStim(
         win,
         text=add_line_break(
-            f"Press {manual_trigger_button} to start (before starting the MRI sequence)"
+            f"Press {manual_trigger_button} to start run no. {run_nr} (before starting the MRI sequence)"
         ),
         color=(0.0, 0.0, 0.0),
         wrapWidth=2,
@@ -197,7 +200,7 @@ def run_single_run(
 @click.option("--inter_stimulus_interval", type=float, default=5.5)
 @click.option("--dummy_scan_duration", type=float, default=8.0)
 @click.option("--frame_rate", type=int, default=60)
-@click.option("--fullscreen", type=bool, default=False)
+@click.option("--fullscreen", type=bool, default=True)
 @click.option("--manual_trigger_button", type=str, default="space")
 @click.option("--mri_trigger_button", type=str, default="t")
 @click.option("--break_duration", type=float, default=30.0)
@@ -209,7 +212,7 @@ def run_psychopy_exp(
     inter_stimulus_interval: float = 5.5,
     dummy_scan_duration: float = 8.0,
     frame_rate: int = 60,
-    fullscreen: bool = False,
+    fullscreen: bool = True,
     manual_trigger_button: str = "space",
     mri_trigger_button: str = "t",
     break_duration: float = 30.0,
@@ -309,6 +312,7 @@ def run_psychopy_exp(
             frame_rate=frame_rate,
             mri_trigger_button=mri_trigger_button,
             manual_trigger_button=manual_trigger_button,
+            run_nr=idx + 1,
         )
         # Have a break every two runs
         if idx % 2 == 1:
