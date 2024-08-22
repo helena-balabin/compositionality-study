@@ -11,7 +11,13 @@ import pandas as pd
 from datasets import load_from_disk
 from tqdm import tqdm
 
-from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_SELECTED_STIMULI_DIR
+from compositionality_study.constants import (
+    VG_COCO_LOCAL_STIMULI_DIR,
+    VG_COCO_SELECTED_STIMULI_DIR,
+)
+from compositionality_study.experiment.mri.create_fourier_scrambled_images import (
+    fft_phase_scrambling,
+)
 from compositionality_study.utils import apply_gamma_correction
 
 # Set a random seed for reproducibility
@@ -68,7 +74,7 @@ def create_balanced_conditions(
 def estimate_letter_frequency(
     text_series: pd.Series,
 ) -> List[float]:
-    """Estimate the frequency of each English letter based on a series of text.
+    """Estimate the frequency of each English letter excluding vowels based on a series of text.
 
     :param text_series: The series of text to use.
     :type text_series: pd.Series
@@ -78,8 +84,8 @@ def estimate_letter_frequency(
     # Concatenate all the text
     text = " ".join(text_series.values)
 
-    # Count the number of occurrences of each letter
-    letter_counts = [text.count(letter) for letter in string.ascii_lowercase]
+    # Count the number of occurrences of each letter, but filter out vowels
+    letter_counts = [text.count(letter) for letter in string.ascii_lowercase if letter not in "aeiou"]
 
     # Return the letter frequencies
     return [count / sum(letter_counts) * 100 for count in letter_counts]
@@ -109,8 +115,8 @@ def generate_non_word_sentence(
     for word in words:
         # Sample letters according to their frequency
         letters = random.choices(  # noqa
-            ["x"] if consonant_letter_string else string.ascii_lowercase,
-            weights=[1.0] if consonant_letter_string else letter_frequencies,
+            "".join([i for i in string.ascii_lowercase if i not in "aeiou"]),
+            weights=letter_frequencies,
             k=len(word),
         )  # noqa
 
