@@ -32,7 +32,9 @@ LARGE_DATASET_STORAGE_PATH = os.path.join(
 LARGE_MODELS_STORAGE_PATH = os.path.join(
     os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/transformers"
 )
-LARGE_HUB_STORAGE_PATH = os.path.join(os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/hub")
+LARGE_HUB_STORAGE_PATH = os.path.join(
+    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/hub"  # noqa
+)
 
 # Directory for local Visual Genome files
 VG_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "vg")
