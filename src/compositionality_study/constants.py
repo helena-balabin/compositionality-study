@@ -32,9 +32,7 @@ LARGE_DATASET_STORAGE_PATH = os.path.join(
 LARGE_MODELS_STORAGE_PATH = os.path.join(
     os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/transformers"
 )
-LARGE_HUB_STORAGE_PATH = os.path.join(
-    os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/hub"
-)
+LARGE_HUB_STORAGE_PATH = os.path.join(os.getenv("LARGE_STORAGE_PATH") or "~/.cache/huggingface", "huggingface/hub")
 
 # Directory for local Visual Genome files
 VG_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "vg")
@@ -89,3 +87,6 @@ WN_EXCLUDED_CATEGORIES = ["verb.body", "verb.consumption"]
 WN_SYNSET_FILTER = ["be", "have", "along"]
 WN_PREDICATE_FILTER = ["with", "on", "in"]
 # "verb.contact", "verb.change", "verb.weather", "verb.stative", "verb.possession"
+
+# Add a path to the NSD dataset
+NSD_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "nsd")
