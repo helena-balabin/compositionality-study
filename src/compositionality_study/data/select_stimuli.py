@@ -301,14 +301,16 @@ def select_stimuli(
     # As a sanity check: Check that the number of people is not correlated with the complexities
     # Get the correlation between the number of people and the complexities
     corr_text: float = float(
-        np.corrcoef(np.array(vg_ds_n_stimuli["coco_person"]), np.array(vg_ds_n_stimuli["textual_complexity_param"]))[
-            0, 1
-        ]
+        np.corrcoef(
+            np.array(vg_ds_n_stimuli["coco_person"]),
+            np.array(vg_ds_n_stimuli["textual_complexity_param"]),
+        )[0, 1]
     )
     corr_img: float = float(
-        np.corrcoef(np.array(vg_ds_n_stimuli["coco_person"]), np.array(vg_ds_n_stimuli["img_act_complexity_param"]))[
-            0, 1
-        ]
+        np.corrcoef(
+            np.array(vg_ds_n_stimuli["coco_person"]),
+            np.array(vg_ds_n_stimuli["img_act_complexity_param"]),
+        )[0, 1]
     )
     logger.info(f"Correlation between the number of people and the textual complexity: {corr_text}")
     logger.info(f"Correlation between the number of people and the image complexity: {corr_img}")

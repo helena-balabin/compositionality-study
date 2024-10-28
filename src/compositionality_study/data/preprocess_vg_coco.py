@@ -98,9 +98,7 @@ def add_text_properties(
         vg_in_file_name = "vg_"
     else:
         vg_in_file_name = ""
-    vg_coco_ds = (
-        load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
-    )
+    vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
 
     # Flatten the dataset so that there is one caption per example
     # Check if any of the features are lists
@@ -149,9 +147,7 @@ def add_text_properties(
     # Save to disk
     if save_to_disk:
         output_dir = os.path.split(vg_coco_overlap)[0]
-        preprocessed_ds.save_to_disk(
-            os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text")
-        )
+        preprocessed_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
             preprocessed_ds.select(list(range(dummy_subset_size))).save_to_disk(
@@ -230,17 +226,13 @@ def add_graph_properties(
     """
     # Load the dataset
     preprocessed_ds = (
-        load_from_disk(vg_coco_overlap_text)
-        if isinstance(vg_coco_overlap_text, str)
-        else vg_coco_overlap_text
+        load_from_disk(vg_coco_overlap_text) if isinstance(vg_coco_overlap_text, str) else vg_coco_overlap_text
     )
     image_ids = list(set(preprocessed_ds["vg_image_id"]))
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Get the graph characteristics
-    vg_graph_dict = determine_graph_complexity_measures(
-        vg_objects_file, vg_relationships_file, image_ids
-    )
+    vg_graph_dict = determine_graph_complexity_measures(vg_objects_file, vg_relationships_file, image_ids)
     vg_graph_df = pd.DataFrame(vg_graph_dict).rename(columns={"image_id": "vg_image_id"})
 
     # Speed up the merge by setting the ids as index
@@ -251,11 +243,7 @@ def add_graph_properties(
 
     # Save to disk
     if save_to_disk:
-        output_dir = (
-            os.path.split(vg_coco_overlap_text)[0]
-            if isinstance(vg_coco_overlap_text, str)
-            else VG_DIR
-        )
+        output_dir = os.path.split(vg_coco_overlap_text)[0] if isinstance(vg_coco_overlap_text, str) else VG_DIR
         vg_graph_merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_graph"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
@@ -343,19 +331,14 @@ def add_coco_properties(
     # Set the output name
     if isinstance(vg_coco_overlap_graph, str) and "vg_" in vg_coco_overlap_graph:
         vg_in_file_name = "vg_"
-    elif (
-        isinstance(vg_coco_overlap_graph, Dataset)
-        and "vg_image_id" in vg_coco_overlap_graph.column_names
-    ):
+    elif isinstance(vg_coco_overlap_graph, Dataset) and "vg_image_id" in vg_coco_overlap_graph.column_names:
         vg_in_file_name = "vg_"
     else:
         vg_in_file_name = ""
 
     # Load the dataset
     preprocessed_ds = (
-        load_from_disk(vg_coco_overlap_graph)
-        if isinstance(vg_coco_overlap_graph, str)
-        else vg_coco_overlap_graph
+        load_from_disk(vg_coco_overlap_graph) if isinstance(vg_coco_overlap_graph, str) else vg_coco_overlap_graph
     )
     preprocessed_df = preprocessed_ds.to_pandas()
 
@@ -377,9 +360,7 @@ def add_coco_properties(
 
     # Save to disk
     if save_to_disk:
-        vg_img_seg_ds.save_to_disk(
-            os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg")
-        )
+        vg_img_seg_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
             vg_img_seg_ds.select(list(range(dummy_subset_size))).save_to_disk(
@@ -458,9 +439,7 @@ def add_ic_scores(
     """
     # Load the dataset
     preprocessed_ds = (
-        load_from_disk(vg_coco_overlap_graph)
-        if isinstance(vg_coco_overlap_graph, str)
-        else vg_coco_overlap_graph
+        load_from_disk(vg_coco_overlap_graph) if isinstance(vg_coco_overlap_graph, str) else vg_coco_overlap_graph
     )
     preprocessed_df = preprocessed_ds.to_pandas()
 
@@ -468,9 +447,7 @@ def add_ic_scores(
     ic_scores_df = pd.read_json(ic_scores_file, orient="index")
     ic_scores_df.columns = ["ic_score"]
     # In case that the index contains "COCO": Only take the last numbers of the file name without leading zeros
-    ic_scores_df.index = ic_scores_df.index.map(
-        lambda x: int(x.split("_")[-1]) if type(x) == str else x
-    )
+    ic_scores_df.index = ic_scores_df.index.map(lambda x: int(x.split("_")[-1]) if type(x) == str else x)  # noqa
     # Convert the index to int
     ic_scores_df.index = ic_scores_df.index.astype(int)
     # Rename the index column to cocoid
@@ -551,16 +528,11 @@ def determine_graph_complexity_measures(
             for r in rel["relationships"]
             if len(r["object"]["synsets"]) > 0
             and len(r["subject"]["synsets"]) > 0
-            and (
-                check_if_living_being(r["object"]["synsets"][0])
-                or check_if_living_being(r["subject"]["synsets"][0])
-            )
+            and (check_if_living_being(r["object"]["synsets"][0]) or check_if_living_being(r["subject"]["synsets"][0]))
         ]
         filtered_rel_ids = [r["relationship_id"] for r in filtered_rels]
         filtered_edges = [
-            (u, v, data)
-            for u, v, data in graph.edges(data=True)
-            if data.get("rel_id") in filtered_rel_ids
+            (u, v, data) for u, v, data in graph.edges(data=True) if data.get("rel_id") in filtered_rel_ids
         ]
         # Create a new graph with the filtered edges
         filtered_graph = nx.Graph(filtered_edges)
@@ -568,13 +540,9 @@ def determine_graph_complexity_measures(
         # Determine the characteristics + add the image id as well
         measures = {
             "image_id": obj["image_id"],
-            "avg_node_degree": (
-                np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0
-            ),
+            "avg_node_degree": (np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0),
             "avg_node_connectivity": (
-                nx.algorithms.connectivity.average_node_connectivity(graph)
-                if nx.number_of_nodes(graph) > 0
-                else 0
+                nx.algorithms.connectivity.average_node_connectivity(graph) if nx.number_of_nodes(graph) > 0 else 0
             ),
             "avg_clustering_coefficient": (
                 nx.algorithms.approximation.average_clustering(
@@ -592,12 +560,7 @@ def determine_graph_complexity_measures(
                 else 0
             ),
             "sg_filtered_depth": (
-                max(
-                    [
-                        max(nx.shortest_path_length(filtered_graph, source=n).values())
-                        for n in filtered_graph.nodes()
-                    ]
-                )
+                max([max(nx.shortest_path_length(filtered_graph, source=n).values()) for n in filtered_graph.nodes()])
                 if nx.number_of_nodes(filtered_graph) > 0
                 else 0
             ),
@@ -665,15 +628,11 @@ def get_coco_obj_seg_df(
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
         coco_data_tr = json.load(f)
-        coco_obj_seg_tr = [
-            (ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]
-        ]
+        coco_obj_seg_tr = [(ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]]
         coco_cats_tr = {ex["id"]: ex["supercategory"] for ex in coco_data_tr["categories"]}
     with open(os.path.join(coco_obj_seg_dir, "instances_val2017.json"), "r") as f:
         coco_data_val = json.load(f)
-        coco_obj_seg_val = [
-            (ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]
-        ]
+        coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]]
         coco_cats_val = {ex["id"]: ex["supercategory"] for ex in coco_data_val["categories"]}
     with open(coco_a_annot_file, "r") as f:
         # Load the version of the dataset with an annotator agreement of 3 persons
@@ -704,9 +663,7 @@ def get_coco_obj_seg_df(
             coco_obj_seg_filtered[coco_id]["coco_person"] += 1  # type: ignore
 
     # Create a dictionary with the number of actions/graph depth from the COCO action annotations
-    coco_a_filtered = {
-        k: {"n_coco_a_actions": 0, "coco_a_graph_depth": None} for k in set(coco_a_ids)
-    }
+    coco_a_filtered = {k: {"n_coco_a_actions": 0, "coco_a_graph_depth": None} for k in set(coco_a_ids)}
 
     # Get all the COCO-A features
     for coco_a_entry in tqdm(
@@ -725,9 +682,7 @@ def get_coco_obj_seg_df(
             )
         else:
             # If there is no graph data for that image_id yet, create a new graph
-            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"] = (
-                create_coco_a_sub_graph(coco_a_entry)
-            )
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"] = create_coco_a_sub_graph(coco_a_entry)
 
     # Determine the depths of the graphs
     for coco_a_id, coco_a_graph in coco_a_filtered.items():
@@ -889,12 +844,8 @@ def create_searchable_vg_rel_obj_idx(
     with open(vg_rels_file, "r") as f:
         vg_rels = json.load(f)
     # Initialize the result
-    all_ids = set([x["image_id"] for x in vg_objs]).intersection(
-        set([x["image_id"] for x in vg_rels])
-    )
-    res_dict: Dict[str, Dict[str, List]] = {
-        vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids
-    }
+    all_ids = set([x["image_id"] for x in vg_objs]).intersection(set([x["image_id"] for x in vg_rels]))
+    res_dict: Dict[str, Dict[str, List]] = {vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids}
 
     # Iterate over all objects
     for i, obj in tqdm(enumerate(vg_objs), desc="Iterating through all objects"):
