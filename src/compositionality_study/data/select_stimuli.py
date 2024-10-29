@@ -2,7 +2,7 @@
 
 import copy
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import click
 import datasets
@@ -12,6 +12,7 @@ from datasets import load_from_disk
 from loguru import logger
 from PIL import Image
 from pytesseract import image_to_string
+from scipy.stats import spearmanr
 
 from compositionality_study.constants import VG_COCO_PREP_ALL, VG_IMAGE_DIR
 from compositionality_study.utils import get_image_aspect_ratio_from_local_path
@@ -19,7 +20,7 @@ from compositionality_study.utils import get_image_aspect_ratio_from_local_path
 
 def map_conditions(
     example: Dict[str, Any],
-    text_feature: str = "parse_tree_depth",
+    text_feature: str = "amr_graph_depth",
     graph_feature: str = "coco_a_graph_depth",
     min_text_feature_depth: int = 5,
     max_text_feature_depth: int = 10,
@@ -30,7 +31,7 @@ def map_conditions(
 
     :param example: The hf dataset example to map the conditions to
     :type example: Dict[str, Any]
-    :param text_feature: The text feature to parameterize with, defaults to "parse_tree_depth"
+    :param text_feature: The text feature to parameterize with, defaults to "amr_graph_depth"
     :type text_feature: str
     :param graph_feature: The graph feature to parameterize with, defaults to "coco_a_graph_depth"
     :type graph_feature: str
@@ -55,14 +56,14 @@ def map_conditions(
 
 @click.command()
 @click.option("--vg_coco_preprocessed_dir", type=str, default=VG_COCO_PREP_ALL)
-@click.option("--sent_len", type=int, default=9)
+@click.option("--sent_len", type=int, default=10)
 @click.option("--sent_len_tol", type=int, default=2)
 @click.option("--verbs", type=bool, default=True)
 @click.option("--img_comp", type=float, default=0.5)
 @click.option("--img_comp_tol", type=float, default=0.15)
 @click.option("--asp_min", type=float, default=1.0)
 @click.option("--asp_max", type=float, default=2.0)
-@click.option("--text_feature", type=str, default="parse_tree_depth")
+@click.option("--text_feature", type=str, default="amr_graph_depth")
 @click.option("--graph_feature", type=str, default="coco_a_graph_depth")
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=False)
@@ -70,14 +71,14 @@ def map_conditions(
 @click.option("--n_stimuli", type=int, default=378)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
-    sent_len: int = 9,
+    sent_len: int = 10,
     sent_len_tol: int = 2,
     verbs: bool = True,
     img_comp: float = 0.5,
     img_comp_tol: float = 0.15,
-    asp_min: float = 1.2,
-    asp_max: float = 1.8,
-    text_feature: str = "parse_tree_depth",
+    asp_min: float = 1.0,
+    asp_max: float = 2.0,
+    text_feature: str = "amr_graph_depth",
     graph_feature: str = "coco_a_graph_depth",
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = False,
@@ -89,9 +90,9 @@ def select_stimuli(
     :param vg_coco_preprocessed_dir: The preprocessed VG + COCO overlap dataset to select stimuli from, defaults to
         VG_COCO_PREP_ALL
     :type vg_coco_preprocessed_dir: str
-    :param sent_len: The sentence length to control for (controlled variable
+    :param sent_len: The sentence length to control for (controlled variable), defaults to 10
     :type sent_len: int
-    :param sent_len_tol: The tolerance for the sentence length (+- sent_len_tol within sent_len)
+    :param sent_len_tol: The tolerance for the sentence length (+- sent_len_tol within sent_len), defaults to 2
     :type sent_len_tol: int
     :param verbs: Whether to control for verbs (controlled variable), i.e., only select captions with verbs,
         defaults to True
@@ -104,8 +105,8 @@ def select_stimuli(
     :type asp_min: float
     :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 2.0
     :type asp_max: float
-    :param text_feature: The text feature to parameterize with, defaults to "parse_tree_depth", alternatively one can
-        use "amr_tree_depth"
+    :param text_feature: The text feature to parameterize with, defaults to "amr_graph_depth", alternatively one can
+        use "parse_tree_depth"
     :type text_feature: str
     :param graph_feature: The graph feature to parameterize with, defaults to "coco_a_graph_depth", alternatively one
         can use "sg_depth"
@@ -183,12 +184,6 @@ def select_stimuli(
         f"{len(vg_ds)} entries remain."
     )
 
-    # Filter out image duplicates
-    vg_df = pd.DataFrame(vg_ds)
-    vg_df = vg_df.drop_duplicates(subset=["filepath"])
-    vg_ds = datasets.Dataset.from_pandas(vg_df)
-    logger.info(f"Filtered out duplicate images, {len(vg_ds)} entries remain.")
-
     # Filter out black and white images and images with text on them and images with low quality
     # Add the images to the dataset, load based on the filenames
     # Avoid PIL-related bugs by copying the images
@@ -236,84 +231,69 @@ def select_stimuli(
         num_proc=24,
     )
 
-    # Instead of covering the full 2D grid, select points along the diagonal
-    vg_n_stim: List = []
+    # Pre-compute arrays for faster access
+    text_complexities = np.array(vg_ds["textual_complexity_param"])
+    img_complexities = np.array(vg_ds["img_act_complexity_param"])
+    image_ids = np.array(vg_ds["imgid"])
+    person_counts = np.array(vg_ds["coco_person"])
 
     # Create evenly spaced points along the diagonal from (0,0) to (1,1)
     complexity_points = np.linspace(0, 1, n_stimuli)
+
+    # Calculate mean person count for penalty
+    mean_person_count = np.mean(person_counts)
+
+    vg_n_stim = []
+    used_image_ids = set()
+
     for target_complexity in complexity_points:
-        # Calculate distance to target point for all examples
-        distances = np.sqrt(
-            (np.array(vg_ds["textual_complexity_param"]) - target_complexity) ** 2
-            + (np.array(vg_ds["img_act_complexity_param"]) - target_complexity) ** 2
-        )
+        # Calculate distances to target point
+        distances = np.sqrt((text_complexities - target_complexity) ** 2 + (img_complexities - target_complexity) ** 2)
 
-        # Find available indices that haven't been used yet
-        available_indices = [
-            i for i in range(len(vg_ds)) if vg_ds[i]["vg_image_id"] not in [x["vg_image_id"] for x in vg_n_stim]
-        ]
+        # Add penalty for deviating from mean person count
+        person_penalty = np.abs(person_counts - mean_person_count) / mean_person_count
+        distances += person_penalty
 
-        if not available_indices:
-            logger.warning(f"Not enough stimuli for complexity level {target_complexity}")
-            continue
+        # Mask out already used images using vectorized operation
+        distances[np.isin(image_ids, list(used_image_ids))] = np.inf
 
-        # Normalize distances to [0,1] for available indices to make them comparable with correlation impacts
-        # Without normalization, the raw distances could dominate the combined score since they're on a different scale
-        # TODO double check if this makes sense
-        distances_norm = distances[available_indices]
-        distances_norm = (distances_norm - np.min(distances_norm)) / (np.max(distances_norm) - np.min(distances_norm))
-
-        # Calculate correlation impact for each candidate
-        correlation_impacts = []
-        for idx in available_indices:
-            temp_stim = vg_n_stim + [vg_ds[idx]]
-            if len(temp_stim) < 2:
-                correlation_impacts.append(0)
-                continue
-
-            people = [x["coco_person"] for x in temp_stim]  # type: ignore
-            text_comp = [x["textual_complexity_param"] for x in temp_stim]  # type: ignore
-            img_comp = [x["img_act_complexity_param"] for x in temp_stim]  # type: ignore
-
-            # TODO double check if this makes sense
-            corr1 = abs(np.corrcoef(people, text_comp)[0, 1])
-            corr2 = abs(np.corrcoef(people, img_comp)[0, 1])
-            correlation_impacts.append((corr1 + corr2) / 2)
-
-        correlation_impacts = np.array(correlation_impacts)
-
-        # TODO double check if this makes sense
-        # Combine both metrics with equal weight
-        combined_score = distances_norm + correlation_impacts
-
-        # Select the example with the lowest combined score
-        best_match_idx = available_indices[np.argmin(combined_score)]
-        vg_n_stim.append(vg_ds[best_match_idx])
+        # Select best remaining point
+        best_idx = np.argmin(distances)
+        best_idx = int(best_idx)
+        vg_n_stim.append(vg_ds[best_idx])
+        used_image_ids.add(image_ids[best_idx])
 
     vg_ds_n_stimuli = datasets.Dataset.from_dict(
         {k: [example[k] for example in vg_n_stim] for k in vg_ds.features.keys()}
     )
 
-    # If the "__index_level_0__" column exists, drop it
-    if "__index_level_0__" in vg_ds_n_stimuli.features:
-        vg_ds_n_stimuli = vg_ds_n_stimuli.remove_columns(["__index_level_0__"])
-
-    # As a sanity check: Check that the number of people is not correlated with the complexities
+    # Check that the number of people is not correlated with the complexities
     # Get the correlation between the number of people and the complexities
-    corr_text: float = float(
-        np.corrcoef(
-            np.array(vg_ds_n_stimuli["coco_person"]),
-            np.array(vg_ds_n_stimuli["textual_complexity_param"]),
-        )[0, 1]
-    )
-    corr_img: float = float(
-        np.corrcoef(
-            np.array(vg_ds_n_stimuli["coco_person"]),
-            np.array(vg_ds_n_stimuli["img_act_complexity_param"]),
-        )[0, 1]
-    )
+    corr_text, p_text = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli["textual_complexity_param"])
+    corr_img, p_img = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli["img_act_complexity_param"])
     logger.info(f"Correlation between the number of people and the textual complexity: {corr_text}")
+    logger.info(f"Text correlation p-value: {p_text}")
     logger.info(f"Correlation between the number of people and the image complexity: {corr_img}")
+    logger.info(f"Image correlation p-value: {p_img}")
+
+    # Another check: Look at the possible (unique) categories in coco_categories
+    # and see that they are not correlated with the complexities
+    # 1. Get all the unique categories
+    coco_categories = vg_ds_n_stimuli["coco_categories"]
+    coco_categories = [cat for sublist in coco_categories for cat in sublist if cat != "person"]
+    coco_categories = np.array(coco_categories)
+    unique_coco_categories = np.unique(coco_categories)
+
+    # 2. For each category, get a binary absence/presence indicator
+    # and correlate it with the complexities
+    for cat in unique_coco_categories:
+        cat_indicator = [1 if cat in x["coco_categories"] else 0 for x in vg_ds_n_stimuli]
+        corr_text, p_text = spearmanr(cat_indicator, vg_ds_n_stimuli["textual_complexity_param"])
+        corr_img, p_img = spearmanr(cat_indicator, vg_ds_n_stimuli["img_act_complexity_param"])
+        logger.info(f"Correlation between the presence of category {cat} and the textual complexity: {corr_text}")
+        logger.info(f"Text correlation p-value: {p_text}")
+        logger.info(f"Correlation between the presence of category {cat} and the image complexity: {corr_img}")
+        logger.info(f"Image correlation p-value: {p_img}")
 
     # Save the dataset
     output_dir = os.path.split(vg_coco_preprocessed_dir)[0]
