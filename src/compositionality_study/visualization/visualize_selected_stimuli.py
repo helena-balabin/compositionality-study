@@ -1,89 +1,207 @@
-"""Visualize the stimuli chosen with the data/select_stimuli.py script based on streamlit.
-
-To see the stimuli, run the following command: streamlit run visualize_selected_stimuli.py
-"""
+"""Create image files for the selected stimuli with their action annotations."""
 
 import json
-import os
+from pathlib import Path
+from typing import Dict, List
 
-import requests
-import spacy
-import streamlit as st
-from datasets import load_dataset, load_from_disk
+import click
+import matplotlib.pyplot as plt
+from datasets import load_from_disk
 from PIL import Image
-from spacy_streamlit import visualize_parser
+from tqdm import tqdm
 
 from compositionality_study.constants import (
+    COCO_A_ANNOT_FILE,
+    IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    VG_COCO_OBJ_SEG_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
-    VG_OBJ_REL_IDX_FILE,
-    VG_OBJECTS_FILE,
-    VG_RELATIONSHIPS_FILE,
 )
-from compositionality_study.utils import draw_objs_and_rels
 
-# Set up the streamlit page
-st.set_page_config(layout="wide")
 
-# Load a spacy model to display the dependency trees
-nlp = spacy.load("en_core_web_lg")
+def load_coco_actions(
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
+) -> Dict:
+    """Load COCO-A annotations.
 
-# Load the dataset
-dataset = load_from_disk(VG_COCO_SELECTED_STIMULI_DIR)
-# Get the complexities
-complexities = list(set([example["complexity"] for example in dataset]))
+    :param coco_a_annot_file: Path to the COCO-A annotations file
+    :type coco_a_annot_file: str
+    :return: COCO-A annotations
+    :rtype: Dict
+    """
+    with open(coco_a_annot_file, "r") as f:
+        return json.load(f)["annotations"]["3"]
 
-# Create table-like layout
-col1, col2, col3, col4 = st.columns(4, gap="medium")
 
-# Retrieve the id column
-id_col = "cocoid" if "cocoid" in dataset.features else "id"
+def load_coco_annotations(
+    input_dir: str = VG_COCO_OBJ_SEG_DIR,
+) -> List[Dict]:
+    """Load COCO image annotations.
 
-objs, rels = [], []
-vg_objs_idx, vg_rels_idx = [], []  # type: ignore
-obj_rel_idx_file = {}  # type: ignore
+    :param input_path: Path to the COCO image annotations dir
+    :type input_path: str
+    :return: COCO image annotations
+    :rtype: List[Dict]
+    """
+    # Load and combine the jsons for instances_train2017 and instances_val2017
+    with open(Path(input_dir) / "instances_train2017.json", "r") as f:
+        instances_train = json.load(f)["annotations"]
+    with open(Path(input_dir) / "instances_val2017.json", "r") as f:
+        instances_val = json.load(f)["annotations"]
 
-if (
-    os.path.exists(VG_OBJECTS_FILE)
-    and os.path.exists(VG_RELATIONSHIPS_FILE)
-    and os.path.exists(VG_OBJ_REL_IDX_FILE)
-):
-    objs = load_dataset("json", data_files=VG_OBJECTS_FILE, split="train")
-    rels = load_dataset("json", data_files=VG_RELATIONSHIPS_FILE, split="train")
-    with open(VG_OBJ_REL_IDX_FILE, "r") as f:
-        obj_rel_idx_file = json.load(f)
+    # Combine the two lists
+    return instances_train + instances_val
 
-for cell, comp in zip([col1, col2, col3, col4], complexities):
-    with cell:
-        header = comp.replace("_", " ")  # noqa
-        st.header(f"{header}")
-        examples = [example for example in dataset if example["complexity"] == comp]
-        for example in examples:
-            image = Image.open(requests.get(example["vg_url"], stream=True).raw)  # noqa
 
-            # Also plot the objects and relationships if the objects and relationship files exist
-            if (
-                os.path.exists(VG_OBJECTS_FILE)
-                and os.path.exists(VG_RELATIONSHIPS_FILE)
-                and os.path.exists(VG_OBJ_REL_IDX_FILE)
-            ):
-                # Find the object annotations for the selected image
-                image_objects = objs[obj_rel_idx_file[str(example["vg_image_id"])]["objs"]][
-                    "objects"  # type: ignore
-                ][0]
-                # Find the relationship annotations for the selected image
-                image_relationships = rels[obj_rel_idx_file[str(example["vg_image_id"])]["rels"]][
-                    "relationships"  # type: ignore
-                ][0]
-                image = draw_objs_and_rels(image, image_objects, image_relationships)
+def visualize_image_with_actions(
+    img: Image, depth: int, actions: List[Dict], coco_annots: List[Dict], output_path: str
+) -> None:
+    """
+    Visualize an image with its action annotations.
 
-                st.image(image, caption=f"{example['sentences_raw']}")
-                doc = nlp(example["sentences_raw"])
-                st.empty()
-                # Generate the dependency parse tree and display it
-                visualize_parser(
-                    doc,
-                    key=f"{str(example[id_col])}_parser_split_sents",
-                    displacy_options={"compact": True, "distance": 65},
-                    title=None,
+    :param img: PIL image
+    :type img: Image
+    :param depth: Depth of the image
+    :type depth: int
+    :param actions: List of COCO-A action annotations
+    :type actions: List[Dict]
+    :param coco_annots: List of COCO image annotations (bounding boxes)
+    :type coco_annots: List[Dict]
+    :param output_path: Path to save the visualization
+    :type output_path: str
+    """
+    plt.figure(figsize=(12, 8))
+    plt.imshow(img)
+
+    # Filter coco_annots: Only include entries where i["id"] is either in
+    # "subject_id" or "object_id" of the actions
+    all_subjects_objects = [i["subject_id"] for i in actions] + [i["object_id"] for i in actions]
+    coco_annots_filtered = [i for i in coco_annots if i["id"] in all_subjects_objects]
+
+    # Draw bounding boxes and actions
+    for action in actions:
+        # Make sure that neither subject nor object id are -1
+        if action["subject_id"] != -1 and action["object_id"] != -1:
+            # Get the bounding boxes for the subject and object
+            subject_bbox = [i for i in coco_annots_filtered if i["id"] == action["subject_id"]][0]
+            object_bbox = [i for i in coco_annots_filtered if i["id"] == action["object_id"]][0]
+
+            # Draw the bounding boxes
+            plt.gca().add_patch(
+                plt.Rectangle(
+                    (subject_bbox["bbox"][0], subject_bbox["bbox"][1]),
+                    subject_bbox["bbox"][2],
+                    subject_bbox["bbox"][3],
+                    linewidth=2,
+                    edgecolor="r",
+                    facecolor="none",
                 )
-            st.divider()
+            )
+            plt.gca().add_patch(
+                plt.Rectangle(
+                    (object_bbox["bbox"][0], object_bbox["bbox"][1]),
+                    object_bbox["bbox"][2],
+                    object_bbox["bbox"][3],
+                    linewidth=2,
+                    edgecolor="b",
+                    facecolor="none",
+                )
+            )
+
+            # Draw the action, as a line between the centers of the bounding boxes
+            plt.plot(
+                [
+                    subject_bbox["bbox"][0] + subject_bbox["bbox"][2] / 2,
+                    object_bbox["bbox"][0] + object_bbox["bbox"][2] / 2,
+                ],
+                [
+                    subject_bbox["bbox"][1] + subject_bbox["bbox"][3] / 2,
+                    object_bbox["bbox"][1] + object_bbox["bbox"][3] / 2,
+                ],
+                color="g",
+                linewidth=2,
+            )
+            # Use the depth as a title
+            plt.title(f"Depth: {depth}")
+
+    plt.axis("off")
+    plt.savefig(output_path, bbox_inches="tight", dpi=300)
+    plt.close()
+
+
+@click.command()
+@click.option(
+    "--dataset_path",
+    type=str,
+    default=VG_COCO_SELECTED_STIMULI_DIR,
+    help="Path to the dataset containing selected stimuli",
+)
+@click.option(
+    "--coco_annotations_dir", type=str, default=VG_COCO_OBJ_SEG_DIR, help="Directory containing COCO image annotations"
+)
+@click.option(
+    "--output_dir",
+    type=str,
+    default=IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    help="Directory where visualizations will be saved",
+)
+def visualize_actions(
+    dataset_path: str = VG_COCO_SELECTED_STIMULI_DIR,
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
+    coco_annotations_dir: str = VG_COCO_OBJ_SEG_DIR,
+    output_dir: str = IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+) -> None:
+    """Visualize actions for selected stimuli from the dataset.
+
+    :param dataset_path: Path to the dataset containing selected stimuli
+    :type dataset_path: str
+    :param coco_a_annot_file: Path to the COCO-A annotations file
+    :type coco_a_annot_file: str
+    :param coco_annotations_dir: Directory containing COCO image annotations (instances_train/val)
+    :type coco_annotations_dir: str
+    :param output_dir: Directory where visualizations will be saved
+    :type output_dir: str
+    """
+    # Load COCO-A annotations
+    coco_actions = load_coco_actions(coco_a_annot_file)
+
+    # Load the instances_train/val2017 file
+    coco_train_val = load_coco_annotations(coco_annotations_dir)
+
+    # Load our selected stimuli dataset
+    dataset = load_from_disk(dataset_path)
+    dataset_ids = [item["cocoid"] for item in dataset]
+
+    # Filter in coco_actions only the actions that are in our dataset
+    coco_actions_filtered = [i for i in coco_actions if i["image_id"] in dataset_ids]
+    # Same for coco_train_val
+    coco_train_val_filtered = [i for i in coco_train_val if i["image_id"] in dataset_ids]
+
+    # Create output directory with if needed
+    output_dir.mkdir(exist_ok=True, parents=True)
+
+    # Process each image in our dataset
+    for item in tqdm(dataset, desc="Processing images"):
+        image_id = item["cocoid"]
+        image_actions = [i for i in coco_actions_filtered if i["image_id"] == image_id]
+        image_coco_annots = [i for i in coco_train_val_filtered if i["image_id"] == image_id]
+
+        # Get the PIL image from the dataset
+        img = item["img"]
+        output_path = output_dir / f"action_{image_id}.png"
+
+        try:
+            visualize_image_with_actions(
+                img, item["coco_a_graph_depth"], image_actions, image_coco_annots, str(output_path)
+            )
+        except Exception as e:
+            print(f"Error processing image {image_id}: {e}")
+
+
+@click.group()
+def cli() -> None:
+    """Visualize actions for selected stimuli."""
+
+
+if __name__ == "__main__":
+    cli.add_command(visualize_actions)
+    cli()

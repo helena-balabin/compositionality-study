@@ -58,7 +58,7 @@ def map_conditions(
 @click.option("--vg_coco_preprocessed_dir", type=str, default=VG_COCO_PREP_ALL)
 @click.option("--sent_len", type=int, default=10)
 @click.option("--sent_len_tol", type=int, default=2)
-@click.option("--verbs", type=bool, default=True)
+@click.option("--verbs", type=bool, default=False)
 @click.option("--img_comp", type=float, default=0.5)
 @click.option("--img_comp_tol", type=float, default=0.15)
 @click.option("--asp_min", type=float, default=1.0)
@@ -69,11 +69,12 @@ def map_conditions(
 @click.option("--filter_text_on_images", type=bool, default=False)
 @click.option("--filter_by_person", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=378)
+@click.option("--n_most_frequent_categories", type=int, default=8)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
     sent_len: int = 10,
     sent_len_tol: int = 2,
-    verbs: bool = True,
+    verbs: bool = False,
     img_comp: float = 0.5,
     img_comp_tol: float = 0.15,
     asp_min: float = 1.0,
@@ -84,6 +85,7 @@ def select_stimuli(
     filter_text_on_images: bool = False,
     filter_by_person: bool = True,
     n_stimuli: int = 378,
+    n_most_frequent_categories: int = 8,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
 
@@ -95,7 +97,7 @@ def select_stimuli(
     :param sent_len_tol: The tolerance for the sentence length (+- sent_len_tol within sent_len), defaults to 2
     :type sent_len_tol: int
     :param verbs: Whether to control for verbs (controlled variable), i.e., only select captions with verbs,
-        defaults to True
+        defaults to False
     :type verbs: bool
     :param img_comp: The image complexity to control for (controlled variable), defaults to 0.5
     :type img_comp: float
@@ -120,6 +122,9 @@ def select_stimuli(
     :type filter_by_person: bool
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
+    :param n_most_frequent_categories: The number of most frequent categories to select stimuli for the object
+        condition, defaults to 8
+    :type n_most_frequent_categories: int
     """
     # Load the dataset
     vg_ds = load_from_disk(vg_coco_preprocessed_dir)
@@ -283,17 +288,27 @@ def select_stimuli(
     coco_categories = [cat for sublist in coco_categories for cat in sublist if cat != "person"]
     coco_categories = np.array(coco_categories)
     unique_coco_categories = np.unique(coco_categories)
+    category_counter = {cat: 0 for cat in unique_coco_categories}
 
     # 2. For each category, get a binary absence/presence indicator
     # and correlate it with the complexities
     for cat in unique_coco_categories:
         cat_indicator = [1 if cat in x["coco_categories"] else 0 for x in vg_ds_n_stimuli]
+        category_counter[cat] = np.sum(cat_indicator)
         corr_text, p_text = spearmanr(cat_indicator, vg_ds_n_stimuli["textual_complexity_param"])
         corr_img, p_img = spearmanr(cat_indicator, vg_ds_n_stimuli["img_act_complexity_param"])
         logger.info(f"Correlation between the presence of category {cat} and the textual complexity: {corr_text}")
         logger.info(f"Text correlation p-value: {p_text}")
         logger.info(f"Correlation between the presence of category {cat} and the image complexity: {corr_img}")
         logger.info(f"Image correlation p-value: {p_img}")
+
+    # 3. Get the n most frequent categories
+    most_frequent_categories = sorted(
+        category_counter,
+        key=category_counter.get,
+        reverse=True,
+    )[:n_most_frequent_categories]
+    logger.info(f"The {n_most_frequent_categories} most frequent categories are: {most_frequent_categories}")
 
     # Save the dataset
     output_dir = os.path.split(vg_coco_preprocessed_dir)[0]
