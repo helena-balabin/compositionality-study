@@ -1,13 +1,18 @@
 """Create image files for the selected stimuli with their action annotations."""
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, List
 
+import amrlib
 import click
 import matplotlib.pyplot as plt
+import spacy
+from amrlib.graph_processing.amr_plot import AMRPlot
 from datasets import load_from_disk
 from PIL import Image
+from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
@@ -177,7 +182,8 @@ def visualize_actions(
     coco_train_val_filtered = [i for i in coco_train_val if i["image_id"] in dataset_ids]
 
     # Create output directory with if needed
-    output_dir.mkdir(exist_ok=True, parents=True)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Process each image in our dataset
     for item in tqdm(dataset, desc="Processing images"):
@@ -187,7 +193,7 @@ def visualize_actions(
 
         # Get the PIL image from the dataset
         img = item["img"]
-        output_path = output_dir / f"action_{image_id}.png"
+        output_path = os.path.join(output_dir, f"{image_id}_image.png")
 
         try:
             visualize_image_with_actions(
@@ -197,11 +203,96 @@ def visualize_actions(
             print(f"Error processing image {image_id}: {e}")
 
 
+@click.command()
+@click.option(
+    "--dataset_path",
+    type=str,
+    default=VG_COCO_SELECTED_STIMULI_DIR,
+    help="Path to the dataset containing selected stimuli",
+)
+@click.option(
+    "--spacy_model",
+    type=str,
+    default="en_core_web_trf",
+    help="spaCy model to use for text processing",
+)
+@click.option(
+    "--output_dir",
+    type=str,
+    default=IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    help="Directory where visualizations will be saved",
+)
+def visualize_amr_text(
+    dataset_path: str = VG_COCO_SELECTED_STIMULI_DIR,
+    spacy_model: str = "en_core_web_trf",
+    output_dir: str = IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+):
+    """Visualize AMR graphs for the text stimuli.
+
+    :param dataset_path: Path to the dataset containing selected stimuli
+    :type dataset_path: str
+    :spacy_model: spaCy model to use for text processing
+    :type spacy_model: str
+    :param output_dir: Directory where visualizations will be saved
+    :type output_dir: str
+    """
+
+    # Initialize the spaCy pipeline
+    @Language.component("force_single_sentence")
+    def one_sentence_per_doc(
+        doc: spacy.tokens.Doc,  # noqa
+    ) -> spacy.tokens.Doc:  # noqa
+        """Force the document to be one sentence.
+
+        :param doc: The document to force to be one sentence
+        :type doc: spacy.tokens.Doc
+        :return: The document with one sentence
+        :rtype: spacy.tokens.Doc
+        """
+        doc[0].sent_start = True
+        for i in range(1, len(doc)):
+            doc[i].sent_start = False
+        return doc
+
+    # Add dependency parse tree depth and AMR depth
+    # Prefer GPU if available
+    spacy.prefer_gpu()
+    amrlib.setup_spacy_extension()
+    # Disable unnecessary components
+    nlp = spacy.load(spacy_model, disable=["tok2vec", "attribute_ruler", "lemmatizer"])
+    nlp.add_pipe("force_single_sentence", before="parser")
+
+    # Load the dataset
+    dataset = load_from_disk(dataset_path)
+    doc_batched = nlp.pipe(dataset["sentences_raw"])
+
+    for doc, ex in tqdm(
+        zip(doc_batched, dataset),
+        desc="Processing text stimuli",
+        total=len(dataset),
+    ):
+        amr_graph = doc._.to_amr()[0]  # noqa
+        # Make a figure and save it
+        plot = AMRPlot()
+        plot.build_from_graph(amr_graph, debug=False)
+        # Save the plot
+        output_path = os.path.join(output_dir, f"{ex['cocoid']}_text")
+        graph = plot.graph
+        graph.graph_attr["label"] = f"Depth for '{ex['sentences_raw']}': {ex['amr_graph_depth']}"
+        graph.render(output_path, format="png", cleanup=True)
+
+    # Remove all .pdf files in the output directory
+    for file in os.listdir(output_dir):
+        if file.endswith(".pdf"):
+            os.remove(os.path.join(output_dir, file))
+
+
 @click.group()
 def cli() -> None:
-    """Visualize actions for selected stimuli."""
+    """Visualize actions and text AMR graphs for selected stimuli."""
 
 
 if __name__ == "__main__":
     cli.add_command(visualize_actions)
+    cli.add_command(visualize_amr_text)
     cli()
