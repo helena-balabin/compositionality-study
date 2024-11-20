@@ -274,7 +274,7 @@ def visualize_amr_text(
         amr_graph = doc._.to_amr()[0]  # noqa
         # Make a figure and save it
         plot = AMRPlot()
-        plot.build_from_graph(amr_graph, debug=False)
+        plot.build_from_graph(amr_graph, allow_deinvert=True)
         # Save the plot
         output_path = os.path.join(output_dir, f"{ex['cocoid']}_text")
         graph = plot.graph
