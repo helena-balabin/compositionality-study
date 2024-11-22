@@ -2,6 +2,7 @@
 
 import copy
 import os
+from collections import Counter
 from typing import Any, Dict
 
 import click
@@ -69,6 +70,7 @@ def map_conditions(
 @click.option("--filter_text_on_images", type=bool, default=False)
 @click.option("--filter_by_person", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=378)
+@click.option("--buffer_stimuli_fraction", type=float, default=0.1)
 @click.option("--n_most_frequent_categories", type=int, default=8)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
@@ -85,6 +87,7 @@ def select_stimuli(
     filter_text_on_images: bool = False,
     filter_by_person: bool = True,
     n_stimuli: int = 378,
+    buffer_stimuli_fraction: float = 0.1,
     n_most_frequent_categories: int = 8,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
@@ -122,10 +125,16 @@ def select_stimuli(
     :type filter_by_person: bool
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
+    :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
+        0.1, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
     :param n_most_frequent_categories: The number of most frequent categories to select stimuli for the object
         condition, defaults to 8
     :type n_most_frequent_categories: int
     """
+    # Apply a buffer to the number of stimuli to select
+    n_stimuli = int(n_stimuli * (1 + buffer_stimuli_fraction))
+    logger.info(f"Selecting {n_stimuli} stimuli (including buffer).")
+
     # Load the dataset
     vg_ds = load_from_disk(vg_coco_preprocessed_dir)
     file_prefix = "vg_" if "vg_" in vg_coco_preprocessed_dir else ""
@@ -133,7 +142,7 @@ def select_stimuli(
     # Set a random seed for reproducibility
     np.random.seed(42)
 
-    # Calculate min/max depth values for the dependency parse tree depth and the COCO action graph depth
+    # Calculate min/max depth values for the AMR tree depth and the COCO action graph depth
     dep_min = int(pd.Series(vg_ds[text_feature]).min())
     dep_max = int(pd.Series(vg_ds[text_feature]).max())
     ac_min = int(pd.Series(vg_ds[graph_feature]).min())
@@ -156,12 +165,17 @@ def select_stimuli(
         )
         logger.info(f"Controlled the dataset for captions with verbs, {len(vg_ds)} entries remain.")
 
+    # Filter by person based on the mean number of people in the dataset
     if filter_by_person:
+        mean_person_count = int(np.mean(vg_ds["coco_person"]))
         vg_ds = vg_ds.filter(
-            lambda x: x["coco_person"] >= 1,
+            lambda x: np.abs(mean_person_count - x["coco_person"]) <= 1,
             num_proc=24,
         )
-        logger.info(f"Controlled the dataset for the number of people (at least 1), " f"{len(vg_ds)} entries remain.")
+        logger.info(
+            f"Controlled the dataset for the number of people {mean_person_count} +- 1, "
+            f"{len(vg_ds)} entries remain."
+        )
 
     # Filter by image complexity (within a tolerance)
     vg_ds = vg_ds.filter(
@@ -228,6 +242,7 @@ def select_stimuli(
         lambda x: map_conditions(
             x,
             text_feature=text_feature,
+            graph_feature=graph_feature,
             min_text_feature_depth=dep_min,
             max_text_feature_depth=dep_max,
             min_n_coco_a_actions=ac_min,
@@ -240,13 +255,9 @@ def select_stimuli(
     text_complexities = np.array(vg_ds["textual_complexity_param"])
     img_complexities = np.array(vg_ds["img_act_complexity_param"])
     image_ids = np.array(vg_ds["imgid"])
-    person_counts = np.array(vg_ds["coco_person"])
 
     # Create evenly spaced points along the diagonal from (0,0) to (1,1)
     complexity_points = np.linspace(0, 1, n_stimuli)
-
-    # Calculate mean person count for penalty
-    mean_person_count = np.mean(person_counts)
 
     vg_n_stim = []
     used_image_ids = set()
@@ -254,10 +265,6 @@ def select_stimuli(
     for target_complexity in complexity_points:
         # Calculate distances to target point
         distances = np.sqrt((text_complexities - target_complexity) ** 2 + (img_complexities - target_complexity) ** 2)
-
-        # Add penalty for deviating from mean person count
-        person_penalty = np.abs(person_counts - mean_person_count) / mean_person_count
-        distances += person_penalty
 
         # Mask out already used images using vectorized operation
         distances[np.isin(image_ids, list(used_image_ids))] = np.inf
@@ -309,6 +316,10 @@ def select_stimuli(
         reverse=True,
     )[:n_most_frequent_categories]
     logger.info(f"The {n_most_frequent_categories} most frequent categories are: {most_frequent_categories}")
+
+    # Also get a counter on the image complexity and the textual complexity values
+    logger.info(f"Textual complexity values: {Counter(vg_ds_n_stimuli[text_feature])}")
+    logger.info(f"Image complexity values: {Counter(vg_ds_n_stimuli[graph_feature])}")
 
     # Save the dataset
     output_dir = os.path.split(vg_coco_preprocessed_dir)[0]
