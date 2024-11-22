@@ -28,11 +28,14 @@ amrlib.setup_spacy_extension()
 
 def get_amr_graph_depth(
     amr_graph: str,
+    return_graph=False,
 ) -> int:
     """Get the depth of the AMR graph for a given example.
 
     :param amr_graph: The AMR graph to get the depth for (output of a spacy doc._.to_amr()[0] call)
     :type amr_graph: str
+    :param return_graph: Whether to return the networkx graph, defaults to False
+    :type return_graph: bool, optional
     :return: The maximum "depth" of the AMR graph (longest shortest path)
     :rtype: int
     """
@@ -50,7 +53,10 @@ def get_amr_graph_depth(
         else 0
     )
 
-    return amr_graph_depth
+    if return_graph:
+        return amr_graph_depth, nx_graph
+    else:
+        return amr_graph_depth
 
 
 def walk_tree(
