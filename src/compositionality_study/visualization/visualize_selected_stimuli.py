@@ -8,6 +8,8 @@ from typing import Dict, List
 import amrlib
 import click
 import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 import spacy
 from amrlib.graph_processing.amr_plot import AMRPlot
 from datasets import load_from_disk
@@ -20,7 +22,10 @@ from compositionality_study.constants import (
     IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
     VG_COCO_OBJ_SEG_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
+    VG_DIR,
 )
+from compositionality_study.data.preprocess_vg_coco import get_coco_a_graphs
+from compositionality_study.utils import get_amr_graph_depth, walk_tree
 
 
 def load_coco_actions(
@@ -287,6 +292,88 @@ def visualize_amr_text(
             os.remove(os.path.join(output_dir, file))
 
 
+@click.command()
+@click.option(
+    "--stimuli_dir",
+    type=str,
+    default=VG_COCO_SELECTED_STIMULI_DIR,
+    help="Path to the dataset containing selected stimuli",
+)
+@click.option(
+    "--visualizations_dir",
+    type=str,
+    default=os.path.join(VG_DIR, "visualizations"),
+    help="Directory where visualizations will be saved",
+)
+@click.option(
+    "--coco_a_annot_file",
+    type=str,
+    default=COCO_A_ANNOT_FILE,
+    help="Path to the COCO-A annotations file",
+)
+def get_summary_statistics(
+    stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
+    visualizations_dir: str = os.path.join(VG_DIR, "visualizations"),
+    coco_a_annot_file: str = COCO_A_ANNOT_FILE,
+):
+    """Generate summary statistics plots for the selected stimuli.
+
+    :param stimuli_dir: Path to the dataset containing selected stimuli
+    :type stimuli_dir: str
+    :param visualizations_dir: Directory where visualizations will be saved
+    :type visualizations_dir: str
+    :param coco_a_annot_file: Path to the COCO-A annotations file
+    :type coco_a_annot_file: str
+    """
+    # Load the stimuli and convert them to a pandas DataFrame
+    stimuli = load_from_disk(stimuli_dir)
+    n_stimuli = len(stimuli)
+    stimuli_df = pd.DataFrame(stimuli)
+    # Initialize the visualization directory
+    os.makedirs(visualizations_dir, exist_ok=True)
+
+    # Generate a seaborn KDE plot of the textual and image complexity values
+    sns.kdeplot(stimuli_df, x="amr_graph_depth", y="coco_a_graph_depth", cmap="Blues", fill=True)
+    # And save it to a visualization directory
+    plt.savefig(os.path.join(visualizations_dir, f"textual_vs_image_complexity_{n_stimuli}.png"))
+
+    # Re-generate the image-based graphs for the stimuli
+    # Re-generate COCO-A sub-graph
+    # Get all the COCO-A features
+    with open(coco_a_annot_file, "r") as f:
+        # Load the version of the dataset with an annotator agreement of 3 persons
+        coco_a_data = json.load(f)["annotations"]["3"]
+        coco_a_ids = [ex["image_id"] for ex in coco_a_data]
+
+    coco_a_graphs = get_coco_a_graphs(  # noqa
+        coco_a_data=coco_a_data,
+        coco_a_ids=coco_a_ids,
+    )
+    # TODO get the features from it
+
+    # TODO figure out COCO-A and VG overlap by looking at COCO ids and VG ids
+
+    # Initialize spaCy model
+    nlp = spacy.load("en_core_web_trf")
+    # Prefer GPU if available
+    spacy.prefer_gpu()
+    # Set up the spacy amrlib extension
+    amrlib.setup_spacy_extension()
+
+    # Re-generate the following text-based graphs for the stimuli
+    for index, example in tqdm(stimuli_df.iterrows(), total=n_stimuli, desc="Processing stimuli"):
+        # Re-generate AMR graph
+        doc = nlp(example["sentences_raw"])
+        amr_graph = doc._.to_amr()[0]
+        _, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)
+        # stimuli_df.at[index, "amr_graph"] = amr_graph
+        # TODO get all the other features
+
+        # TODO Re-generate dependency parse tree
+        parse_tree_depth = walk_tree(next(doc.sents).root, 0)
+        stimuli_df.at[index, "parse_tree_depth"] = parse_tree_depth
+
+
 @click.group()
 def cli() -> None:
     """Visualize actions and text AMR graphs for selected stimuli."""
@@ -295,4 +382,5 @@ def cli() -> None:
 if __name__ == "__main__":
     cli.add_command(visualize_actions)
     cli.add_command(visualize_amr_text)
+    cli.add_command(get_summary_statistics)
     cli()
