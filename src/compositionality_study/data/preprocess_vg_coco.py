@@ -609,6 +609,39 @@ def create_coco_a_sub_graph(
     return g
 
 
+def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Create a dictionary with the graphs from the COCO-action annotations.
+
+    :param coco_a_data: List of COCO-A annotations
+    :type coco_a_data: List[Dict]
+    :param coco_a_ids: List of COCO-A image IDs
+    :type coco_a_ids: List[str]
+    :return: Dictionary with the number of actions and graph depth for each image ID
+    :rtype: Dict[str, Dict[str, Any]]
+    """
+    # Create a dictionary with the number of actions/graph depth from the COCO action annotations
+    coco_a_filtered = {k: {"n_coco_a_actions": 0, "coco_a_graph": None} for k in set(coco_a_ids)}
+
+    # Get all the COCO-A features
+    for coco_a_entry in tqdm(
+        coco_a_data,
+        desc="Adding COCO-A features",
+        total=len(coco_a_data),
+    ):
+        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])
+
+        if coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"]:
+            # If there is already a graph, add the entry to the existing graph
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"].add_edges_from(
+                create_coco_a_sub_graph(coco_a_entry).edges()
+            )
+        else:
+            # If there is no graph data for that image_id yet, create a new graph
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"] = create_coco_a_sub_graph(coco_a_entry)
+
+    return coco_a_filtered
+
+
 def get_coco_obj_seg_df(
     coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
@@ -663,40 +696,23 @@ def get_coco_obj_seg_df(
             coco_obj_seg_filtered[coco_id]["coco_person"] += 1  # type: ignore
 
     # Create a dictionary with the number of actions/graph depth from the COCO action annotations
-    coco_a_filtered = {k: {"n_coco_a_actions": 0, "coco_a_graph_depth": None} for k in set(coco_a_ids)}
-
-    # Get all the COCO-A features
-    for coco_a_entry in tqdm(
-        coco_a_data,
-        desc="Adding COCO-A features",
-        total=len(coco_a_data),
-    ):
-        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(  # type: ignore
-            coco_a_entry["visual_actions"]
-        )  # type: ignore
-
-        if coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"]:
-            # If there is already a graph, add the entry to the existing graph
-            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"].add_edges_from(  # type: ignore
-                create_coco_a_sub_graph(coco_a_entry).edges()
-            )
-        else:
-            # If there is no graph data for that image_id yet, create a new graph
-            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph_depth"] = create_coco_a_sub_graph(coco_a_entry)
+    coco_a_filtered = get_coco_a_graphs(coco_a_data, coco_a_ids)
 
     # Determine the depths of the graphs
     for coco_a_id, coco_a_graph in coco_a_filtered.items():
         max_longest_shortest_path = 0
         # Iterate over all connected components
-        for comp_nodes in nx.weakly_connected_components(coco_a_graph["coco_a_graph_depth"]):
+        for comp_nodes in nx.weakly_connected_components(coco_a_graph["coco_a_graph"]):
             # Get the longest shortest path for each connected component
-            subgraph = coco_a_graph["coco_a_graph_depth"].subgraph(comp_nodes)  # type: ignore
+            subgraph = coco_a_graph["coco_a_graph"].subgraph(comp_nodes)  # type: ignore
             shortest_path_lengths = dict(nx.all_pairs_shortest_path_length(subgraph))
             longest_path = max(max(shortest_path_lengths[source].values()) for source in comp_nodes)  # type: ignore
             max_longest_shortest_path = max(max_longest_shortest_path, longest_path)
 
         # Add the longest shortest path to the image id
         coco_a_filtered[coco_a_id]["coco_a_graph_depth"] = max_longest_shortest_path
+        # Remove the graph from the dictionary
+        coco_a_filtered[coco_a_id].pop("coco_a_graph")
 
     # Create dataframes from the dictionaries
     coco_obj_seg_df = pd.DataFrame.from_dict(
