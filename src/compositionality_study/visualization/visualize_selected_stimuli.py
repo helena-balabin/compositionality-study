@@ -8,11 +8,13 @@ from typing import Dict, List
 import amrlib
 import click
 import matplotlib.pyplot as plt
+import networkx as nx
 import pandas as pd
 import seaborn as sns
 import spacy
 from amrlib.graph_processing.amr_plot import AMRPlot
 from datasets import load_from_disk
+from loguru import logger
 from PIL import Image
 from spacy import Language
 from tqdm import tqdm
@@ -23,9 +25,13 @@ from compositionality_study.constants import (
     VG_COCO_OBJ_SEG_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
     VG_DIR,
+    VG_METADATA_FILE,
 )
-from compositionality_study.data.preprocess_vg_coco import get_coco_a_graphs
-from compositionality_study.utils import get_amr_graph_depth, walk_tree
+from compositionality_study.data.preprocess_vg_coco import (
+    determine_graph_complexity_measures,
+    get_coco_a_graphs,
+)
+from compositionality_study.utils import dependency_parse_to_nx, get_amr_graph_depth
 
 
 def load_coco_actions(
@@ -292,6 +298,52 @@ def visualize_amr_text(
             os.remove(os.path.join(output_dir, file))
 
 
+def plot_graph_statistics(
+    graphs: List[nx.DiGraph],
+    title: str,
+    output_path: str,
+):
+    """Plot statistics for the given graphs.
+
+    :param graphs: List of graphs
+    :type graphs: List[nx.DiGraph]
+    :param title: Title of the plot
+    :type title: str
+    :param output_path: Path to save the plot
+    :type output
+    """
+    num_nodes = [len(graph.nodes) for graph in graphs.values()]
+    num_edges = [len(graph.edges) for graph in graphs.values()]
+    longest_shortest_paths = [
+        (
+            max([max(nx.shortest_path_length(graph, source=n).values()) for n in graph.nodes()])
+            if nx.number_of_nodes(graph) > 0
+            else 0
+        )
+        for graph in graphs.values()
+    ]
+
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    fig.suptitle(title)
+
+    sns.histplot(num_nodes, kde=True, ax=axs[0], discrete=True)
+    axs[0].set_title("# Nodes")
+
+    sns.histplot(num_edges, kde=True, ax=axs[1], discrete=True)
+    axs[1].set_title("# Edges")
+
+    sns.histplot(
+        longest_shortest_paths,
+        kde=True,
+        ax=axs[2],
+        discrete=True,
+    )
+    axs[2].set_title("Depth")
+
+    plt.savefig(output_path)
+    plt.close()
+
+
 @click.command()
 @click.option(
     "--stimuli_dir",
@@ -311,10 +363,17 @@ def visualize_amr_text(
     default=COCO_A_ANNOT_FILE,
     help="Path to the COCO-A annotations file",
 )
+@click.option(
+    "--vg_metadata_file",
+    type=str,
+    default=VG_METADATA_FILE,
+    help="Path to the VG metadata file",
+)
 def get_summary_statistics(
     stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
     visualizations_dir: str = os.path.join(VG_DIR, "visualizations"),
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
+    vg_metadata_file: str = os.path.join(VG_METADATA_FILE),
 ):
     """Generate summary statistics plots for the selected stimuli.
 
@@ -334,6 +393,8 @@ def get_summary_statistics(
 
     # Generate a seaborn KDE plot of the textual and image complexity values
     sns.kdeplot(stimuli_df, x="amr_graph_depth", y="coco_a_graph_depth", cmap="Blues", fill=True)
+    # Draw a diagonal line from (0,0) to (max_depth, max_depth)
+    plt.plot([0, max(stimuli_df["amr_graph_depth"])], [0, max(stimuli_df["coco_a_graph_depth"])], color="blue")
     # And save it to a visualization directory
     plt.savefig(os.path.join(visualizations_dir, f"textual_vs_image_complexity_{n_stimuli}.png"))
 
@@ -341,17 +402,38 @@ def get_summary_statistics(
     # Re-generate COCO-A sub-graph
     # Get all the COCO-A features
     with open(coco_a_annot_file, "r") as f:
-        # Load the version of the dataset with an annotator agreement of 3 persons
         coco_a_data = json.load(f)["annotations"]["3"]
         coco_a_ids = [ex["image_id"] for ex in coco_a_data]
 
-    coco_a_graphs = get_coco_a_graphs(  # noqa
+    coco_a_graphs = get_coco_a_graphs(
         coco_a_data=coco_a_data,
         coco_a_ids=coco_a_ids,
     )
-    # TODO get the features from it
 
-    # TODO figure out COCO-A and VG overlap by looking at COCO ids and VG ids
+    # Get the overlap with visual genome
+    # Get the VG images that have COCO overlap
+    with open(vg_metadata_file, "r") as f:
+        vg_metadata = json.load(f)
+    vg = [
+        {
+            "cocoid": m["coco_id"],
+            "vg_image_id": m["image_id"],
+            "vg_url": m["url"],
+            "aspect_ratio": m["width"] / m["height"],
+        }
+        for m in vg_metadata
+        if m["coco_id"] is not None
+    ]
+    vg_df = pd.DataFrame(data=vg)
+    # Merge based on the COCO ID
+    vg_coco_overlap = stimuli_df.merge(vg_df, on="cocoid", how="inner")
+    # Log the number of stimuli that have COCO overlap
+    logger.info(f"Number of stimuli with VG-COCO overlap: {len(vg_coco_overlap)}")
+
+    vg_graphs, _ = determine_graph_complexity_measures(
+        image_ids=list(vg_coco_overlap["vg_image_id"]),
+        return_graphs=True,
+    )
 
     # Initialize spaCy model
     nlp = spacy.load("en_core_web_trf")
@@ -360,18 +442,57 @@ def get_summary_statistics(
     # Set up the spacy amrlib extension
     amrlib.setup_spacy_extension()
 
+    amr_graphs = {}
+    parse_trees = {}
+
     # Re-generate the following text-based graphs for the stimuli
-    for index, example in tqdm(stimuli_df.iterrows(), total=n_stimuli, desc="Processing stimuli"):
+    for _, example in tqdm(stimuli_df.iterrows(), total=n_stimuli, desc="Processing stimuli"):
         # Re-generate AMR graph
         doc = nlp(example["sentences_raw"])
         amr_graph = doc._.to_amr()[0]
         _, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)
-        # stimuli_df.at[index, "amr_graph"] = amr_graph
-        # TODO get all the other features
+        amr_graphs[example["cocoid"]] = amr_graph
 
-        # TODO Re-generate dependency parse tree
-        parse_tree_depth = walk_tree(next(doc.sents).root, 0)
-        stimuli_df.at[index, "parse_tree_depth"] = parse_tree_depth
+        # Re-generate dependency parse tree
+        parse_tree = dependency_parse_to_nx(doc.sents)
+        parse_trees[example["cocoid"]] = parse_tree
+
+    # Plot statistics for AMR graphs
+    plot_graph_statistics(
+        amr_graphs,
+        "AMR Graph Statistics",
+        os.path.join(visualizations_dir, "amr_graph_statistics.png"),
+    )
+
+    # Plot statistics for dependency parse trees
+    plot_graph_statistics(
+        parse_trees,
+        "Dependency Parse Tree Statistics",
+        os.path.join(visualizations_dir, "parse_tree_statistics.png"),
+    )
+
+    # Plot statistics for VG graphs
+    plot_graph_statistics(
+        vg_graphs,
+        f"VG Graph Statistics for {len(vg_graphs)} VG-COCO Overlapping Stimuli",
+        os.path.join(visualizations_dir, "vg_graph_statistics.png"),
+    )
+
+    # Plot statistics for COCO-A graphs
+    coco_a_graphs_flat = {k: v["coco_a_graph"] for k, v in coco_a_graphs.items()}
+    plot_graph_statistics(
+        coco_a_graphs_flat,
+        "COCO-A Graph Statistics",
+        os.path.join(visualizations_dir, "coco_a_graph_statistics.png"),
+    )
+
+    # Plot histogram for number of COCO actions
+    n_coco_actions = [v["n_coco_a_actions"] for v in coco_a_graphs.values()]
+    plt.figure(figsize=(6, 6))
+    sns.histplot(n_coco_actions, kde=True, discrete=True)
+    plt.title("Number of COCO Actions")
+    plt.savefig(os.path.join(visualizations_dir, "n_coco_actions_histogram.png"))
+    plt.close()
 
 
 @click.group()

@@ -481,6 +481,7 @@ def determine_graph_complexity_measures(
     vg_objects_file: str = VG_OBJECTS_FILE,
     vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
     image_ids: Optional[List[str]] = None,
+    return_graphs: bool = False,
 ) -> List[Dict[str, Any]]:
     """Characterize the graph complexity of the VG + COCO overlap dataset for the given image ids.
 
@@ -490,6 +491,8 @@ def determine_graph_complexity_measures(
     :type vg_relationships_file: str
     :param image_ids: Optional list of image ids to characterize the graph complexity for, defaults to None
     :type image_ids: Optional[List[str]]
+    :param return_graphs: Whether to return the graphs as well, defaults to False
+    :type return_graphs: bool
     :return: List of dictionaries with the graph complexity measures and image id
     :rtype: List[Dict[str, Any]]
     """
@@ -506,6 +509,7 @@ def determine_graph_complexity_measures(
 
     # Process each VG image/graph into a networkx graph
     graph_measures = []
+    graphs = {}
     for obj, rel in tqdm(
         zip(vg_objects, vg_relationships),
         desc="Processing rels/objs as networkx graphs",
@@ -522,6 +526,8 @@ def determine_graph_complexity_measures(
                 rel_id=r["relationship_id"],
             )
 
+        # Append the graph to the dict
+        graphs[obj["image_id"]] = graph
         # Filter for relationships that have at least one living being as subject/object
         filtered_rels = [
             r
@@ -572,7 +578,10 @@ def determine_graph_complexity_measures(
         # Append them to the list
         graph_measures.append(measures)
 
-    return graph_measures
+    if return_graphs:
+        return graphs, graph_measures
+    else:
+        return graph_measures
 
 
 def create_coco_a_sub_graph(
@@ -609,15 +618,15 @@ def create_coco_a_sub_graph(
     return g
 
 
-def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[str, nx.DiGraph]:
     """Create a dictionary with the graphs from the COCO-action annotations.
 
     :param coco_a_data: List of COCO-A annotations
     :type coco_a_data: List[Dict]
     :param coco_a_ids: List of COCO-A image IDs
     :type coco_a_ids: List[str]
-    :return: Dictionary with the number of actions and graph depth for each image ID
-    :rtype: Dict[str, Dict[str, Any]]
+    :return: Dictionary with the graphs for each image ID
+    :rtype: Dict[str, nx.DiGraph]
     """
     # Create a dictionary with the number of actions/graph depth from the COCO action annotations
     coco_a_filtered = {k: {"n_coco_a_actions": 0, "coco_a_graph": None} for k in set(coco_a_ids)}

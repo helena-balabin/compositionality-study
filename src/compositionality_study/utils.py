@@ -111,6 +111,32 @@ def derive_text_depth_features(
     return examples | result
 
 
+def dependency_parse_to_nx(
+    sents: List[spacy.tokens.doc.Doc],
+):
+    """
+    Converts spaCy sentence objects into a NetworkX directed graph representing the dependency parse tree.
+
+    :param sents: A list of spaCy sentence objects
+    :type sents: List[spacy.tokens.doc.Doc]
+    :return: A NetworkX directed graph representing the dependency parse tree
+    :rtype: nx.DiGraph
+    """
+    # Create a directed graph
+    graph = nx.DiGraph()
+
+    # Iterate over sentences
+    for sent in sents:
+        for token in sent:
+            # Add node for the token with attributes
+            graph.add_node(token.i, text=token.text, pos=token.pos_, tag=token.tag_)
+            # Add edge from head to child (if not the root token)
+            if token.head != token:  # Avoid self-loop for the root
+                graph.add_edge(token.head.i, token.i, dep=token.dep_)
+
+    return graph
+
+
 def flatten_examples(
     examples: Dict[str, List],
     flatten_col_names: List[str] = ["sentences_raw", "sentids"],  # noqa
