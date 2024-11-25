@@ -61,7 +61,7 @@ def map_conditions(
 @click.option("--sent_len_tol", type=int, default=2)
 @click.option("--verbs", type=bool, default=False)
 @click.option("--img_comp", type=float, default=0.5)
-@click.option("--img_comp_tol", type=float, default=0.15)
+@click.option("--img_comp_tol", type=float, default=0.2)
 @click.option("--asp_min", type=float, default=1.0)
 @click.option("--asp_max", type=float, default=2.0)
 @click.option("--text_feature", type=str, default="amr_graph_depth")
@@ -70,7 +70,7 @@ def map_conditions(
 @click.option("--filter_text_on_images", type=bool, default=False)
 @click.option("--filter_by_person", type=bool, default=True)
 @click.option("--n_stimuli", type=int, default=378)
-@click.option("--buffer_stimuli_fraction", type=float, default=0.1)
+@click.option("--buffer_stimuli_fraction", type=float, default=0.0)
 @click.option("--n_most_frequent_categories", type=int, default=8)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
@@ -78,7 +78,7 @@ def select_stimuli(
     sent_len_tol: int = 2,
     verbs: bool = False,
     img_comp: float = 0.5,
-    img_comp_tol: float = 0.15,
+    img_comp_tol: float = 0.2,
     asp_min: float = 1.0,
     asp_max: float = 2.0,
     text_feature: str = "amr_graph_depth",
@@ -87,7 +87,7 @@ def select_stimuli(
     filter_text_on_images: bool = False,
     filter_by_person: bool = True,
     n_stimuli: int = 378,
-    buffer_stimuli_fraction: float = 0.1,
+    buffer_stimuli_fraction: float = 0.0,
     n_most_frequent_categories: int = 8,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
@@ -104,7 +104,7 @@ def select_stimuli(
     :type verbs: bool
     :param img_comp: The image complexity to control for (controlled variable), defaults to 0.5
     :type img_comp: float
-    :param img_comp_tol: The tolerance for the image complexity (+- img_comp_tol within img_comp), defaults to 0.15
+    :param img_comp_tol: The tolerance for the image complexity (+- img_comp_tol within img_comp), defaults to 0.2
     :type img_comp_tol: float
     :param asp_min: The min aspect ratio of the images to select stimuli for, defaults to 1.0
     :type asp_min: float
@@ -126,12 +126,12 @@ def select_stimuli(
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
-        0.1, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
+        0.0, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
     :param n_most_frequent_categories: The number of most frequent categories to select stimuli for the object
         condition, defaults to 8
     :type n_most_frequent_categories: int
     """
-    # Apply a buffer to the number of stimuli to select
+    # Apply a buffer to the number of stimuli to select (default = no buffer)
     n_stimuli = int(n_stimuli * (1 + buffer_stimuli_fraction))
     logger.info(f"Selecting {n_stimuli} stimuli (including buffer).")
 
@@ -270,14 +270,19 @@ def select_stimuli(
         distances[np.isin(image_ids, list(used_image_ids))] = np.inf
 
         # Select best remaining point
-        best_idx = np.argmin(distances)
-        best_idx = int(best_idx)
+        best_idx = int(np.argmin(distances))
+        if distances[best_idx] == np.inf:
+            # Throw an error if we run out of images
+            raise ValueError(f"Ran out of images to select from (max {len(used_image_ids)}).")
+
         vg_n_stim.append(vg_ds[best_idx])
         used_image_ids.add(image_ids[best_idx])
 
     vg_ds_n_stimuli = datasets.Dataset.from_dict(
         {k: [example[k] for example in vg_n_stim] for k in vg_ds.features.keys()}
     )
+    # Assert that the number of unique image ids is equal to the number of stimuli
+    assert len(set(vg_ds_n_stimuli["imgid"])) == n_stimuli
 
     # Check that the number of people is not correlated with the complexities
     # Get the correlation between the number of people and the complexities
