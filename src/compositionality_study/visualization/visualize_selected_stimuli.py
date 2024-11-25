@@ -409,6 +409,8 @@ def get_summary_statistics(
         coco_a_data=coco_a_data,
         coco_a_ids=coco_a_ids,
     )
+    # Filter by those present in the stimuli
+    coco_a_graphs = {k: v for k, v in coco_a_graphs.items() if k in stimuli_df["cocoid"].values}
 
     # Get the overlap with visual genome
     # Get the VG images that have COCO overlap
