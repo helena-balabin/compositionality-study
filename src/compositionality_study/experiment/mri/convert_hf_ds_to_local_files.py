@@ -12,17 +12,12 @@ from datasets import load_from_disk
 from PIL import Image
 from tqdm import tqdm
 
-from compositionality_study.constants import (  # noqa
+from compositionality_study.constants import (
+    THINGS_IMAGE_DIR,
     VG_COCO_LOCAL_STIMULI_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
-    VG_OBJ_REL_IDX_FILE,
-    VG_OBJECTS_FILE,
-    VG_RELATIONSHIPS_FILE,
 )
-from compositionality_study.experiment.mri.create_fourier_scrambled_images import (
-    fft_phase_scrambling,
-)
-from compositionality_study.utils import apply_gamma_correction, draw_objs_and_rels  # noqa
+from compositionality_study.utils import apply_gamma_correction
 
 # Set a random seed for reproducibility
 random.seed(42)
@@ -67,9 +62,7 @@ def create_balanced_conditions(
             group[new_group_key] = np.tile(run_order, len(group) // effective_group_size)
         else:
             effective_group_size = min(n_groups, len(group))
-            group[new_group_key] = np.tile(
-                np.arange(effective_group_size), len(group) // effective_group_size
-            )
+            group[new_group_key] = np.tile(np.arange(effective_group_size), len(group) // effective_group_size)
 
         stimuli_rep_dfs[i] = group
 
@@ -100,6 +93,7 @@ def estimate_letter_frequency(
 def generate_non_word_sentence(
     input_sentence: str,
     letter_frequencies: List[float],
+    consonant_letter_string: bool = False,
 ) -> str:
     """Generate nonword from a sentence by sampling letters according to their frequency.
 
@@ -107,6 +101,8 @@ def generate_non_word_sentence(
     :type input_sentence: str
     :param letter_frequencies: The letter frequencies to use.
     :type letter_frequencies: List[float]
+    :param consonant_letter_string: Whether to generate a nonword with only consonants.
+    :type consonant_letter_string: bool
     :return: The pseudoword sentence.
     :rtype: str
     """
@@ -118,7 +114,9 @@ def generate_non_word_sentence(
     for word in words:
         # Sample letters according to their frequency
         letters = random.choices(  # noqa
-            string.ascii_lowercase, weights=letter_frequencies, k=len(word)
+            ["x"] if consonant_letter_string else string.ascii_lowercase,
+            weights=[1.0] if consonant_letter_string else letter_frequencies,
+            k=len(word),
         )  # noqa
 
         # Add the non word to the list
@@ -131,19 +129,17 @@ def generate_non_word_sentence(
 @click.command()
 @click.option("--hf_stimuli_dir", default=VG_COCO_SELECTED_STIMULI_DIR, type=str)
 @click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
+@click.option("--things_stimuli_dir", default=THINGS_IMAGE_DIR, type=str)
 @click.option("--text_feature", default="amr_graph_depth", type=str)
 @click.option("--delete_existing", default=True, type=bool)
-@click.option("--random_seed", default=42, type=int)
-@click.option("--only_control", default=False, type=bool, is_flag=True)
-@click.option("--control_fraction", default=0.2, type=float)
+@click.option("--random_state", default=42, type=int)
 def convert_hf_dataset_to_local_stimuli(
     hf_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    things_stimuli_dir: str = THINGS_IMAGE_DIR,
     text_feature: str = "amr_graph_depth",
     delete_existing: bool = True,
-    random_seed: int = 42,
-    only_control: bool = False,
-    control_fraction: float = 0.2,
+    random_state: int = 42,
 ) -> pd.DataFrame:
     """Convert the stimuli from the huggingface dataset to locally stimuli (images/text).
 
@@ -151,93 +147,89 @@ def convert_hf_dataset_to_local_stimuli(
     :type hf_stimuli_dir: str
     :param local_stimuli_dir: The directory to save the locally stimuli to.
     :type local_stimuli_dir: str
+    :param things_stimuli_dir: The directory containing the THINGS dataset images.
+    :type things_stimuli_dir: str
     :param text_feature: The text feature to use for the description of the local stimuli.
     :type text_feature: str
     :param delete_existing: Whether to delete the existing stimuli in the local stimuli directory.
     :type delete_existing: bool
-    :param random_seed: The random seed to use for reproducibility.
-    :type random_seed: int
-    :param only_control: Whether to only generate the control stimuli (scrambled images and non word sentences), assumes
-        that the stimuli have already been downloaded.
-    :type only_control: bool
-    :param control_fraction: The fraction of stimuli to use for the control condition.
-    :type control_fraction: float
+    :param random_state: The random state to use for reproducibility.
+    :type random_state: int
     :return: A dataframe containing the text and path to the image and image ID.
     :rtype: pd.DataFrame
     """
     # Load the dataset
     dataset = load_from_disk(hf_stimuli_dir)
     # Initialize a dataframe that contains the text, path to the image, image ID and the condition
-    stimuli_df = pd.DataFrame(columns=["text", "img_path", "img_id", "complexity"])
+    stimuli_df = pd.DataFrame(columns=["text", "img_path", "img_id"])
 
-    if not only_control:
-        # Create the output directory if it does not exist
-        if not os.path.exists(local_stimuli_dir):
-            os.makedirs(local_stimuli_dir)
-        # Delete the existing stimuli if specified
-        if delete_existing:
-            for f in os.listdir(local_stimuli_dir):  # type: ignore
-                os.remove(os.path.join(local_stimuli_dir, f))  # type: ignore
+    # Create the output directory if it does not exist
+    if not os.path.exists(local_stimuli_dir):
+        os.makedirs(local_stimuli_dir)
+    # Delete the existing stimuli if specified
+    if delete_existing:
+        for f in os.listdir(local_stimuli_dir):  # type: ignore
+            os.remove(os.path.join(local_stimuli_dir, f))  # type: ignore
 
-        # Iterate through the dataset and load the images
-        for ex in tqdm(dataset, desc="Loading images"):
-            # Load the image
-            img = ex["img"]
-            # Get the aspect ratio of the image
-            aspect_ratio = img.size[0] / img.size[1]
-            output_name = f"{ex['sentids']}_{ex['complexity']}"
+    # Iterate through the dataset and load the images
+    for ex in tqdm(dataset, desc="Loading images"):
+        # Load the image
+        img = ex["img"]
+        # Get the aspect ratio of the image
+        aspect_ratio = img.size[0] / img.size[1]
+        output_name = f"{ex['sentids']}"
 
-            # Apply gamma correction to the image
-            img = apply_gamma_correction(img)
+        # Apply gamma correction to the image
+        img = apply_gamma_correction(img)
 
-            # Save the images to disk
-            img.save(os.path.join(local_stimuli_dir, output_name + ".png"))
+        # Save the images to disk
+        img.save(os.path.join(local_stimuli_dir, output_name + ".png"))
 
-            # Add the text and image path to the dataframe
-            stimuli_df = pd.concat(
-                [
-                    stimuli_df,
-                    pd.DataFrame(
-                        {
-                            "text": ex["sentences_raw"],
-                            "img_path": output_name + ".png",
-                            "img_id": f"{ex['sentids']}",
-                            "complexity": ex["complexity"],
-                            text_feature: ex[text_feature],
-                            "coco_a_graph_depth": ex["coco_a_graph_depth"],
-                            "cocoid": ex["cocoid"],
-                            "coco_person": ex["coco_person"],
-                            "aspect_ratio": aspect_ratio,
-                        },
-                        index=[0],
-                    ),
-                ],
-                ignore_index=True,
-            )
-    else:
-        # Load the existing stimuli_df
-        stimuli_df = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
-
-    # Generate null condition stimuli by scrambling control_fraction of the images for each complexity condition
-    # Take a subset of the stimuli, stratified by complexity
-    stimuli_df_subset = stimuli_df.groupby("complexity").sample(
-        frac=control_fraction, random_state=random_seed
-    )
-
-    # Estimate the letter frequencies
-    letter_frequencies = estimate_letter_frequency(stimuli_df_subset["text"])
-
-    for ex in tqdm(stimuli_df_subset.itertuples(), desc="Generating null condition stimuli"):
-        # Create a scrambled version of the image and turn it into a PIL image
-        scrambled_img = Image.fromarray(
-            fft_phase_scrambling(os.path.join(local_stimuli_dir, ex.img_path)),
+        # Add the text and image path to the dataframe
+        stimuli_df = pd.concat(
+            [
+                stimuli_df,
+                pd.DataFrame(
+                    {
+                        "text": ex["sentences_raw"],
+                        "img_path": output_name + ".png",
+                        "img_id": f"{ex['sentids']}",
+                        text_feature: ex[text_feature],
+                        "coco_a_graph_depth": ex["coco_a_graph_depth"],
+                        "cocoid": ex["cocoid"],
+                        "coco_person": ex["coco_person"],
+                        "aspect_ratio": aspect_ratio,
+                    },
+                    index=[0],
+                ),
+            ],
+            ignore_index=True,
         )
-        sc_img_output_path = f"scrambled_{ex.img_id}.png"
-        # Write the scrambled image to disk
-        scrambled_img.save(os.path.join(local_stimuli_dir, sc_img_output_path))
+
+    # Generate null condition stimuli based on the images in the THINGS dataset
+    # Estimate the letter frequencies
+    letter_frequencies = estimate_letter_frequency(stimuli_df["text"])
+    # Load all the paths in the THINGS dataset
+    things_img_paths = os.listdir(things_stimuli_dir)
+    # Get a random subset of the texts in stimuli_df of the same length as the THINGS dataset
+    texts = list(stimuli_df.sample(n=len(things_img_paths), random_state=random_state)["text"].values)
+
+    # Get the "control" stimuli
+    for things_img_path, text in tqdm(zip(things_img_paths, texts), desc="Generating null condition stimuli"):
+        # Save the images to disk
+        img = Image.open(os.path.join(things_stimuli_dir, things_img_path))
+        img.save(os.path.join(local_stimuli_dir, things_img_path))
+
+        # Get the thing by stripping the last 8 characters and replacing the underscores with spaces
+        thing = things_img_path[:-8].replace("_", " ")
 
         # Generate a scrambled (non word) sentence as well
-        non_word_sentence = generate_non_word_sentence(ex.text, letter_frequencies)
+        non_word_sentence = generate_non_word_sentence(text, letter_frequencies, consonant_letter_string=True)
+        # Replace the middle word with the THING
+        non_word_sentence = non_word_sentence.split(" ")
+        non_word_sentence[len(non_word_sentence) // 2] = thing
+        # Join the words back together
+        non_word_sentence = " ".join(non_word_sentence)
         # Add the info to the dataframe
         stimuli_df = pd.concat(
             [
@@ -245,9 +237,8 @@ def convert_hf_dataset_to_local_stimuli(
                 pd.DataFrame(
                     {
                         "text": non_word_sentence,
-                        "img_path": sc_img_output_path,
-                        "img_id": ex.img_id,
-                        "complexity": f"scrambled_{ex.complexity}",
+                        "img_path": things_img_path,
+                        "img_id": things_img_path.strip(".jpg"),
                     },
                     index=[0],
                 ),
@@ -264,20 +255,20 @@ def convert_hf_dataset_to_local_stimuli(
 @click.command()
 @click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
 @click.option("--n_subjects", default=48, type=int)
-@click.option("--n_runs", default=8, type=int)
+@click.option("--n_runs", default=12, type=int)
 @click.option("--n_run_blocks", default=6, type=int)
 @click.option("--n_repetitions", default=3, type=int)
 @click.option("--duration", default=3.0, type=float)
-@click.option("--isi", default=5.5, type=float)
+@click.option("--isi", default=1.0, type=float)
 @click.option("--dummy_scan_duration", default=8.0, type=float)
 def generate_subject_specific_stimulus_files(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     n_subjects: int = 48,
-    n_runs: int = 8,
+    n_runs: int = 12,
     n_run_blocks: int = 6,
     n_repetitions: int = 3,
     duration: float = 3.0,
-    isi: float = 5.5,
+    isi: float = 1.0,
     dummy_scan_duration: float = 8.0,
 ) -> None:
     """Generate subject specific stimulus files with the correct randomization and repetitions across runs.
@@ -340,18 +331,14 @@ def generate_subject_specific_stimulus_files(
     )
 
     # Iterate through the subjects and generate the stimulus files
-    for subject in tqdm(
-        range(1, n_subjects + 1), desc="Generating subject specific stimulus files"
-    ):
+    for subject in tqdm(range(1, n_subjects + 1), desc="Generating subject specific stimulus files"):
         # Create a copy of the stimuli dataframe
         subj_stimuli_rep_df = stimuli_rep_df_rd
 
         # Randomly change the run order by mapping the run numbers to a random permutation of the run numbers, using
         # the subject number as the random seed
         new_run_order = np.random.RandomState(subject).permutation(np.arange(n_runs))
-        subj_stimuli_rep_df["run"] = subj_stimuli_rep_df["run"].map(
-            lambda x: new_run_order[x]  # noqa
-        )
+        subj_stimuli_rep_df["run"] = subj_stimuli_rep_df["run"].map(lambda x: new_run_order[x])  # noqa
 
         # Within each run, create blocks of stimuli
         subj_stimuli_rep_df = (
@@ -381,9 +368,7 @@ def generate_subject_specific_stimulus_files(
 
         # Add the onset and duration columns
         # The onset is relative to the start of the run and starts with the dummy scan duration
-        subj_stimuli_rep_df["onset"] = np.arange(len(subj_stimuli_rep_df)) % (
-            len(subj_stimuli_rep_df) // n_runs
-        )
+        subj_stimuli_rep_df["onset"] = np.arange(len(subj_stimuli_rep_df)) % (len(subj_stimuli_rep_df) // n_runs)
         subj_stimuli_rep_df["onset"] *= duration + isi
         subj_stimuli_rep_df["onset"] += dummy_scan_duration
         subj_stimuli_rep_df["duration"] = duration
