@@ -204,7 +204,8 @@ def visualize_actions(
 
         # Get the PIL image from the dataset
         img = item["img"]
-        output_path = os.path.join(output_dir, f"{image_id}_image.png")
+        image_output_id = item["sentids"]
+        output_path = os.path.join(output_dir, f"{image_output_id}_image.png")
 
         try:
             visualize_image_with_actions(
@@ -287,7 +288,7 @@ def visualize_amr_text(
         plot = AMRPlot()
         plot.build_from_graph(amr_graph, allow_deinvert=True)
         # Save the plot
-        output_path = os.path.join(output_dir, f"{ex['cocoid']}_text")
+        output_path = os.path.join(output_dir, f"{ex['sentids']}_text")
         graph = plot.graph
         graph.graph_attr["label"] = f"Depth for '{ex['sentences_raw']}': {ex['amr_graph_depth']}"
         graph.render(output_path, format="png", cleanup=True)
