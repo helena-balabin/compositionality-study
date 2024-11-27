@@ -8,7 +8,6 @@ from typing import Any, Dict
 import click
 import datasets
 import numpy as np
-import pandas as pd
 from datasets import load_from_disk
 from loguru import logger
 from PIL import Image
@@ -69,9 +68,9 @@ def map_conditions(
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=False)
 @click.option("--filter_by_person", type=bool, default=True)
-@click.option("--n_stimuli", type=int, default=378)
-@click.option("--buffer_stimuli_fraction", type=float, default=0.0)
-@click.option("--n_most_frequent_categories", type=int, default=8)
+@click.option("--person_count", type=int, default=3)
+@click.option("--n_stimuli", type=int, default=252)
+@click.option("--buffer_stimuli_fraction", type=float, default=0.1)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
     sent_len: int = 10,
@@ -86,9 +85,9 @@ def select_stimuli(
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = False,
     filter_by_person: bool = True,
-    n_stimuli: int = 378,
-    buffer_stimuli_fraction: float = 0.0,
-    n_most_frequent_categories: int = 8,
+    person_count: int = 3,
+    n_stimuli: int = 252,
+    buffer_stimuli_fraction: float = 0.1,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
 
@@ -123,16 +122,17 @@ def select_stimuli(
     :param filter_by_person: Whether to filter out images that do not contain any people based on the COCO annotation
         data, defaults to True
     :type filter_by_person: bool
+    :param person_count: The number of people to filter for, defaults to 3
+    :type person_count: int
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
-        0.0, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
-    :param n_most_frequent_categories: The number of most frequent categories to select stimuli for the object
-        condition, defaults to 8
-    :type n_most_frequent_categories: int
+        0.1, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
     """
-    # Apply a buffer to the number of stimuli to select (default = no buffer)
+    # Apply a buffer to the number of stimuli to select
     n_stimuli = int(n_stimuli * (1 + buffer_stimuli_fraction))
+    # Make sure it's an even number
+    n_stimuli = n_stimuli if n_stimuli % 2 == 0 else n_stimuli + 1
     logger.info(f"Selecting {n_stimuli} stimuli (including buffer).")
 
     # Load the dataset
@@ -141,12 +141,6 @@ def select_stimuli(
     logger.info(f"Loaded the preprocessed VG + COCO overlap dataset with {len(vg_ds)} entries.")
     # Set a random seed for reproducibility
     np.random.seed(42)
-
-    # Calculate min/max depth values for the AMR tree depth and the COCO action graph depth
-    dep_min = int(pd.Series(vg_ds[text_feature]).min())
-    dep_max = int(pd.Series(vg_ds[text_feature]).max())
-    ac_min = int(pd.Series(vg_ds[graph_feature]).min())
-    ac_max = int(pd.Series(vg_ds[graph_feature]).max())
 
     # Filter by sentence length (within a tolerance)
     vg_ds = vg_ds.filter(
@@ -165,16 +159,14 @@ def select_stimuli(
         )
         logger.info(f"Controlled the dataset for captions with verbs, {len(vg_ds)} entries remain.")
 
-    # Filter by person based on the mean number of people in the dataset
+    # Filter by person based on the desired number of people in the dataset
     if filter_by_person:
-        mean_person_count = int(np.mean(vg_ds["coco_person"]))
         vg_ds = vg_ds.filter(
-            lambda x: np.abs(mean_person_count - x["coco_person"]) <= 1,
+            lambda x: np.abs(person_count - x["coco_person"]) <= 1,
             num_proc=24,
         )
         logger.info(
-            f"Controlled the dataset for the number of people {mean_person_count} +- 1, "
-            f"{len(vg_ds)} entries remain."
+            f"Controlled the dataset for the number of people {person_count} +- 1, " f"{len(vg_ds)} entries remain."
         )
 
     # Filter by image complexity (within a tolerance)
@@ -237,46 +229,39 @@ def select_stimuli(
         f"entries remain."
     )
 
-    # Map the conditions to the examples
-    vg_ds = vg_ds.map(
-        lambda x: map_conditions(
-            x,
-            text_feature=text_feature,
-            graph_feature=graph_feature,
-            min_text_feature_depth=dep_min,
-            max_text_feature_depth=dep_max,
-            min_n_coco_a_actions=ac_min,
-            max_n_coco_a_actions=ac_max,
-        ),
-        num_proc=24,
-    )
-
     # Pre-compute arrays for faster access
-    text_complexities = np.array(vg_ds["textual_complexity_param"])
-    img_complexities = np.array(vg_ds["img_act_complexity_param"])
+    text_complexities = np.array(vg_ds[text_feature])
+    img_complexities = np.array(vg_ds[graph_feature])
     image_ids = np.array(vg_ds["imgid"])
 
-    # Create evenly spaced points along the diagonal from (0,0) to (1,1)
-    complexity_points = np.linspace(0, 1, n_stimuli)
+    # Create target complexity points (1,1) and (2,2)
+    target_complexities = [(1, 1), (2, 2)]
+    n_each = n_stimuli // len(target_complexities)
 
     vg_n_stim = []
-    used_image_ids = set()
+    for target_text, target_img in target_complexities:
+        # Filter for the target complexities
+        filtered_indices = np.where((text_complexities == target_text) & (img_complexities == target_img))[0]
 
-    for target_complexity in complexity_points:
-        # Calculate distances to target point
-        distances = np.sqrt((text_complexities - target_complexity) ** 2 + (img_complexities - target_complexity) ** 2)
+        if len(filtered_indices) < n_each:
+            raise ValueError(f"Not enough stimuli with complexities ({target_text}, {target_img}).")
 
-        # Mask out already used images using vectorized operation
-        distances[np.isin(image_ids, list(used_image_ids))] = np.inf
+        # Exclude duplicates based on imgid
+        unique_imgids = set()
+        unique_filtered_indices = []
+        for idx in filtered_indices:
+            imgid = image_ids[idx]
+            if imgid not in unique_imgids:
+                unique_imgids.add(imgid)
+                unique_filtered_indices.append(idx)
 
-        # Select best remaining point
-        best_idx = int(np.argmin(distances))
-        if distances[best_idx] == np.inf:
-            # Throw an error if we run out of images
-            raise ValueError(f"Ran out of images to select from (max {len(used_image_ids)}).")
+        if len(unique_filtered_indices) < n_each:
+            raise ValueError(f"Not enough unique stimuli with complexities ({target_text}, {target_img}).")
 
-        vg_n_stim.append(vg_ds[best_idx])
-        used_image_ids.add(image_ids[best_idx])
+        selected_indices = np.random.choice(unique_filtered_indices, n_each, replace=False)
+
+        for idx in selected_indices:
+            vg_n_stim.append(vg_ds[int(idx)])
 
     vg_ds_n_stimuli = datasets.Dataset.from_dict(
         {k: [example[k] for example in vg_n_stim] for k in vg_ds.features.keys()}
@@ -286,8 +271,8 @@ def select_stimuli(
 
     # Check that the number of people is not correlated with the complexities
     # Get the correlation between the number of people and the complexities
-    corr_text, p_text = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli["textual_complexity_param"])
-    corr_img, p_img = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli["img_act_complexity_param"])
+    corr_text, p_text = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli[text_feature])
+    corr_img, p_img = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli[graph_feature])
     logger.info(f"Correlation between the number of people and the textual complexity: {corr_text}")
     logger.info(f"Text correlation p-value: {p_text}")
     logger.info(f"Correlation between the number of people and the image complexity: {corr_img}")
@@ -307,20 +292,12 @@ def select_stimuli(
     for cat in unique_coco_categories:
         cat_indicator = [1 if cat in x["coco_categories"] else 0 for x in vg_ds_n_stimuli]
         category_counter[cat] = np.sum(cat_indicator)
-        corr_text, p_text = spearmanr(cat_indicator, vg_ds_n_stimuli["textual_complexity_param"])
-        corr_img, p_img = spearmanr(cat_indicator, vg_ds_n_stimuli["img_act_complexity_param"])
+        corr_text, p_text = spearmanr(cat_indicator, vg_ds_n_stimuli[text_feature])
+        corr_img, p_img = spearmanr(cat_indicator, vg_ds_n_stimuli[graph_feature])
         logger.info(f"Correlation between the presence of category {cat} and the textual complexity: {corr_text}")
         logger.info(f"Text correlation p-value: {p_text}")
         logger.info(f"Correlation between the presence of category {cat} and the image complexity: {corr_img}")
         logger.info(f"Image correlation p-value: {p_img}")
-
-    # 3. Get the n most frequent categories
-    most_frequent_categories = sorted(
-        category_counter,
-        key=category_counter.get,
-        reverse=True,
-    )[:n_most_frequent_categories]
-    logger.info(f"The {n_most_frequent_categories} most frequent categories are: {most_frequent_categories}")
 
     # Also get a counter on the image complexity and the textual complexity values
     logger.info(f"Textual complexity values: {Counter(vg_ds_n_stimuli[text_feature])}")
