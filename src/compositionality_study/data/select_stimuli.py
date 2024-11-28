@@ -308,7 +308,7 @@ def select_stimuli(
     vg_ds_n_stimuli.save_to_disk(
         os.path.join(
             output_dir,
-            f"{file_prefix}coco_{n_stimuli}_stimuli_parametric",
+            f"{file_prefix}coco_{n_stimuli}_stimuli",
         )
     )
 
