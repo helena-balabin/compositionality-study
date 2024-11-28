@@ -9,14 +9,9 @@ import click
 import numpy as np
 import pandas as pd
 from datasets import load_from_disk
-from PIL import Image
 from tqdm import tqdm
 
-from compositionality_study.constants import (
-    THINGS_IMAGE_DIR,
-    VG_COCO_LOCAL_STIMULI_DIR,
-    VG_COCO_SELECTED_STIMULI_DIR,
-)
+from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_SELECTED_STIMULI_DIR
 from compositionality_study.utils import apply_gamma_correction
 
 # Set a random seed for reproducibility
@@ -129,17 +124,13 @@ def generate_non_word_sentence(
 @click.command()
 @click.option("--hf_stimuli_dir", default=VG_COCO_SELECTED_STIMULI_DIR, type=str)
 @click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
-@click.option("--things_stimuli_dir", default=THINGS_IMAGE_DIR, type=str)
 @click.option("--text_feature", default="amr_graph_depth", type=str)
 @click.option("--delete_existing", default=True, type=bool)
-@click.option("--random_state", default=42, type=int)
 def convert_hf_dataset_to_local_stimuli(
     hf_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
-    things_stimuli_dir: str = THINGS_IMAGE_DIR,
     text_feature: str = "amr_graph_depth",
     delete_existing: bool = True,
-    random_state: int = 42,
 ) -> pd.DataFrame:
     """Convert the stimuli from the huggingface dataset to locally stimuli (images/text).
 
@@ -147,14 +138,10 @@ def convert_hf_dataset_to_local_stimuli(
     :type hf_stimuli_dir: str
     :param local_stimuli_dir: The directory to save the locally stimuli to.
     :type local_stimuli_dir: str
-    :param things_stimuli_dir: The directory containing the THINGS dataset images.
-    :type things_stimuli_dir: str
     :param text_feature: The text feature to use for the description of the local stimuli.
     :type text_feature: str
     :param delete_existing: Whether to delete the existing stimuli in the local stimuli directory.
     :type delete_existing: bool
-    :param random_state: The random state to use for reproducibility.
-    :type random_state: int
     :return: A dataframe containing the text and path to the image and image ID.
     :rtype: pd.DataFrame
     """
@@ -199,46 +186,7 @@ def convert_hf_dataset_to_local_stimuli(
                         "cocoid": ex["cocoid"],
                         "coco_person": ex["coco_person"],
                         "aspect_ratio": aspect_ratio,
-                    },
-                    index=[0],
-                ),
-            ],
-            ignore_index=True,
-        )
-
-    # Generate null condition stimuli based on the images in the THINGS dataset
-    # Estimate the letter frequencies
-    letter_frequencies = estimate_letter_frequency(stimuli_df["text"])
-    # Load all the paths in the THINGS dataset
-    things_img_paths = os.listdir(things_stimuli_dir)
-    # Get a random subset of the texts in stimuli_df of the same length as the THINGS dataset
-    texts = list(stimuli_df.sample(n=len(things_img_paths), random_state=random_state)["text"].values)
-
-    # Get the "control" stimuli
-    for things_img_path, text in tqdm(zip(things_img_paths, texts), desc="Generating null condition stimuli"):
-        # Save the images to disk
-        img = Image.open(os.path.join(things_stimuli_dir, things_img_path))
-        img.save(os.path.join(local_stimuli_dir, things_img_path))
-
-        # Get the thing by stripping the last 8 characters and replacing the underscores with spaces
-        thing = things_img_path[:-8].replace("_", " ")
-
-        # Generate a scrambled (non word) sentence as well
-        non_word_sentence = generate_non_word_sentence(text, letter_frequencies, consonant_letter_string=True)
-        # Replace the middle word with the THING
-        non_word_sentence = non_word_sentence.split(" ")
-        non_word_sentence[len(non_word_sentence) // 2] = thing
-        # Join the words back together
-        non_word_sentence = " ".join(non_word_sentence)
-        # Add the info to the dataframe
-        stimuli_df = pd.concat(
-            [
-                stimuli_df,
-                pd.DataFrame(
-                    {
-                        "text": non_word_sentence,
-                        "img_path": things_img_path,
-                        "img_id": things_img_path.strip(".jpg"),
+                        "complexity": "high" if ex["coco_a_graph_depth"] > 1 else "low",
                     },
                     index=[0],
                 ),
