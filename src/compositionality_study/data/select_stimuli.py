@@ -8,11 +8,12 @@ from typing import Any, Dict
 import click
 import datasets
 import numpy as np
+import pandas as pd
 from datasets import load_from_disk
 from loguru import logger
 from PIL import Image
 from pytesseract import image_to_string
-from scipy.stats import spearmanr
+from scipy.stats import chi2_contingency, spearmanr
 
 from compositionality_study.constants import VG_COCO_PREP_ALL, VG_IMAGE_DIR
 from compositionality_study.utils import get_image_aspect_ratio_from_local_path
@@ -68,9 +69,10 @@ def map_conditions(
 @click.option("--image_quality_threshold", type=int, default=400)
 @click.option("--filter_text_on_images", type=bool, default=False)
 @click.option("--filter_by_person", type=bool, default=True)
-@click.option("--person_count", type=int, default=3)
+@click.option("--person_count", type=int, default=5)
+@click.option("--person_tol", type=int, default=2)
 @click.option("--n_stimuli", type=int, default=252)
-@click.option("--buffer_stimuli_fraction", type=float, default=0.1)
+@click.option("--buffer_stimuli_fraction", type=float, default=0.2)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
     sent_len: int = 10,
@@ -85,9 +87,10 @@ def select_stimuli(
     image_quality_threshold: int = 400,
     filter_text_on_images: bool = False,
     filter_by_person: bool = True,
-    person_count: int = 3,
+    person_count: int = 5,
+    person_tol: int = 2,
     n_stimuli: int = 252,
-    buffer_stimuli_fraction: float = 0.1,
+    buffer_stimuli_fraction: float = 0.2,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
 
@@ -124,10 +127,12 @@ def select_stimuli(
     :type filter_by_person: bool
     :param person_count: The number of people to filter for, defaults to 3
     :type person_count: int
+    :param person_tol: The tolerance for the number of people (+- person_tol within person_count), defaults to 2
+    :type person_tol: int
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
-        0.1, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
+        0.2, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
     """
     # Apply a buffer to the number of stimuli to select
     n_stimuli = int(n_stimuli * (1 + buffer_stimuli_fraction))
@@ -162,11 +167,12 @@ def select_stimuli(
     # Filter by person based on the desired number of people in the dataset
     if filter_by_person:
         vg_ds = vg_ds.filter(
-            lambda x: np.abs(person_count - x["coco_person"]) <= 1,
+            lambda x: np.abs(person_count - x["coco_person"]) <= person_tol,
             num_proc=24,
         )
         logger.info(
-            f"Controlled the dataset for the number of people {person_count} +- 1, " f"{len(vg_ds)} entries remain."
+            f"Controlled the dataset for the number of people {person_count} +- {person_tol},"
+            f"{len(vg_ds)} entries remain."
         )
 
     # Filter by image complexity (within a tolerance)
@@ -269,14 +275,21 @@ def select_stimuli(
     # Assert that the number of unique image ids is equal to the number of stimuli
     assert len(set(vg_ds_n_stimuli["imgid"])) == n_stimuli
 
-    # Check that the number of people is not correlated with the complexities
-    # Get the correlation between the number of people and the complexities
-    corr_text, p_text = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli[text_feature])
-    corr_img, p_img = spearmanr(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli[graph_feature])
-    logger.info(f"Correlation between the number of people and the textual complexity: {corr_text}")
-    logger.info(f"Text correlation p-value: {p_text}")
-    logger.info(f"Correlation between the number of people and the image complexity: {corr_img}")
-    logger.info(f"Image correlation p-value: {p_img}")
+    # Check that the number of people is not correlated with the complexities using a chi-square test
+    # Create contingency tables for the chi-square test
+    text_contingency_table = pd.crosstab(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli[text_feature])
+    img_contingency_table = pd.crosstab(vg_ds_n_stimuli["coco_person"], vg_ds_n_stimuli[graph_feature])
+
+    # Perform chi-square test
+    chi2_text, p_text, _, _ = chi2_contingency(text_contingency_table)
+    chi2_img, p_img, _, _ = chi2_contingency(img_contingency_table)
+
+    logger.info(
+        f"Chi-square test between the number of people and the textual complexity: chi2={chi2_text}, p-value={p_text}"
+    )
+    logger.info(
+        f"Chi-square test between the number of people and the image complexity: chi2={chi2_img}, p-value={p_img}"
+    )
 
     # Another check: Look at the possible (unique) categories in coco_categories
     # and see that they are not correlated with the complexities

@@ -16,7 +16,7 @@ from amrlib.graph_processing.amr_plot import AMRPlot
 from datasets import load_from_disk
 from loguru import logger
 from PIL import Image
-from scipy.stats import spearmanr
+from scipy.stats import chi2_contingency
 from spacy import Language
 from tqdm import tqdm
 
@@ -393,16 +393,20 @@ def get_summary_statistics(
     # Initialize the visualization directory
     os.makedirs(visualizations_dir, exist_ok=True)
 
-    # Get the correlation between amr and/or coco a depths and coco_person and p-value
-    coco_person = stimuli_df["coco_person"]
-    amr_graph_depth = stimuli_df["amr_graph_depth"]
-    coco_a_graph_depth = stimuli_df["coco_a_graph_depth"]
-    correlation_amr_coco_a, p_value_amr = spearmanr(coco_person, amr_graph_depth)
-    correlation_coco_a, p_value_actions = spearmanr(coco_person, coco_a_graph_depth)
-    # Save the correlation and p-value to a file in the visualization directory
-    with open(os.path.join(visualizations_dir, "correlation.txt"), "w") as f:
-        f.write(f"Correlation between COCO person and AMR depth: {correlation_amr_coco_a} ({p_value_amr}) \n")
-        f.write(f"Correlation between COCO person and COCO-A depth: {correlation_coco_a} ({p_value_actions}) \n")
+    # Perform a Chi-square test between coco_person and amr_graph_depth
+    contingency_table_amr = pd.crosstab(stimuli_df["coco_person"], stimuli_df["amr_graph_depth"])
+    chi2_amr, p_value_amr, _, _ = chi2_contingency(contingency_table_amr)
+
+    # Perform a Chi-square test between coco_person and coco_a_graph_depth
+    contingency_table_coco_a = pd.crosstab(stimuli_df["coco_person"], stimuli_df["coco_a_graph_depth"])
+    chi2_coco_a, p_value_coco_a, _, _ = chi2_contingency(contingency_table_coco_a)
+
+    # Save the Chi-square test results to a file in the visualization directory
+    with open(os.path.join(visualizations_dir, "chi_square_test_results.txt"), "w") as f:
+        f.write(f"Chi-square test between COCO person and AMR depth: Chi2 = {chi2_amr}, p-value = {p_value_amr}\n")
+        f.write(
+            f"Chi-square test between COCO person and COCO-A depth: Chi2 = {chi2_coco_a}, p-value = {p_value_coco_a}\n"
+        )
 
     # Generate a seaborn KDE plot of the textual and image complexity values
     sns.kdeplot(stimuli_df, x="amr_graph_depth", y="coco_a_graph_depth", cmap="Blues", fill=True)
