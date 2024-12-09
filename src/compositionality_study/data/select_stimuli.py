@@ -72,7 +72,7 @@ def map_conditions(
 @click.option("--person_count", type=int, default=5)
 @click.option("--person_tol", type=int, default=2)
 @click.option("--n_stimuli", type=int, default=252)
-@click.option("--buffer_stimuli_fraction", type=float, default=0.2)
+@click.option("--buffer_stimuli_fraction", type=float, default=0.3)
 def select_stimuli(
     vg_coco_preprocessed_dir: str = VG_COCO_PREP_ALL,
     sent_len: int = 10,
@@ -90,7 +90,7 @@ def select_stimuli(
     person_count: int = 5,
     person_tol: int = 2,
     n_stimuli: int = 252,
-    buffer_stimuli_fraction: float = 0.2,
+    buffer_stimuli_fraction: float = 0.3,
 ):
     """Select stimuli from the VG + COCO overlap dataset.
 
@@ -132,7 +132,7 @@ def select_stimuli(
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
-        0.2, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
+        0.3, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
     """
     # Apply a buffer to the number of stimuli to select
     n_stimuli = int(n_stimuli * (1 + buffer_stimuli_fraction))
