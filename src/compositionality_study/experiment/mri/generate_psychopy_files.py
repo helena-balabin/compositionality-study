@@ -84,7 +84,7 @@ def run_single_run(
     inter_stimulus_interval: float = 5.5,
     dummy_scan_duration: float = 6.0,
     frame_rate: int = 60,
-    mri_trigger_button: str = "t",
+    mri_trigger_button: str = "5",
     manual_trigger_button: str = "space",
     run_nr: int = 0,
 ):
@@ -115,9 +115,7 @@ def run_single_run(
         if isinstance(stim, Image.Image):
             stim_objects.append(visual.ImageStim(win, image=stim))
         else:
-            stim_objects.append(
-                visual.TextStim(win, text=add_line_break(stim), color=(0.0, 0.0, 0.0), wrapWidth=2)
-            )
+            stim_objects.append(visual.TextStim(win, text=add_line_break(stim), color=(0.0, 0.0, 0.0), wrapWidth=2))
 
     # Get the number of frames for time durations in seconds
     n_frames_stimuli = int(duration * frame_rate)
@@ -202,7 +200,7 @@ def run_single_run(
 @click.option("--frame_rate", type=int, default=60)
 @click.option("--fullscreen", type=bool, default=True)
 @click.option("--manual_trigger_button", type=str, default="space")
-@click.option("--mri_trigger_button", type=str, default="t")
+@click.option("--mri_trigger_button", type=str, default="5")
 @click.option("--break_duration", type=float, default=30.0)
 def run_psychopy_exp(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
@@ -214,7 +212,7 @@ def run_psychopy_exp(
     frame_rate: int = 60,
     fullscreen: bool = True,
     manual_trigger_button: str = "space",
-    mri_trigger_button: str = "t",
+    mri_trigger_button: str = "5",
     break_duration: float = 30.0,
 ):
     """Load the selected stimuli and present them in a psychopy experiment.
@@ -244,9 +242,7 @@ def run_psychopy_exp(
     """
     # Load the csv file for the stimuli
     stimuli_df = pd.read_csv(
-        os.path.join(
-            local_stimuli_dir, "subject_specific_stimuli", f"sub-{subject_id}_task-comp_events.tsv"
-        ),
+        os.path.join(local_stimuli_dir, "subject_specific_stimuli", f"sub-{subject_id}_task-comp_events.tsv"),
         sep="\t",
     )
     # Determine the number of unique runs
