@@ -9,6 +9,7 @@ import pandas as pd
 from PIL import Image, ImageOps
 from psychopy import core, event, logging, visual
 from tqdm import tqdm
+import glob
 
 from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_PRACTICE_STIMULI_DIR
 
@@ -31,6 +32,9 @@ def add_line_break(
     # Check if the input string is empty
     if not input_string:
         return "Error: Input string is empty."
+
+    if input_string == "blank":
+        return ""
 
     # Find the midpoint of the input string
     midpoint = len(input_string) // 2
@@ -82,7 +86,7 @@ def run_single_run(
     stimuli: List,
     duration: float = 3.0,
     inter_stimulus_interval: float = 5.5,
-    dummy_scan_duration: float = 6.0,
+    dummy_scan_duration: float = 12.0,
     frame_rate: int = 60,
     mri_trigger_button: str = "5",
     manual_trigger_button: str = "space",
@@ -158,16 +162,16 @@ def run_single_run(
         elif "escape" in keys:
             core.quit()
 
-    # Have a blank window for the duration of the dummy scans
+    # Have a global timer to log the time
+    timer = core.Clock()
+    start_time = timer.getTime()
+
+    # Have a blank window for the duration of the dummy scans at the start
     for _ in range(n_frames_dummy_scan_duration):
         # Check if the experiment should be exited or the stimuli skipped
         if check_quit_skip_exp():
             break
         win.flip()
-
-    # Have a global timer to log the time
-    timer = core.Clock()
-    start_time = timer.getTime()
 
     # Create the visual or textual stimuli
     for ex in stim_objects:
@@ -186,6 +190,13 @@ def run_single_run(
             if check_quit_skip_exp():
                 break
 
+    # Have a blank window for the duration of the dummy scans at the end as well
+    for _ in range(n_frames_dummy_scan_duration):
+        # Check if the experiment should be exited or the stimuli skipped
+        if check_quit_skip_exp():
+            break
+        win.flip()
+
     end_time = timer.getTime()
     logging.log(f"Total time: {end_time - start_time}", level=logging.INFO)
 
@@ -195,25 +206,27 @@ def run_single_run(
 @click.option("--practice_stimuli_dir", type=str, default=VG_COCO_PRACTICE_STIMULI_DIR)
 @click.option("--subject_id", type=int, default=1)
 @click.option("--duration", type=float, default=3.0)
-@click.option("--inter_stimulus_interval", type=float, default=5.5)
-@click.option("--dummy_scan_duration", type=float, default=8.0)
+@click.option("--inter_stimulus_interval", type=float, default=3.0)
+@click.option("--dummy_scan_duration", type=float, default=12.0)
 @click.option("--frame_rate", type=int, default=60)
 @click.option("--fullscreen", type=bool, default=True)
 @click.option("--manual_trigger_button", type=str, default="space")
 @click.option("--mri_trigger_button", type=str, default="5")
 @click.option("--break_duration", type=float, default=30.0)
+@click.option("--session", type=int, default=1)
 def run_psychopy_exp(
     local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
     practice_stimuli_dir: str = VG_COCO_PRACTICE_STIMULI_DIR,
     subject_id: int = 1,
     duration: float = 3.0,
-    inter_stimulus_interval: float = 5.5,
-    dummy_scan_duration: float = 8.0,
+    inter_stimulus_interval: float = 3.0,
+    dummy_scan_duration: float = 12.0,
     frame_rate: int = 60,
     fullscreen: bool = True,
     manual_trigger_button: str = "space",
     mri_trigger_button: str = "5",
     break_duration: float = 30.0,
+    session: int = 1,
 ):
     """Load the selected stimuli and present them in a psychopy experiment.
 
@@ -239,12 +252,25 @@ def run_psychopy_exp(
     :type mri_trigger_button: str
     :param break_duration: The duration of the break after every two runs in seconds.
     :type break_duration: float
+    :param session: The session identifier.
+    :type session: str
     """
-    # Load the csv file for the stimuli
-    stimuli_df = pd.read_csv(
-        os.path.join(local_stimuli_dir, "subject_specific_stimuli", f"sub-{subject_id}_task-comp_events.tsv"),
-        sep="\t",
+    logging_dir = os.path.join(local_stimuli_dir, "logs")
+    os.makedirs(logging_dir, exist_ok=True)
+    logging.LogFile(
+        os.path.join(logging_dir, f"psychopy_sub-{subject_id}_ses-{session}.log"),
+        level=logging.INFO,
     )
+
+    # Load all individual run files and concatenate them
+    run_files_dir = os.path.join(local_stimuli_dir, "subject_specific_stimuli")
+    pattern = f"sub-{subject_id}_ses-{session}_*.tsv"
+    run_files = glob.glob(os.path.join(run_files_dir, pattern))
+    stimuli_df_list = []
+    for run_file in run_files:
+        stimuli_df_list.append(pd.read_csv(run_file, sep="\t"))
+    stimuli_df = pd.concat(stimuli_df_list, ignore_index=True)
+
     # Determine the number of unique runs
     n_runs = len(stimuli_df["run"].unique())
 
@@ -255,10 +281,10 @@ def run_psychopy_exp(
             # Load the image from disk and resize it
             img = Image.open(os.path.join(local_stimuli_dir, row["stimulus"]))
             # Add the image to the stimuli list
-            stimuli_runs[row["run"]].append(ImageOps.contain(img, (800, 600)))
+            stimuli_runs[row["run"] - 1].append(ImageOps.contain(img, (800, 600)))
         else:
             # Add the text to the stimuli list
-            stimuli_runs[row["run"]].append(row["stimulus"])
+            stimuli_runs[row["run"] - 1].append(row["stimulus"])
 
     # Load the practice stimuli
     practice_stimuli: List = []
