@@ -16,7 +16,7 @@ from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_
 # Set a random seed for reproducibility
 random.seed(42)
 # Set the logging level
-logging.console.setLevel(logging.INFO)
+logging.console.setLevel(logging.DEBUG)
 
 
 def add_line_break(
