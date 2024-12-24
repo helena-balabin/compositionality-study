@@ -307,7 +307,10 @@ def generate_subject_specific_stimulus_files(
         # Shuffle within each block within each run
         subj_stimuli_rep_df = (
             subj_stimuli_rep_df.groupby(["run", "block"])
-            .apply(lambda x: x.sample(frac=1, random_state=subject))  # noqa
+            .apply(lambda x: x.sample(
+                frac=1,
+                random_state=subject + x["run"].iloc[0] + x["block"].iloc[0] * 1000,
+            ))
             .reset_index(drop=True)
         )
 
@@ -324,11 +327,13 @@ def generate_subject_specific_stimulus_files(
             run_df = subj_stimuli_rep_df[subj_stimuli_rep_df["run"] == run].copy()
             blank_trials = pd.DataFrame([blank_trial] * n_blanks_per_run)
             blank_trials["run"] = run
-            # Assign a random block number to each blank trial
-            blank_trials["block"] = np.random.RandomState(subject).randint(n_run_blocks, size=n_blanks_per_run)
-
+            blank_trials["block"] = np.random.RandomState(subject + run).randint(
+                n_run_blocks, size=n_blanks_per_run
+            )
+            insert_positions = np.random.RandomState(subject + run).choice(
+                len(run_df) + 1, n_blanks_per_run, replace=False
+            )
             # Insert blank trials at pseudorandom positions within the run
-            insert_positions = np.random.RandomState(subject).choice(len(run_df) + 1, n_blanks_per_run, replace=False)
             insert_positions.sort()
             for i, insert_position in enumerate(insert_positions):
                 run_df = pd.concat(
