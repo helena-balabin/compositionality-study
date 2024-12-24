@@ -130,7 +130,7 @@ def run_single_run(
     start_text = visual.TextStim(
         win,
         text=add_line_break(
-            f"Press {manual_trigger_button} to start run no. {run_nr} (before starting the MRI sequence)"
+            f"Press {manual_trigger_button} to start run no. {run_nr} (shortly after starting the MRI sequence)"
         ),
         color=(0.0, 0.0, 0.0),
         wrapWidth=2,
@@ -336,8 +336,8 @@ def run_psychopy_exp(
             manual_trigger_button=manual_trigger_button,
             run_nr=idx + 1,
         )
-        # Have a break every two runs
-        if idx % 2 == 1:
+        # Have a break every three runs
+        if idx % 3 == 1:
             break_txt = visual.TextStim(
                 win,
                 text=f"Break for {int(break_duration)}s",
