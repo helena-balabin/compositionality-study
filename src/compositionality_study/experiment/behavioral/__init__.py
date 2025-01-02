@@ -1,1 +1,1 @@
-"""Code for the behavioral experiment."""
+"""Behavioral experiment."""

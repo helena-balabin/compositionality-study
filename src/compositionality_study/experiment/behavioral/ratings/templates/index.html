@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complexity Experiment</title>
+</head>
+<body>
+    <h1>Complexity Rating Experiment</h1>
+    <form method="POST" action="{{ url_for('start_experiment') }}">
+        <label>Subject Number (0-7):</label>
+        <input type="number" name="subject_number" min="0" max="7" required><br><br>
+
+        <label>Modality:</label>
+        <select name="modality" required>
+            <option value="text">Text</option>
+            <option value="img">Image</option>
+        </select><br><br>
+
+        <button type="submit">Start Experiment</button>
+    </form>
+</body>
+</html>

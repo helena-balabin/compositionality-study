@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trial {{ trial_num }} / {{ total_trials }}</title>
+    <style>
+        .stimulus-container {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px;
+        }
+        .stimulus {
+            width: 45%;
+            text-align: center;
+        }
+        .stimulus img {
+            max-width: 600px;
+            max-height: 300px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+    <h1>Which input is more complex?</h1>
+    <p>Trial {{ trial_num }} of {{ total_trials }}</p>
+
+    <div class="stimulus-container">
+        <div class="stimulus">
+            <h3>Input A</h3>
+            {% if modality == 'img' %}
+                <img src="{{ stim_A }}" alt="Stimulus A">
+            {% else %}
+                <p>{{ stim_A }}</p>
+            {% endif %}
+        </div>
+        <div class="stimulus">
+            <h3>Input B</h3>
+            {% if modality == 'img' %}
+                <img src="{{ stim_B }}" alt="Stimulus B">
+            {% else %}
+                <p>{{ stim_B }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="POST">
+        <button type="submit" name="response" value="A">A is more complex</button>
+        <button type="submit" name="response" value="B">B is more complex</button>
+    </form>
+</body>
+</html>
