@@ -68,11 +68,13 @@ BEHAV_INPUT_DIR = os.path.join(BEHAV_DIR, "input")
 BEHAV_OUTPUT_DIR = os.path.join(BEHAV_DIR, "output")
 BEHAV_OUTPUT_IMAGES_DIR = os.path.join(BEHAV_OUTPUT_DIR, "image")
 BEHAV_OUTPUT_TEXT_DIR = os.path.join(BEHAV_OUTPUT_DIR, "text")
+MEMORY_TEST_DIR = os.path.join(BEHAV_DIR, "memory_test")
 os.makedirs(BEHAV_DIR, exist_ok=True)
 os.makedirs(BEHAV_INPUT_DIR, exist_ok=True)
 os.makedirs(BEHAV_OUTPUT_DIR, exist_ok=True)
 os.makedirs(BEHAV_OUTPUT_IMAGES_DIR, exist_ok=True)
 os.makedirs(BEHAV_OUTPUT_TEXT_DIR, exist_ok=True)
+os.makedirs(MEMORY_TEST_DIR, exist_ok=True)
 
 # Directory for the image complexity models and outputs
 IC9000_MODEL_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or MODELS_DIR, "IC9600")
