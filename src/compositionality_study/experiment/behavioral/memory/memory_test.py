@@ -145,7 +145,7 @@ def create_memory_test_helper(
     # Get the stimuli that were not shown to the subject
     lure_stimuli = all_stimuli[~all_stimuli["img_id"].isin(shown_stimuli["img_id"])]
     real_test = shown_stimuli.sample(n=n_test, random_state=42)
-    lure_test = lure_stimuli.sample(n=len(real_test), random_state=42)
+    lure_test = lure_stimuli.sample(n=len(real_test), random_state=subject_id * day + day)
 
     # Randomly choose between sentences_raw and filepath for each lure stimulus
     lure_test["stimulus"] = lure_test.apply(lambda row: row[np.random.choice(["sentences_raw", "filepath"])], axis=1)
