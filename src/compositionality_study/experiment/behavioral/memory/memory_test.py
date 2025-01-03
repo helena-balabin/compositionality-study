@@ -86,12 +86,15 @@ def create_memory_test_helper(
     # Rename imgid to img_id in all_stimuli
     all_stimuli.rename(columns={'imgid': 'img_id'}, inplace=True)
 
+    # Get the stimuli that were not shown to the subject
     lure_stimuli = all_stimuli[~all_stimuli['img_id'].isin(shown_stimuli['img_id'])]
-
     real_test = shown_stimuli.sample(n=n_test, random_state=42)
     lure_test = lure_stimuli.sample(n=len(real_test), random_state=42)
-
+    # Combine the real and lure test stimuli
     memory_test = pd.concat([real_test, lure_test])
+    memory_test.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    # TODO correctly merge the columns (stimuli and sentences_raw etc.)
     # Save one version with labels (create a label 'real' for real stimuli and 'lure' for lure stimuli)
     memory_test['label'] = 'real'
     memory_test.loc[memory_test['img_id'].isin(lure_test['img_id']), 'label'] = 'lure'
@@ -100,9 +103,12 @@ def create_memory_test_helper(
         index=False,
     )
 
-    # Save another version without labels and shuffle the rows
+    # Remove all unnecessary columns from the memory test, keep only the "stimulus" column
+    memory_test = memory_test['stimulus']
+    # TODO save/download the images for the memory test
+
+    # Save another version without labels
     memory_test = memory_test.drop(columns='label')
-    memory_test.sample(frac=1, random_state=42).reset_index(drop=True)
     memory_test.to_csv(
         os.path.join(output_dir, f'memory_test_day_{day}_subject_{subject_id}.csv'),
         index=False,
