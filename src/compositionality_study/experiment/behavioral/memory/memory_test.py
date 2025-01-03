@@ -19,7 +19,7 @@ from compositionality_study.constants import (
 
 
 @click.command()
-@click.option("--n_subjects", type=int, default=8, help="Number of subjects.")
+@click.option("--n_subjects", type=int, default=12, help="Number of subjects.")
 @click.option("--n_days", type=int, default=3, help="Number of days.")
 @click.option("--input_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str, help="Directory with the true stimuli.")
 @click.option("--preprocessed_vg_coco_dir", default=VG_COCO_PREP_ALL, type=str, help="Directory with the lure stimuli.")
@@ -157,12 +157,6 @@ def create_memory_test_helper(
     # Save one version with labels (create a label 'real' for real stimuli and 'lure' for lure stimuli)
     memory_test["label"] = "real"
     memory_test.loc[memory_test["img_id"].isin(lure_test["img_id"]), "label"] = "lure"
-    memory_test.to_csv(
-        os.path.join(
-            output_dir, f"sub-{subject_id}", f"ses-{day}", f"memory_test_day_{day}_subject_{subject_id}_with_labels.csv"
-        ),
-        index=False,
-    )
 
     # Copy images for the memory test
     copy_memory_test_images(
@@ -172,12 +166,25 @@ def create_memory_test_helper(
         input_dir=input_dir,
         output_dir=output_dir,
     )
+    # Replace "COCO_train2014_000000" with "" in the stimulus
+    memory_test["stimulus"] = memory_test["stimulus"].str.replace("COCO_train2014_000000", "")
+    memory_test.to_csv(
+        os.path.join(
+            output_dir, f"sub-{subject_id}", f"ses-{day}", f"memory_test_day_{day}_subject_{subject_id}_with_labels.csv"
+        ),
+        index=False,
+    )
 
     # Remove all unnecessary columns from the memory test, keep only the "stimulus" column
     memory_test = memory_test["stimulus"]
+    # Add another empty column for the response named "write_X_if_seen"
+    memory_test = pd.DataFrame(
+        {
+            "stimulus": memory_test,
+            "write_X_if_seen": "" * len(memory_test),
+        }
+    )
 
-    # Save another version without labels
-    memory_test = memory_test.drop(columns="label")
     memory_test.to_csv(
         os.path.join(
             output_dir,
