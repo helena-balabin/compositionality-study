@@ -16,13 +16,14 @@ from amrlib.graph_processing.amr_plot import AMRPlot
 from datasets import load_from_disk
 from loguru import logger
 from PIL import Image
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, ttest_ind
 from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
     COCO_A_ANNOT_FILE,
     IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    VG_COCO_LOCAL_STIMULI_DIR,
     VG_COCO_OBJ_SEG_DIR,
     VG_COCO_SELECTED_STIMULI_DIR,
     VG_DIR,
@@ -70,7 +71,11 @@ def load_coco_annotations(
 
 
 def visualize_image_with_actions(
-    img: Image, depth: int, actions: List[Dict], coco_annots: List[Dict], output_path: str
+    img: Image,
+    depth: int,
+    actions: List[Dict],
+    coco_annots: List[Dict],
+    output_path: str,
 ) -> None:
     """
     Visualize an image with its action annotations.
@@ -514,13 +519,112 @@ def get_summary_statistics(
     plt.close()
 
 
+@click.command()
+@click.option(
+    "--selected_stimuli_dir",
+    type=str,
+    default=VG_COCO_SELECTED_STIMULI_DIR,
+    help="Path to the dataset containing selected stimuli",
+)
+@click.option(
+    "--local_stimuli_dir",
+    type=str,
+    default=VG_COCO_LOCAL_STIMULI_DIR,
+    help="Directory containing local stimuli",
+)
+@click.option(
+    "--output_dir",
+    type=str,
+    default=os.path.join(VG_DIR, "visualizations"),
+    help="Directory where visualizations will be saved",
+)
+def check_control_variables_balance(
+    selected_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
+    local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    output_dir: str = os.path.join(VG_DIR, "visualizations"),
+) -> pd.DataFrame:
+    """Check if control variables are balanced between high and low complexity groups.
+
+    :param selected_stimuli_dir: Path to the dataset containing selected stimuli
+    :type selected_stimuli_dir: str
+    :param local_stimuli_dir: Directory containing local stimuli
+    :type local_stimuli_dir: str
+    :param output_dir: Directory where visualizations will be saved
+    :type output_dir: str
+    :return: DataFrame with statistics
+    :rtype: pd.DataFrame
+    """
+    # Control variables to check
+    control_vars = ["sentence_length", "coco_person", "ic_score"]
+    # Load selected stimuli using load_from_disk
+    selected_df = load_from_disk(selected_stimuli_dir).to_pandas()
+    # Filter by available local stimuli
+    local_stimuli = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
+    selected_df = selected_df[selected_df['cocoid'].isin(local_stimuli['cocoid'])]
+
+    # Add image metrics
+    def get_image_metrics(row):
+        img = Image.open(os.path.join(local_stimuli_dir, row['img_path']))
+        width, height = img.size
+        return pd.Series({'aspect_ratio': width/height, 'image_height': height})
+
+    image_metrics = local_stimuli.apply(get_image_metrics, axis=1)
+    image_metrics = pd.concat([local_stimuli['cocoid'], image_metrics], axis=1)
+    selected_df = selected_df.merge(image_metrics, on='cocoid')
+
+    # Split into high/low groups
+    high_group = selected_df[selected_df['amr_graph_depth'] == 2]
+    low_group = selected_df[selected_df['amr_graph_depth'] == 1]
+
+    # Check all variables
+    all_vars = control_vars + ['aspect_ratio', 'image_height']
+    results = {}
+
+    for var in all_vars:
+        stat, pval = ttest_ind(high_group[var], low_group[var], equal_var=False)
+        results[var] = {
+            'high_mean': high_group[var].mean(),
+            'low_mean': low_group[var].mean(),
+            't_stat': stat,
+            'p_value': pval
+        }
+
+    # Create a visualization directory if it does not exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save results to a DataFrame and write to a CSV file
+    results_df = pd.DataFrame.from_dict(results, orient='index')
+    results_df.to_csv(os.path.join(output_dir, "control_variable_balance_check.csv"))
+
+    # Save means and p-values to a DataFrame and write to a CSV file
+    summary_df = pd.DataFrame({
+        'Variable': results.keys(),
+        'High Mean': [stats['high_mean'] for stats in results.values()],
+        'Low Mean': [stats['low_mean'] for stats in results.values()],
+        'p-value': [stats['p_value'] for stats in results.values()],
+        'Significant Difference': ['Yes' if stats['p_value'] < 0.05 else 'No' for stats in results.values()]
+    })
+    summary_df.to_csv(os.path.join(output_dir, "control_variable_summary.csv"), index=False)
+
+    # Log the results
+    for var, stats_dict in results.items():
+        logger.info(f"\n{var}:")
+        logger.info(f"High group mean: {stats_dict['high_mean']:.3f}")
+        logger.info(f"Low group mean: {stats_dict['low_mean']:.3f}")
+        logger.info(f"p-value: {stats_dict['p_value']:.3f}")
+        logger.info(f"Significant difference: {'Yes' if stats_dict['p_value'] < 0.05 else 'No'}")
+
+    return results_df
+
+
 @click.group()
 def cli() -> None:
-    """Visualize actions and text AMR graphs for selected stimuli."""
+    """Visualize actions and text AMR graphs and summary statistics for selected stimuli."""
 
 
 if __name__ == "__main__":
     cli.add_command(visualize_actions)
     cli.add_command(visualize_amr_text)
     cli.add_command(get_summary_statistics)
+    cli.add_command(check_control_variables_balance)
     cli()
