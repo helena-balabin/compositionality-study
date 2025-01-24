@@ -11,10 +11,7 @@ import pandas as pd
 from datasets import load_from_disk
 from tqdm import tqdm
 
-from compositionality_study.constants import (
-    VG_COCO_LOCAL_STIMULI_DIR,
-    VG_COCO_SELECTED_STIMULI_DIR,
-)
+from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_SELECTED_STIMULI_DIR
 from compositionality_study.utils import apply_gamma_correction
 
 # Set a random seed for reproducibility
@@ -307,10 +304,12 @@ def generate_subject_specific_stimulus_files(
         # Shuffle within each block within each run
         subj_stimuli_rep_df = (
             subj_stimuli_rep_df.groupby(["run", "block"])
-            .apply(lambda x: x.sample(
-                frac=1,
-                random_state=subject + x["run"].iloc[0] + x["block"].iloc[0] * 1000,
-            ))
+            .apply(
+                lambda x: x.sample(
+                    frac=1,
+                    random_state=subject + x["run"].iloc[0] + x["block"].iloc[0] * 1000,
+                )
+            )
             .reset_index(drop=True)
         )
 
@@ -327,9 +326,7 @@ def generate_subject_specific_stimulus_files(
             run_df = subj_stimuli_rep_df[subj_stimuli_rep_df["run"] == run].copy()
             blank_trials = pd.DataFrame([blank_trial] * n_blanks_per_run)
             blank_trials["run"] = run
-            blank_trials["block"] = np.random.RandomState(subject + run).randint(
-                n_run_blocks, size=n_blanks_per_run
-            )
+            blank_trials["block"] = np.random.RandomState(subject + run).randint(n_run_blocks, size=n_blanks_per_run)
             insert_positions = np.random.RandomState(subject + run).choice(
                 len(run_df) + 1, n_blanks_per_run, replace=False
             )
@@ -337,7 +334,7 @@ def generate_subject_specific_stimulus_files(
             insert_positions.sort()
             for i, insert_position in enumerate(insert_positions):
                 run_df = pd.concat(
-                    [run_df.iloc[:insert_position + i], blank_trials.iloc[[i]], run_df.iloc[insert_position + i:]]
+                    [run_df.iloc[: insert_position + i], blank_trials.iloc[[i]], run_df.iloc[insert_position + i :]]
                 ).reset_index(drop=True)
 
             subj_stimuli_rep_df = pd.concat(
@@ -379,6 +376,36 @@ def generate_subject_specific_stimulus_files(
                 )
 
 
+@click.command()
+@click.option("--filtered_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
+def map_stimuli_ids_to_design_matrix_idx(
+    filtered_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+):
+    """Map the stimuli IDs to the design matrix indices for later GLMSingle beta estimation.
+
+    :param filtered_stimuli_dir: The directory containing the filtered stimuli images and text,
+        defaults to VG_COCO_LOCAL_STIMULI_DIR.
+    :type filtered_stimuli_dir: str
+    """
+    # TODO load the stimuli dataframe, get all texts, all images and sort each by ID
+    # Load the stimuli dataframe
+    stimuli_df = pd.read_csv(os.path.join(filtered_stimuli_dir, "stimuli_text_and_im_paths.csv"))
+    # Get the sorted COCO IDs
+    sorted_coco_ids = stimuli_df["cocoid"].sort_values().astype(str)
+    # Create a df with sorted_coco_ids + "_text" and "_image" below, and index as a new column
+    design_matrix_mapping_df = pd.DataFrame(
+        {
+            "design_matrix_idx": np.arange(2 * len(sorted_coco_ids)),
+            "coco_id": pd.concat([sorted_coco_ids + "_text", sorted_coco_ids + "_image"]),
+        }
+    )
+    # Save the mapping
+    design_matrix_mapping_df.to_csv(
+        os.path.join(filtered_stimuli_dir, "design_matrix_mapping.csv"),
+        index=False,
+    )
+
+
 @click.group()
 def cli() -> None:
     """Convert the HF dataset with the selected stimuli into locally saved images and text."""
@@ -387,4 +414,5 @@ def cli() -> None:
 if __name__ == "__main__":
     cli.add_command(convert_hf_dataset_to_local_stimuli)
     cli.add_command(generate_subject_specific_stimulus_files)
+    cli.add_command(map_stimuli_ids_to_design_matrix_idx)
     cli()
