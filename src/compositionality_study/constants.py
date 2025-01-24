@@ -96,3 +96,10 @@ WN_PREDICATE_FILTER = ["with", "on", "in"]
 
 # Add a path to the NSD dataset
 NSD_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "nsd")
+
+# Directory for raw and preprocessed MRI data
+MRI_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "comp_fmri_study_2025")
+BIDS_DIR = os.path.join(MRI_DIR, "bids")
+PREPROC_MRI_DIR = os.path.join(MRI_DIR, "fmriprep")
+BETAS_DIR = os.path.join(MRI_DIR, "betas")
+os.makedirs(BIDS_DIR, exist_ok=True)

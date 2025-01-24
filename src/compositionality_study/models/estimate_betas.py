@@ -4,44 +4,142 @@ import os
 
 import click
 import nibabel as nib
+import numpy as np
 import pandas as pd
 from glmsingle import GLM_single
 from loguru import logger
 
+from compositionality_study.constants import (
+    BETAS_DIR,
+    BIDS_DIR,
+    PREPROC_MRI_DIR,
+    VG_COCO_LOCAL_STIMULI_DIR,
+)
 
-@click.command()
-@click.option("--prep_input_dir", type=str, required=True, help="Folder with NIfTI (.nii/.nii.gz) files.")
-@click.option("--events_input_dir", type=str, required=True, help="BIDS folder (unpreprocessed) with events.tsv files.")
-@click.option("--output_dir", type=str, required=True, help="Folder to save beta estimates to.")
-@click.option("--tr", type=float, default=1.5, help="Repetition time in seconds.")
-@click.option("--stim_dur", type=float, default=3.0, help="Duration of the stimulus in seconds.")
-@click.option("--isi", type=float, default=3.0, help="Inter-stimulus interval in seconds.")
-@click.option("--file_pattern", type=str, default="desc-prep", help="Pattern to match NIfTI files.")
-@click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
-def estimate_betas(
-    prep_input_dir: str,
-    events_input_dir: str,
-    output_dir: str,
+
+def map_events_files(
+    event_file: str,
+    design_matrix_mapping_file: str = os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
-    file_pattern: str = "desc-prep",
-    subjects: list[str] = ["sub-01"],
-) -> None:
-    """Estimate beta coefficients for each trial in a BIDS-formatted fMRI dataset.
+    dummy_scan_duration: float = 12.0,
+) -> np.array:
+    """Map events files to design matrix columns.
 
-    :param prep_input_dir: Path to the folder with NIfTI files.
-    :type prep_input_dir: str
-    :param events_input_dir: Path to the BIDS folder with events.tsv files.
-    :type events_input_dir: str
-    :param output_dir: Path to the folder to save beta estimates to.
-    :type output_dir: str
+    :param event_file: Path to the events file.
+    :type event_file: str
+    :param design_matrix_mapping_file: Path to the design matrix mapping file,
+        defaults to os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv")
+    :type design_matrix_mapping_file: str
     :param tr: Repetition time (TR) of the fMRI experiment in seconds, defaults to 1.5.
     :type tr: float
     :param stim_dur: Duration of the stimulus in seconds, defaults to 3.0.
     :type stim_dur: float
     :param isi: Inter-stimulus interval in seconds, defaults to 3.0.
     :type isi: float
+    :param dummy_scan_duration: Duration of the dummy scan at the begin and end of the sequence in seconds,
+        defaults to 12.0.
+    :return: Design matrix array.
+    :rtype: np.array
+    """
+    # Read the design matrix mapping file
+    design_matrix_mapping = pd.read_csv(design_matrix_mapping_file)
+    # Read the events file
+    events_df = pd.read_csv(event_file, sep="\t")
+
+    # Calculate the total number of TRs in the sequence
+    # Dummy scans are at the beginning and end of the sequence
+    # Each trial consists of a stimulus and an inter-stimulus interval
+    n_tr_per_trial = int((stim_dur + isi) // tr)
+    n_dummy_trs = int(dummy_scan_duration // tr)
+    total_trs = int(n_dummy_trs * 2 + n_tr_per_trial * len(events_df))
+
+    # The design matrix is a number of TRs x number of conditions matrix
+    design_matrix = np.zeros((total_trs, len(design_matrix_mapping)))
+
+    # Iterate over all events
+    for idx, event in events_df.iterrows():
+        if "blank" not in event["modality"]:
+            event_name = str(int(event["cocoid"])) + "_" + event["modality"]
+            # Look up the event in the design matrix mapping to get the column index
+            event_idx = design_matrix_mapping[design_matrix_mapping["coco_id"] == event_name]["design_matrix_idx"]
+            # Calculate the TR index/index in time for the event
+            tr_idx = n_dummy_trs + idx * n_tr_per_trial
+            # Set the corresponding point in time to 1
+            design_matrix[tr_idx, event_idx] = 1
+
+    return design_matrix
+
+
+@click.command()
+@click.option(
+    "--prep_input_dir",
+    type=str,
+    default=PREPROC_MRI_DIR,
+    help="Folder with NIfTI (.nii/.nii.gz) files.",
+)
+@click.option(
+    "--events_input_dir",
+    type=str,
+    default=BIDS_DIR,
+    help="BIDS folder (unpreprocessed) with events.tsv files.",
+)
+@click.option(
+    "--output_dir",
+    type=str,
+    default=BETAS_DIR,
+    help="Folder to save beta estimates to.",
+)
+@click.option(
+    "--design_matrix_mapping_file",
+    type=str,
+    default=os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    help="Design matrix mapping file.",
+)
+@click.option("--tr", type=float, default=1.5, help="Repetition time in seconds.")
+@click.option("--stim_dur", type=float, default=3.0, help="Duration of the stimulus in seconds.")
+@click.option("--isi", type=float, default=3.0, help="Inter-stimulus interval in seconds.")
+@click.option(
+    "--dummy_scan_duration",
+    type=float,
+    default=12.0,
+    help="Duration of the dummy scan at the begin and end of the sequence in seconds.",
+)
+@click.option("--file_pattern", type=str, default="desc-prep", help="Pattern to match NIfTI files.")
+@click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
+def estimate_betas(
+    prep_input_dir: str = PREPROC_MRI_DIR,
+    events_input_dir: str = BIDS_DIR,
+    output_dir: str = BETAS_DIR,
+    design_matrix_mapping_file: str = os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    tr: float = 1.5,
+    stim_dur: float = 3.0,
+    isi: float = 3.0,
+    dummy_scan_duration: float = 12.0,
+    file_pattern: str = "desc-prep",
+    subjects: list[str] = ["sub-01"],
+) -> None:
+    """Estimate beta coefficients for each trial in a BIDS-formatted fMRI dataset.
+
+    :param prep_input_dir: Path to the folder with NIfTI files, defaults to PREPROC_MRI_DIR.
+    :type prep_input_dir: str
+    :param events_input_dir: Path to the BIDS folder with events.tsv files, defaults to BIDS_DIR.
+    :type events_input_dir: str
+    :param output_dir: Path to the folder to save beta estimates to, defaults to BETAS_DIR.
+    :type output_dir: str
+    :param design_matrix_mapping_file: Path to the design matrix mapping file,
+        defaults to os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv").
+    :type design_matrix_mapping_file: str
+    :param tr: Repetition time (TR) of the fMRI experiment in seconds, defaults to 1.5.
+    :type tr: float
+    :param stim_dur: Duration of the stimulus in seconds, defaults to 3.0.
+    :type stim_dur: float
+    :param isi: Inter-stimulus interval in seconds, defaults to 3.0.
+    :type isi: float
+    :param dummy_scan_duration: Duration of the dummy scan at the begin and end of the sequence in seconds,
+        defaults to 12.0.
+    :type dummy_scan_duration: float
     :param file_pattern: Pattern to match NIfTI files (type of preprocessed file), defaults to "desc-prep".
     :type file_pattern: str
     :param subjects: List of subjects to process, defaults to ["sub-01"].
@@ -55,7 +153,9 @@ def estimate_betas(
     for subject in subjects:
         # See what sessions are available
         session_folders = [
-            f for f in os.listdir(prep_input_dir) if os.path.isdir(os.path.join(prep_input_dir, f)) and "ses" in f
+            f
+            for f in os.listdir(os.path.join(prep_input_dir, subject))
+            if os.path.isdir(os.path.join(prep_input_dir, subject, f)) and "ses" in f
         ]
         nifti_files = []
         events_files = []
@@ -64,38 +164,38 @@ def estimate_betas(
         # Get all NIfTI files and events.tsvs for all sessions
         for ses_idx, session_folder in enumerate(session_folders):
             nifti_files += [
-                nib.load(f)
-                for f in os.listdir(os.path.join(prep_input_dir, session_folder, "func"))
+                nib.load(os.path.join(prep_input_dir, subject, session_folder, "func", f)).get_fdata()
+                for f in os.listdir(os.path.join(prep_input_dir, subject, session_folder, "func"))
                 if (f.endswith(".nii") or f.endswith(".nii.gz")) and file_pattern in f
             ]
             events_files += [
-                f
-                for f in os.listdir(os.path.join(events_input_dir, session_folder, "func"))
-                if f.endswith("events.tsv") and file_pattern in f
+                map_events_files(
+                    os.path.join(events_input_dir, subject, session_folder, "func", f),
+                    design_matrix_mapping_file=design_matrix_mapping_file,
+                    tr=tr,
+                    stim_dur=stim_dur,
+                    isi=isi,
+                    dummy_scan_duration=dummy_scan_duration,
+                )
+                for f in os.listdir(os.path.join(events_input_dir, subject, session_folder, "func"))
+                if f.endswith("events.tsv")
             ]
             session_indicator += [ses_idx + 1] * len(nifti_files)
 
-        logger.info(f"Found {len(nifti_files)} NIfTI files in {prep_input_dir}. Starting beta estimation.")
+        logger.info(
+            f"Found {len(nifti_files)} NIfTI files in {prep_input_dir} for {subject}. " "Starting beta estimation."
+        )
 
-        # TODO change from here
-        for nifti_file in nifti_files:
-            base_name = nifti_file.split(".nii")[0]
-            events_tsv_path = os.path.join(prep_input_dir, base_name + "_events.tsv")
-            if not os.path.exists(events_tsv_path):
-                logger.warning(f"No matching events file for {nifti_file}, skipping.")
-                continue
-
-        events_df = pd.read_csv(events_tsv_path, sep="\t")
-
+        # TODO implement from here
         model = GLM_single()
-        model = model.fit(nifti_files, events_df, tr)
+        model = model.fit(nifti_files, events_files, tr)
         design_matrix = model.design_matrices_[0]
 
         betas = {}
         for column in design_matrix.columns:
             if column.startswith("trial_type"):
                 beta_img = model.compute_contrast(column, output_type="effect_size")
-                beta_out_path = os.path.join(output_dir, f"{base_name}_beta_{column}.nii.gz")
+                beta_out_path = os.path.join(output_dir, f"beta_{column}.nii.gz")
                 beta_img.to_filename(beta_out_path)
                 betas[column] = beta_out_path
 
