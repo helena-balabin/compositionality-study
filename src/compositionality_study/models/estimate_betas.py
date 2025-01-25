@@ -107,6 +107,7 @@ def map_events_files(
     help="Duration of the dummy scan at the begin and end of the sequence in seconds.",
 )
 @click.option("--file_pattern", type=str, default="desc-prep", help="Pattern to match NIfTI files.")
+@click.option("--chunklen", type=int, default=100000, help="Chunk length for the GLM_single model.")
 @click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
 def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
@@ -118,6 +119,7 @@ def estimate_betas(
     isi: float = 3.0,
     dummy_scan_duration: float = 12.0,
     file_pattern: str = "desc-prep",
+    chunklen: int = 100000,
     subjects: list[str] = ["sub-01"],
 ) -> None:
     """Estimate beta coefficients for each trial in a BIDS-formatted fMRI dataset.
@@ -142,6 +144,9 @@ def estimate_betas(
     :type dummy_scan_duration: float
     :param file_pattern: Pattern to match NIfTI files (type of preprocessed file), defaults to "desc-prep".
     :type file_pattern: str
+    :param chunklen: Chunk length for the GLM_single model, i.e., how many voxels are processed at the same time,
+        defaults to 100000.
+    :type chunklen: int
     :param subjects: List of subjects to process, defaults to ["sub-01"].
     :type subjects: list[str]
     """
@@ -186,18 +191,17 @@ def estimate_betas(
             f"Found {len(nifti_files)} NIfTI files in {prep_input_dir} for {subject}. " "Starting beta estimation."
         )
 
-        # TODO implement from here
-        model = GLM_single()
-        model = model.fit(nifti_files, events_files, tr)
-        design_matrix = model.design_matrices_[0]
-
-        betas = {}
-        for column in design_matrix.columns:
-            if column.startswith("trial_type"):
-                beta_img = model.compute_contrast(column, output_type="effect_size")
-                beta_out_path = os.path.join(output_dir, f"beta_{column}.nii.gz")
-                beta_img.to_filename(beta_out_path)
-                betas[column] = beta_out_path
+        # Initialize the GLM_single model
+        opt = {"wantmemoryoutputs": [0, 0, 0, 1], "chunklen": chunklen}
+        model = GLM_single(opt)
+        model = model.fit(
+            design=events_files,
+            data=nifti_files,
+            stimdur=stim_dur,
+            tr=tr,
+            outputdir=os.path.join(output_dir, subject),
+            figuredir=os.path.join(output_dir, subject),
+        )
 
         logger.info(f"Finished estimated betas for {subject}")
 
