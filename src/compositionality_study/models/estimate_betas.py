@@ -108,6 +108,7 @@ def map_events_files(
 )
 @click.option("--file_pattern", type=str, default="desc-prep", help="Pattern to match NIfTI files.")
 @click.option("--chunklen", type=int, default=100000, help="Chunk length for the GLM_single model.")
+@click.option("--n_folds", type=int, default=3, help="Number of cross-validation folds.")
 @click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
 def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
@@ -120,6 +121,7 @@ def estimate_betas(
     dummy_scan_duration: float = 12.0,
     file_pattern: str = "desc-prep",
     chunklen: int = 100000,
+    n_folds: int = 3,
     subjects: list[str] = ["sub-01"],
 ) -> None:
     """Estimate beta coefficients for each trial in a BIDS-formatted fMRI dataset.
@@ -147,6 +149,8 @@ def estimate_betas(
     :param chunklen: Chunk length for the GLM_single model, i.e., how many voxels are processed at the same time,
         defaults to 100000.
     :type chunklen: int
+    :param n_folds: Number of cross-validation folds, defaults to 3.
+    :type n_folds: int
     :param subjects: List of subjects to process, defaults to ["sub-01"].
     :type subjects: list[str]
     """
@@ -185,10 +189,16 @@ def estimate_betas(
                 for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
                 if f.endswith("events.tsv")
             ]
-            session_indicator += [ses_idx + 1] * len(nifti_files)
+            session_indicator += [ses_idx + 1] * len(
+                [
+                    f
+                    for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
+                    if f.endswith("events.tsv")
+                ]
+            )
 
         logger.info(
-            f"Found {len(nifti_files)} NIfTI files in {prep_input_dir} for {subject}. " "Starting beta estimation."
+            f"Found {len(nifti_files)} NIfTI files in {prep_input_dir} for {subject}. Starting beta estimation."
         )
 
         # Initialize the GLM_single model
@@ -196,6 +206,7 @@ def estimate_betas(
             "wantmemoryoutputs": [0, 0, 0, 1],
             "chunklen": chunklen,
             "sessionindicator": np.array(session_indicator),
+            "xvalscheme": np.array_split(np.arange(len(nifti_files)), n_folds),
         }
         model = GLM_single(opt)
         model = model.fit(
