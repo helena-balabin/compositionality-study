@@ -170,7 +170,7 @@ def estimate_betas(
         for ses_idx, session_folder in enumerate(session_folders):
             nifti_files += [
                 nib.load(os.path.join(prep_input_dir, subject, session_folder, "func", f)).get_fdata()
-                for f in os.listdir(os.path.join(prep_input_dir, subject, session_folder, "func"))
+                for f in sorted(os.listdir(os.path.join(prep_input_dir, subject, session_folder, "func")))
                 if (f.endswith(".nii") or f.endswith(".nii.gz")) and file_pattern in f
             ]
             events_files += [
@@ -182,7 +182,7 @@ def estimate_betas(
                     isi=isi,
                     dummy_scan_duration=dummy_scan_duration,
                 )
-                for f in os.listdir(os.path.join(events_input_dir, subject, session_folder, "func"))
+                for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
                 if f.endswith("events.tsv")
             ]
             session_indicator += [ses_idx + 1] * len(nifti_files)
@@ -192,7 +192,11 @@ def estimate_betas(
         )
 
         # Initialize the GLM_single model
-        opt = {"wantmemoryoutputs": [0, 0, 0, 1], "chunklen": chunklen}
+        opt = {
+            "wantmemoryoutputs": [0, 0, 0, 1],
+            "chunklen": chunklen,
+            "sessionindicator": np.array(session_indicator),
+        }
         model = GLM_single(opt)
         model = model.fit(
             design=events_files,
