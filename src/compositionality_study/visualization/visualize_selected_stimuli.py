@@ -584,7 +584,9 @@ def check_control_variables_balance(
         stat, pval = ttest_ind(high_group[var], low_group[var], equal_var=False)
         results[var] = {
             'high_mean': high_group[var].mean(),
+            'high_std': high_group[var].std(),
             'low_mean': low_group[var].mean(),
+            'low_std': low_group[var].std(),
             't_stat': stat,
             'p_value': pval
         }
@@ -600,7 +602,9 @@ def check_control_variables_balance(
     summary_df = pd.DataFrame({
         'Variable': results.keys(),
         'High Mean': [stats['high_mean'] for stats in results.values()],
+        'High Std': [stats['high_std'] for stats in results.values()],
         'Low Mean': [stats['low_mean'] for stats in results.values()],
+        'Low Std': [stats['low_std'] for stats in results.values()],
         'p-value': [stats['p_value'] for stats in results.values()],
         'Significant Difference': ['Yes' if stats['p_value'] < 0.05 else 'No' for stats in results.values()]
     })
@@ -610,7 +614,9 @@ def check_control_variables_balance(
     for var, stats_dict in results.items():
         logger.info(f"\n{var}:")
         logger.info(f"High group mean: {stats_dict['high_mean']:.3f}")
+        logger.info(f"High group std: {stats_dict['high_std']:.3f}")
         logger.info(f"Low group mean: {stats_dict['low_mean']:.3f}")
+        logger.info(f"Low group std: {stats_dict['low_std']:.3f}")
         logger.info(f"p-value: {stats_dict['p_value']:.3f}")
         logger.info(f"Significant difference: {'Yes' if stats_dict['p_value'] < 0.05 else 'No'}")
 
