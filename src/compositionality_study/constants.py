@@ -102,4 +102,5 @@ MRI_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "comp_fmri_s
 BIDS_DIR = os.path.join(MRI_DIR, "bids")
 PREPROC_MRI_DIR = os.path.join(MRI_DIR, "fmriprep")
 BETAS_DIR = os.path.join(MRI_DIR, "betas")
+MVPA_DIR = os.path.join(MRI_DIR, "mvpa")
 os.makedirs(BIDS_DIR, exist_ok=True)
