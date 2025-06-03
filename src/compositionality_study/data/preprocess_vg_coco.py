@@ -1,47 +1,42 @@
-"""Preprocesses the Visual Genome + COCO overlap dataset."""
+"""Preprocesses the Visual Genome + COCO dataset."""
 
 # Imports
 import json
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import click
 import networkx as nx
-import numpy as np
 import pandas as pd
 import spacy
-from datasets import Dataset, load_dataset, load_from_disk
+from datasets import Dataset, load_from_disk
 from loguru import logger
 from spacy import Language
 from tqdm import tqdm
 
 from compositionality_study.constants import (
     COCO_A_ANNOT_FILE,
+    COCO_DIR,
+    COCO_IMAGE_DIR,
+    COCO_OBJ_SEG_DIR,
+    COCO_PREP_TEXT_GRAPH_DIR,
     IC_SCORES_FILE,
-    VG_COCO_OBJ_SEG_DIR,
-    VG_COCO_OVERLAP_DIR,
-    VG_COCO_PREP_TEXT_GRAPH_DIR,
-    VG_COCO_PREP_TEXT_IMG_SEG_DIR,
-    VG_COCO_PREPROCESSED_TEXT_DIR,
-    VG_DIR,
-    VG_OBJECTS_FILE,
-    VG_RELATIONSHIPS_FILE,
 )
 from compositionality_study.utils import (
-    check_if_living_being,
     derive_text_depth_features,
     flatten_examples,
+    get_aspect_ratio,
 )
 
 
 @click.command()
-@click.option("--vg_coco_overlap_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--coco_dir", type=str, default=COCO_DIR)
 @click.option("--spacy_model", type=str, default="en_core_web_trf")
 @click.option("--save_to_disk", type=bool, default=True)
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
 def add_text_properties_wrapper(
-    vg_coco_overlap_dir: str = VG_COCO_OVERLAP_DIR,
+    coco_dir: str = COCO_DIR,
     spacy_model: str = "en_core_web_trf",
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
@@ -49,8 +44,8 @@ def add_text_properties_wrapper(
 ):
     """Wrapper for the add_text_properties function.
 
-    :param vg_coco_overlap_dir: Path to the directory where the Visual Genome + COCO overlap dataset is stored.
-    :type vg_coco_overlap_dir: str
+    :param coco_dir: Path to the directory where the Visual Genome + COCO dataset is stored.
+    :type coco_dir: str
     :param spacy_model: Which spacy model to use, defaults to "en_core_web_trf" (transformer model)
     :type spacy_model: str
     :param save_to_disk: Whether to save the dataset to disk, defaults to True
@@ -61,7 +56,7 @@ def add_text_properties_wrapper(
     :type dummy_subset_size: int
     """
     add_text_properties(
-        vg_coco_overlap=vg_coco_overlap_dir,
+        coco=coco_dir,
         spacy_model=spacy_model,
         save_to_disk=save_to_disk,
         save_dummy_subset=save_dummy_subset,
@@ -70,7 +65,7 @@ def add_text_properties_wrapper(
 
 
 def add_text_properties(
-    vg_coco_overlap: Union[str, Dataset] = VG_COCO_OVERLAP_DIR,
+    coco: Union[str, Dataset] = COCO_DIR,
     spacy_model: str = "en_core_web_trf",
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
@@ -78,9 +73,9 @@ def add_text_properties(
 ) -> Dataset:
     """Add text properties to the dataset.
 
-    :param vg_coco_overlap: Path to the directory where the Visual Genome + COCO overlap dataset is stored or the
-        dataset itself, defaults to VG_COCO_OVERLAP_DIR
-    :type vg_coco_overlap: Union[str, Dataset]
+    :param coco: Path to the directory where the Visual Genome + COCO dataset is stored or the
+        dataset itself, defaults to COCO_DIR
+    :type coco: Union[str, Dataset]
     :param spacy_model: Which spacy model to use, defaults to "en_core_web_trf" (transformer model!)
     :type spacy_model: str
     :param save_to_disk: Whether to save the dataset to disk, defaults to True
@@ -92,20 +87,14 @@ def add_text_properties(
     :return: The dataset with the text properties added
     :rtype: Dataset
     """
-    if isinstance(vg_coco_overlap, str) and "vg_" in vg_coco_overlap:
-        vg_in_file_name = "vg_"
-    elif isinstance(vg_coco_overlap, Dataset) and "vg_image_id" in vg_coco_overlap.column_names:
-        vg_in_file_name = "vg_"
-    else:
-        vg_in_file_name = ""
-    vg_coco_ds = load_from_disk(vg_coco_overlap) if isinstance(vg_coco_overlap, str) else vg_coco_overlap
+    coco_ds = load_from_disk(coco) if isinstance(coco, str) else coco
 
     # Flatten the dataset so that there is one caption per example
     # Check if any of the features are lists
-    if any([isinstance(vg_coco_ds[0][feature], List) for feature in vg_coco_ds.features]):
-        vs_coco_ds_flattened = vg_coco_ds.map(flatten_examples, batched=True, num_proc=24)
+    if any([isinstance(coco_ds[0][feature], List) for feature in coco_ds.features]):
+        vs_coco_ds_flattened = coco_ds.map(flatten_examples, batched=True, num_proc=24)
     else:
-        vs_coco_ds_flattened = vg_coco_ds
+        vs_coco_ds_flattened = coco_ds
 
     # Add sentence length
     preprocessed_ds = vs_coco_ds_flattened.map(
@@ -130,10 +119,11 @@ def add_text_properties(
         return doc
 
     # Add dependency parse tree depth and AMR depth
-    # Prefer GPU if available
-    spacy.prefer_gpu()
     # Disable unnecessary components
-    nlp = spacy.load(spacy_model, disable=["tok2vec", "attribute_ruler", "lemmatizer"])
+    nlp = spacy.load(
+        spacy_model,
+        disable=["tok2vec", "attribute_ruler", "lemmatizer"],
+    )
     nlp.add_pipe("force_single_sentence", before="parser")
     # This cannot be parallelized because of the spacy model/GPU issues
     preprocessed_ds = preprocessed_ds.map(
@@ -141,141 +131,48 @@ def add_text_properties(
         fn_kwargs={"nlp": nlp},
         num_proc=1,
         batched=True,
-        batch_size=64,
+        batch_size=16,
     )
 
     # Save to disk
     if save_to_disk:
-        output_dir = os.path.split(vg_coco_overlap)[0]
-        preprocessed_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text"))
+        output_dir = os.path.split(coco)[0]
+        preprocessed_ds.save_to_disk(os.path.join(output_dir, "coco_preprocessed_text"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
             preprocessed_ds.select(list(range(dummy_subset_size))).save_to_disk(
-                os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_text_dummy")
+                os.path.join(output_dir, "coco_preprocessed_text_dummy")
             )
 
     return preprocessed_ds
 
 
 @click.command()
-@click.option("--vg_coco_overlap_text_dir", type=str, default=VG_COCO_PREPROCESSED_TEXT_DIR)
-@click.option("--vg_objects_file", type=str, default=VG_OBJECTS_FILE)
-@click.option("--vg_relationships_file", type=str, default=VG_RELATIONSHIPS_FILE)
-@click.option("--save_to_disk", type=bool, default=True)
-@click.option("--save_dummy_subset", type=bool, default=True)
-@click.option("--dummy_subset_size", type=int, default=1000)
-def add_graph_properties_wrapper(
-    vg_coco_overlap_text_dir: str = VG_COCO_PREPROCESSED_TEXT_DIR,
-    vg_objects_file: str = VG_OBJECTS_FILE,
-    vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
-    save_to_disk: bool = True,
-    save_dummy_subset: bool = True,
-    dummy_subset_size: int = 1000,
-):
-    """Wrapper for the add_graph_properties function.
-
-    :param vg_coco_overlap_text_dir: Path to the directory where the Visual Genome + COCO overlap dataset with text
-        properties is stored.
-    :type vg_coco_overlap_text_dir: str
-    :param vg_objects_file: Path to the file where the Visual Genome objects json is stored.
-    :type vg_objects_file: str
-    :param vg_relationships_file: Path to the file where the Visual Genome relationship json is stored.
-    :type vg_relationships_file: str
-    :param save_to_disk: Whether to save the dataset to disk, defaults to True
-    :type save_to_disk: bool
-    :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
-    :type save_dummy_subset: bool
-    :param dummy_subset_size: Size of the dummy subset, defaults to 1000
-    :type dummy_subset_size: int
-    """
-    add_graph_properties(
-        vg_coco_overlap_text=vg_coco_overlap_text_dir,
-        vg_objects_file=vg_objects_file,
-        vg_relationships_file=vg_relationships_file,
-        save_to_disk=save_to_disk,
-        save_dummy_subset=save_dummy_subset,
-        dummy_subset_size=dummy_subset_size,
-    )
-
-
-def add_graph_properties(
-    vg_coco_overlap_text: Union[str, Dataset] = VG_COCO_PREPROCESSED_TEXT_DIR,
-    vg_objects_file: str = VG_OBJECTS_FILE,
-    vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
-    save_to_disk: bool = True,
-    save_dummy_subset: bool = True,
-    dummy_subset_size: int = 1000,
-) -> Dataset:
-    """Add graph properties to the dataset.
-
-    :param vg_coco_overlap_text: Path to the directory where the Visual Genome +
-        COCO overlap dataset with text properties is stored or the dataset itself.
-    :type vg_coco_overlap_text: Union[str, Dataset]
-    :param vg_objects_file: Path to the file where the Visual Genome objects json is stored.
-    :type vg_objects_file: str
-    :param vg_relationships_file: Path to the file where the Visual Genome relationship json is stored.
-    :type vg_relationships_file: str
-    :param save_to_disk: Whether to save the dataset to disk, defaults to True
-    :type save_to_disk: bool
-    :param save_dummy_subset: Whether to save a dummy subset of the dataset, defaults to True
-    :type save_dummy_subset: bool
-    :param dummy_subset_size: Size of the dummy subset, defaults to 1000
-    :type dummy_subset_size: int
-    :return: The dataset with the graph properties added
-    :rtype: Dataset
-    """
-    # Load the dataset
-    preprocessed_ds = (
-        load_from_disk(vg_coco_overlap_text) if isinstance(vg_coco_overlap_text, str) else vg_coco_overlap_text
-    )
-    image_ids = list(set(preprocessed_ds["vg_image_id"]))
-    preprocessed_df = preprocessed_ds.to_pandas()
-
-    # Get the graph characteristics
-    vg_graph_dict = determine_graph_complexity_measures(vg_objects_file, vg_relationships_file, image_ids)
-    vg_graph_df = pd.DataFrame(vg_graph_dict).rename(columns={"image_id": "vg_image_id"})
-
-    # Speed up the merge by setting the ids as index
-    preprocessed_df = preprocessed_df.set_index("vg_image_id")
-    vg_graph_df = vg_graph_df.set_index("vg_image_id")
-    # Merge the two datasets
-    vg_graph_merged_ds = Dataset.from_pandas(preprocessed_df.join(vg_graph_df))
-
-    # Save to disk
-    if save_to_disk:
-        output_dir = os.path.split(vg_coco_overlap_text)[0] if isinstance(vg_coco_overlap_text, str) else VG_DIR
-        vg_graph_merged_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_graph"))
-        # Also save a small dummy subset of dummy_subset_size many entries
-        if save_dummy_subset:
-            vg_graph_merged_ds.select(list(range(dummy_subset_size))).save_to_disk(
-                os.path.join(output_dir, "vg_coco_preprocessed_graph_dummy")
-            )
-
-    return vg_graph_merged_ds
-
-
-@click.command()
-@click.option("--vg_coco_overlap_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
-@click.option("--coco_obj_seg_dir", type=str, default=VG_COCO_OBJ_SEG_DIR)
+@click.option("--coco_graph_dir", type=str, default=COCO_PREP_TEXT_GRAPH_DIR)
+@click.option("--coco_image_dir", type=str, default=COCO_IMAGE_DIR)
+@click.option("--coco_obj_seg_dir", type=str, default=COCO_OBJ_SEG_DIR)
 @click.option("--coco_a_annot_file", type=str, default=COCO_A_ANNOT_FILE)
 @click.option("--save_to_disk", type=bool, default=True)
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
-@click.option("--output_dir", type=str, default=os.path.split(VG_COCO_OVERLAP_DIR)[0])
-def add_coco_properties_wrapper(
-    vg_coco_overlap_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
-    coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+@click.option("--output_dir", type=str, default=os.path.split(COCO_DIR)[0])
+def add_graph_properties_wrapper(
+    coco_graph_dir: str = COCO_PREP_TEXT_GRAPH_DIR,
+    coco_image_dir: str = COCO_IMAGE_DIR,
+    coco_obj_seg_dir: str = COCO_OBJ_SEG_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
-    output_dir: str = os.path.split(VG_COCO_OVERLAP_DIR)[0],
+    output_dir: str = os.path.split(COCO_DIR)[0],
 ):
-    """Wrapper for the add_coco_properties_properties function.
+    """Wrapper for the add_graph_properties function.
 
-    :param vg_coco_overlap_graph_dir: Path to the directory where the Visual Genome + COCO overlap dataset with
+    :param coco_graph_dir: Path to the directory where the Visual Genome + COCO dataset with
         graph properties is stored.
-    :type vg_coco_overlap_graph_dir: str
+    :type coco_graph_dir: str
+    :param coco_image_dir: Directory where the COCO images are stored, defaults to COCO_IMAGE_DIR
+    :type coco_image_dir: str
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
     :type coco_obj_seg_dir: str
     :param coco_a_annot_file: Path to the COCO action annotations file, defaults to COCO_A_ANNOT_FILE
@@ -287,11 +184,12 @@ def add_coco_properties_wrapper(
     :param dummy_subset_size: Size of the dummy subset, defaults to 1000
     :type dummy_subset_size: int
     :param output_dir: Directory where the output dataset should be stored, defaults to
-        os.path.split(VG_COCO_OVERLAP_DIR)[0]
+        os.path.split(COCO_DIR)[0]
     :type output_dir: str
     """
-    add_coco_properties(
-        vg_coco_overlap_graph=vg_coco_overlap_graph_dir,
+    add_graph_properties(
+        coco_graph=coco_graph_dir,
+        coco_image_dir=coco_image_dir,
         coco_obj_seg_dir=coco_obj_seg_dir,
         coco_a_annot_file=coco_a_annot_file,
         save_to_disk=save_to_disk,
@@ -301,20 +199,23 @@ def add_coco_properties_wrapper(
     )
 
 
-def add_coco_properties(
-    vg_coco_overlap_graph: Union[str, Dataset] = VG_COCO_PREP_TEXT_GRAPH_DIR,
-    coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+def add_graph_properties(
+    coco_graph: Union[str, Dataset] = COCO_PREP_TEXT_GRAPH_DIR,
+    coco_image_dir: str = COCO_IMAGE_DIR,
+    coco_obj_seg_dir: str = COCO_OBJ_SEG_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
-    output_dir: str = os.path.split(VG_COCO_OVERLAP_DIR)[0],
+    output_dir: str = os.path.split(COCO_DIR)[0],
 ) -> Dataset:
-    """Add image segmentation properties to the dataset.
+    """Add COCO action-based graph properties to the dataset.
 
-    :param vg_coco_overlap_graph: Path to the directory where the Visual Genome +
-        COCO overlap dataset with text and graph properties is stored or the dataset itself.
-    :type vg_coco_overlap_graph: Union[str, Dataset]
+    :param coco_graph: Path to the directory where the Visual Genome +
+        COCO dataset with text and graph properties is stored or the dataset itself.
+    :type coco_graph: Union[str, Dataset]
+    :param coco_image_dir: Directory where the COCO images are stored, defaults to COCO_IMAGE_DIR
+    :type coco_image_dir: str
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json).
     :type coco_obj_seg_dir: str
     :param coco_a_annot_file: Path to the COCO action annotations file, defaults to COCO_A_ANNOT_FILE
@@ -328,18 +229,8 @@ def add_coco_properties(
     :param output_dir: Directory where the dataset should be saved
     :type output_dir: str
     """
-    # Set the output name
-    if isinstance(vg_coco_overlap_graph, str) and "vg_" in vg_coco_overlap_graph:
-        vg_in_file_name = "vg_"
-    elif isinstance(vg_coco_overlap_graph, Dataset) and "vg_image_id" in vg_coco_overlap_graph.column_names:
-        vg_in_file_name = "vg_"
-    else:
-        vg_in_file_name = ""
-
     # Load the dataset
-    preprocessed_ds = (
-        load_from_disk(vg_coco_overlap_graph) if isinstance(vg_coco_overlap_graph, str) else vg_coco_overlap_graph
-    )
+    preprocessed_ds = load_from_disk(coco_graph) if isinstance(coco_graph, str) else coco_graph
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Get the number of objects based on the COCO annotations for image segmentation
@@ -353,43 +244,50 @@ def add_coco_properties(
     preprocessed_df = preprocessed_df.set_index("cocoid")
     # Merge the two datasets
     joined_df = preprocessed_df.join(coco_obj_seg_df, how="inner")
-    vg_img_seg_ds = Dataset.from_pandas(joined_df)
+    graph_ds = Dataset.from_pandas(joined_df)
     # Rename the index column back to cocoid
-    if "__index_level_0__" in vg_img_seg_ds.column_names:
-        vg_img_seg_ds = vg_img_seg_ds.rename_column("__index_level_0__", "cocoid")
+    if "__index_level_0__" in graph_ds.column_names:
+        graph_ds = graph_ds.rename_column("__index_level_0__", "cocoid")
+
+    # For each image, get the aspect ratio by loading the image from the local directory with
+    # the "filepath" column
+    graph_ds = graph_ds.map(
+        lambda example: example | {"aspect_ratio": get_aspect_ratio(os.path.join(coco_image_dir, example["filepath"]))},
+        num_proc=24,
+    )
 
     # Save to disk
     if save_to_disk:
-        vg_img_seg_ds.save_to_disk(os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg"))
+        graph_ds.save_to_disk(os.path.join(output_dir, "coco_preprocessed_text_image_graphs"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            vg_img_seg_ds.select(list(range(dummy_subset_size))).save_to_disk(
-                os.path.join(output_dir, f"{vg_in_file_name}coco_preprocessed_img_seg_dummy")
+            graph_ds.select(list(range(dummy_subset_size))).save_to_disk(
+                os.path.join(output_dir, "coco_preprocessed_text_image_graphs_dummy")
             )
 
-    return vg_img_seg_ds
+    return graph_ds
 
 
 @click.command()
-@click.option("--vg_coco_overlap_graph_dir", type=str, default=VG_COCO_PREP_TEXT_IMG_SEG_DIR)
+@click.option("--coco_graph_dir", type=str, default=COCO_PREP_TEXT_GRAPH_DIR)
 @click.option("--ic_scores_file", type=str, default=IC_SCORES_FILE)
 @click.option("--save_to_disk", type=bool, default=True)
 @click.option("--save_dummy_subset", type=bool, default=True)
 @click.option("--dummy_subset_size", type=int, default=1000)
-@click.option("--output_dir", type=str, default=os.path.split(VG_COCO_OVERLAP_DIR)[0])
+@click.option("--output_dir", type=str, default=os.path.split(COCO_DIR)[0])
 def add_ic_scores_wrapper(
-    vg_coco_overlap_graph_dir: str = VG_COCO_PREP_TEXT_IMG_SEG_DIR,
+    coco_graph_dir: str = COCO_PREP_TEXT_GRAPH_DIR,
     ic_scores_file: str = IC_SCORES_FILE,
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
-    output_dir: str = os.path.split(VG_COCO_PREP_TEXT_IMG_SEG_DIR)[0],
+    output_dir: str = os.path.split(COCO_PREP_TEXT_GRAPH_DIR)[0],
 ):
     """Add image complexity scores to the dataset.
 
-    :param vg_coco_overlap_graph_dir: Path to the directory where the Visual Genome +
-        COCO overlap dataset with text and image segmentation properties is stored.
-    :type vg_coco_overlap_graph_dir: str
+    :param coco_graph_dir: Path to the directory where the Visual Genome +
+        COCO dataset with text and image segmentation properties is stored.
+    :type coco_graph_dir: str
     :param ic_scores_file: Path to the file where the image complexity scores are stored.
     :type ic_scores_file: str
     :param save_to_disk: Whether to save the dataset to disk, defaults to True
@@ -402,7 +300,7 @@ def add_ic_scores_wrapper(
     :type output_dir: str
     """
     add_ic_scores(
-        vg_coco_overlap_graph=vg_coco_overlap_graph_dir,
+        coco_graph=coco_graph_dir,
         ic_scores_file=ic_scores_file,
         save_to_disk=save_to_disk,
         save_dummy_subset=save_dummy_subset,
@@ -412,18 +310,18 @@ def add_ic_scores_wrapper(
 
 
 def add_ic_scores(
-    vg_coco_overlap_graph: Union[str, Dataset] = VG_COCO_PREP_TEXT_IMG_SEG_DIR,
+    coco_graph: Union[str, Dataset] = COCO_PREP_TEXT_GRAPH_DIR,
     ic_scores_file: str = IC_SCORES_FILE,
     save_to_disk: bool = True,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
-    output_dir: str = os.path.split(VG_COCO_PREP_TEXT_IMG_SEG_DIR)[0],
+    output_dir: str = os.path.split(COCO_PREP_TEXT_GRAPH_DIR)[0],
 ) -> Dataset:
     """Add image complexity scores to the dataset.
 
-    :param vg_coco_overlap_graph: Path to the directory where the Visual Genome +
-        COCO overlap dataset with text and image segmentation properties is stored or the dataset itself.
-    :type vg_coco_overlap_graph: Union[str, Dataset]
+    :param coco_graph: Path to the directory where the Visual Genome +
+        COCO dataset with text and image segmentation properties is stored or the dataset itself.
+    :type coco_graph: Union[str, Dataset]
     :param ic_scores_file: Path to the file where the image complexity scores are stored.
     :type ic_scores_file: str
     :param save_to_disk: Whether to save the dataset to disk, defaults to True
@@ -438,9 +336,7 @@ def add_ic_scores(
     :rtype: Dataset
     """
     # Load the dataset
-    preprocessed_ds = (
-        load_from_disk(vg_coco_overlap_graph) if isinstance(vg_coco_overlap_graph, str) else vg_coco_overlap_graph
-    )
+    preprocessed_ds = load_from_disk(coco_graph) if isinstance(coco_graph, str) else coco_graph
     preprocessed_df = preprocessed_ds.to_pandas()
 
     # Load the image complexity scores, give it a column name
@@ -463,128 +359,20 @@ def add_ic_scores(
         joined_df = joined_df.drop(columns=["id"])
     if "split" in joined_df.columns:
         joined_df = joined_df.drop(columns=["split"])
-    vg_img_seg_ds = Dataset.from_pandas(joined_df)
+    graph_ds = Dataset.from_pandas(joined_df)
+
+    # Also get the aspect ratio by loading the image from
 
     # Save to disk
     if save_to_disk:
-        vg_img_seg_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_img_seg_ic"))
+        graph_ds.save_to_disk(os.path.join(output_dir, "coco_preprocessed_text_graph_ic"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            vg_img_seg_ds.select(list(range(dummy_subset_size))).save_to_disk(
-                os.path.join(output_dir, "vg_coco_preprocessed_img_seg_ic_dummy")
+            graph_ds.select(list(range(dummy_subset_size))).save_to_disk(
+                os.path.join(output_dir, "coco_preprocessed_text_graph_ic_dummy")
             )
 
-    return vg_img_seg_ds
-
-
-def determine_graph_complexity_measures(
-    vg_objects_file: str = VG_OBJECTS_FILE,
-    vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
-    image_ids: Optional[List[str]] = None,
-    return_graphs: bool = False,
-) -> List[Dict[str, Any]]:
-    """Characterize the graph complexity of the VG + COCO overlap dataset for the given image ids.
-
-    :param vg_objects_file: Path to the file where the Visual Genome objects json is stored.
-    :type vg_objects_file: str
-    :param vg_relationships_file: Path to the file where the Visual Genome relationship json is stored.
-    :type vg_relationships_file: str
-    :param image_ids: Optional list of image ids to characterize the graph complexity for, defaults to None
-    :type image_ids: Optional[List[str]]
-    :param return_graphs: Whether to return the graphs as well, defaults to False
-    :type return_graphs: bool
-    :return: List of dictionaries with the graph complexity measures and image id
-    :rtype: List[Dict[str, Any]]
-    """
-    # Load the object and relationship files from json
-    vg_objects = load_dataset("json", data_files=vg_objects_file, split="train")
-    vg_relationships = load_dataset("json", data_files=vg_relationships_file, split="train")
-    # Filter by image ids if given
-    if image_ids:
-        vg_objects = vg_objects.filter(lambda x: x["image_id"] in image_ids, num_proc=4)
-        vg_relationships = vg_relationships.filter(
-            lambda x: x["image_id"] in image_ids,
-            num_proc=4,
-        )
-
-    # Process each VG image/graph into a networkx graph
-    graph_measures = []
-    graphs = {}
-    for obj, rel in tqdm(
-        zip(vg_objects, vg_relationships),
-        desc="Processing rels/objs as networkx graphs",
-        total=len(vg_objects),
-    ):
-        # Create the graph based on objects and relationships
-        graph = nx.Graph()
-        for o in obj["objects"]:
-            graph.add_node(o["object_id"])
-        for r in rel["relationships"]:
-            graph.add_edge(
-                r["object"]["object_id"],
-                r["subject"]["object_id"],
-                rel_id=r["relationship_id"],
-            )
-
-        # Append the graph to the dict
-        graphs[obj["image_id"]] = graph
-        # Filter for relationships that have at least one living being as subject/object
-        filtered_rels = [
-            r
-            for r in rel["relationships"]
-            if len(r["object"]["synsets"]) > 0
-            and len(r["subject"]["synsets"]) > 0
-            and (check_if_living_being(r["object"]["synsets"][0]) or check_if_living_being(r["subject"]["synsets"][0]))
-        ]
-        filtered_rel_ids = [r["relationship_id"] for r in filtered_rels]
-        filtered_edges = [
-            (u, v, data) for u, v, data in graph.edges(data=True) if data.get("rel_id") in filtered_rel_ids
-        ]
-        # Create a new graph with the filtered edges
-        filtered_graph = nx.Graph(filtered_edges)
-
-        # Determine the characteristics + add the image id as well
-        measures = {
-            "image_id": obj["image_id"],
-            "avg_node_degree": (np.mean([d for _, d in graph.degree()]) if nx.number_of_nodes(graph) > 0 else 0),
-            "avg_node_connectivity": (
-                nx.algorithms.connectivity.average_node_connectivity(graph) if nx.number_of_nodes(graph) > 0 else 0
-            ),
-            "avg_clustering_coefficient": (
-                nx.algorithms.approximation.average_clustering(
-                    graph,
-                    trials=1000,
-                    seed=42,
-                )
-                if nx.number_of_nodes(graph) > 0
-                else 0
-            ),
-            "density": nx.density(graph),
-            "sg_depth": (
-                max([max(nx.shortest_path_length(graph, source=n).values()) for n in graph.nodes()])
-                if nx.number_of_nodes(graph) > 0
-                else 0
-            ),
-            "sg_filtered_depth": (
-                max([max(nx.shortest_path_length(filtered_graph, source=n).values()) for n in filtered_graph.nodes()])
-                if nx.number_of_nodes(filtered_graph) > 0
-                else 0
-            ),
-            "n_connected_components": nx.number_connected_components(graph),
-            "n_obj": len(obj["objects"]),
-            "n_filtered_obj": len([o for o in obj["objects"] if o["object_id"] in filtered_graph.nodes()]),
-            "n_rel": len(rel["relationships"]),
-            "n_filtered_rel": len(filtered_rels),
-            "graph": nx.to_numpy_array(graph),
-            "filtered_graph": nx.to_numpy_array(filtered_graph),
-        }
-        # Append them to the list
-        graph_measures.append(measures)
-
-    if return_graphs:
-        return graphs, graph_measures
-    else:
-        return graph_measures
+    return graph_ds
 
 
 def create_coco_a_sub_graph(
@@ -655,7 +443,7 @@ def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[st
 
 
 def get_coco_obj_seg_df(
-    coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    coco_obj_seg_dir: str = COCO_OBJ_SEG_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     coco_ids: Optional[List[str]] = None,
 ) -> pd.DataFrame:
@@ -670,6 +458,7 @@ def get_coco_obj_seg_df(
     :return: Dataframe with the number of objects per coco id
     :rtype: pd.DataFrame
     """
+    # TODO more graph properties, e.g. number of edges, number of nodes, and the whole graph
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
         coco_data_tr = json.load(f)
@@ -691,9 +480,7 @@ def get_coco_obj_seg_df(
     coco_cat_mappings = {**coco_cats_tr, **coco_cats_val}
 
     # Create a dictionary counting the number of objects per image id as well as a list of the categories
-    coco_obj_seg_filtered = {
-        k: {"n_img_seg_obj": 0, "coco_person": 0, "coco_categories": []} for k in set(coco_obj_seg)
-    }
+    coco_obj_seg_filtered = {k: {"n_graph_obj": 0, "coco_person": 0, "coco_categories": []} for k in set(coco_obj_seg)}
 
     # Get all the COCO features
     for coco_id, coco_cat_id in tqdm(
@@ -701,7 +488,7 @@ def get_coco_obj_seg_df(
         desc="Adding COCO features",
         total=len(coco_cat),
     ):
-        coco_obj_seg_filtered[coco_id]["n_img_seg_obj"] += 1  # type: ignore
+        coco_obj_seg_filtered[coco_id]["n_graph_obj"] += 1  # type: ignore
         coco_obj_seg_filtered[coco_id]["coco_categories"].append(coco_cat_mappings[coco_cat_id])  # type: ignore
         # Check if the category is a person
         if coco_cat_mappings[coco_cat_id] in ["person"]:
@@ -723,6 +510,11 @@ def get_coco_obj_seg_df(
 
         # Add the longest shortest path to the image id
         coco_a_filtered[coco_a_id]["coco_a_graph_depth"] = max_longest_shortest_path
+        # Also add the number of edges, nodes and the entire graph
+        coco_a_filtered[coco_a_id]["coco_a_edges"] = coco_a_graph["coco_a_graph"].number_of_edges()
+        coco_a_filtered[coco_a_id]["coco_a_nodes"] = coco_a_graph["coco_a_graph"].number_of_nodes()
+        coco_a_filtered[coco_a_id]["coco_a_graph"] = nx.to_numpy_array(coco_a_graph["coco_a_graph"])
+        # Remove the number of actions from the dictionary
         # Remove the graph from the dictionary
         coco_a_filtered[coco_a_id].pop("coco_a_graph")
 
@@ -730,7 +522,7 @@ def get_coco_obj_seg_df(
     coco_obj_seg_df = pd.DataFrame.from_dict(
         coco_obj_seg_filtered,
         orient="index",
-        columns=["n_img_seg_obj", "coco_person", "coco_categories"],
+        columns=["n_graph_obj", "coco_person", "coco_categories"],
     )
     coco_a_df = pd.DataFrame.from_dict(
         coco_a_filtered,
@@ -748,42 +540,38 @@ def get_coco_obj_seg_df(
 
 
 @click.command()
-@click.option("--vg_coco_overlap_dir", default=VG_COCO_OVERLAP_DIR)
+@click.option("--coco_dir", default=COCO_DIR)
+@click.option("--coco_image_dir", default=COCO_IMAGE_DIR)
 @click.option("--spacy_model", default="en_core_web_trf")
-@click.option("--vg_objects_file", default=VG_OBJECTS_FILE)
-@click.option("--vg_relationships_file", default=VG_RELATIONSHIPS_FILE)
-@click.option("--coco_obj_seg_dir", default=VG_COCO_OBJ_SEG_DIR)
+@click.option("--coco_obj_seg_dir", default=COCO_OBJ_SEG_DIR)
 @click.option("--coco_a_annot_file", default=COCO_A_ANNOT_FILE)
 @click.option("--ic_scores_file", default=IC_SCORES_FILE)
 @click.option("--save_intermediate_steps", default=False)
 @click.option("--save_dummy_subset", default=True)
 @click.option("--dummy_subset_size", default=1000)
-@click.option("--output_dir", default=VG_DIR)
+@click.option("--output_dir", default=COCO_DIR)
 def add_all_properties(
-    vg_coco_overlap_dir: str = VG_COCO_OVERLAP_DIR,
+    coco_dir: str = COCO_DIR,
+    coco_image_dir: str = COCO_IMAGE_DIR,
     spacy_model: str = "en_core_web_trf",
-    vg_objects_file: str = VG_OBJECTS_FILE,
-    vg_relationships_file: str = VG_RELATIONSHIPS_FILE,
-    coco_obj_seg_dir: str = VG_COCO_OBJ_SEG_DIR,
+    coco_obj_seg_dir: str = COCO_OBJ_SEG_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     ic_scores_file: str = IC_SCORES_FILE,
     save_intermediate_steps: bool = False,
     save_dummy_subset: bool = True,
     dummy_subset_size: int = 1000,
-    output_dir: str = VG_DIR,
+    output_dir: str = COCO_DIR,
 ):
-    """Add all properties to the VG + COCO overlap dataset.
+    """Add all properties to the COCO dataset.
 
-    :param vg_coco_overlap_dir: Directory where the VG + COCO overlap dataset is stored, defaults to VG_COCO_OVERLAP_DIR
-    :type vg_coco_overlap_dir: str
+    :param coco_dir: Directory where the COCO dataset is stored, defaults to COCO_DIR
+    :type coco_dir: str
+    :param coco_image_dir: Directory where the COCO images are stored, defaults to COCO_IMAGE_DIR
+    :type coco_image_dir: str
     :param spacy_model: SpaCy model to use for text processing, defaults to "en_core_web_trf"
     :type spacy_model: str
-    :param vg_objects_file: File with the VG objects, defaults to VG_OBJECTS_FILE
-    :type vg_objects_file: str
-    :param vg_relationships_file: File with the VG relationships, defaults to VG_RELATIONSHIPS_FILE
-    :type vg_relationships_file: str
     :param coco_obj_seg_dir: Directory where the COCO object segmentations are stored (instances_train/val2017.json),
-        defaults to VG_COCO_OBJ_SEG_DIR
+        defaults to COCO_OBJ_SEG_DIR
     :type coco_obj_seg_dir: str
     :param coco_a_annot_file: File with the COCO action annotations, defaults to COCO_A_ANNOT_FILE
     :type coco_a_annot_file: str
@@ -795,41 +583,33 @@ def add_all_properties(
     :type save_dummy_subset: bool
     :param dummy_subset_size: Size of the dummy subset, defaults to 1000
     :type dummy_subset_size: int
-    :param output_dir: Directory where the VG + COCO overlap dataset with all properties is stored, defaults to VG_DIR
+    :param output_dir: Directory where the COCO dataset with all properties is stored, defaults to COCO_DIR
     :type output_dir: str
     """
     # 1. Add text properties
     text_ds = add_text_properties(
-        vg_coco_overlap=vg_coco_overlap_dir,
+        coco=coco_dir,
         spacy_model=spacy_model,
         save_to_disk=save_intermediate_steps,
         save_dummy_subset=save_dummy_subset,
         dummy_subset_size=dummy_subset_size,
     )
     logger.info(f"Added text properties for {len(text_ds)} entries")
-    # 2. Add graph properties
-    graph_ds = add_graph_properties(
-        vg_coco_overlap_text=text_ds,
-        vg_objects_file=vg_objects_file,
-        vg_relationships_file=vg_relationships_file,
-        save_to_disk=save_intermediate_steps,
-        save_dummy_subset=save_dummy_subset,
-        dummy_subset_size=dummy_subset_size,
-    )
     logger.info(f"Added graph properties for {len(text_ds)} entries")
-    # 3. Add COCO image segmentation + category properties
-    image_segmentation_ds = add_coco_properties(
-        vg_coco_overlap_graph=graph_ds,
+    # 2. Add COCO graph, image segmentation + category properties
+    image_segmentation_ds = add_graph_properties(
+        coco_graph=text_ds,
+        coco_image_dir=coco_image_dir,
         coco_obj_seg_dir=coco_obj_seg_dir,
         coco_a_annot_file=coco_a_annot_file,
         save_to_disk=save_intermediate_steps,
         save_dummy_subset=save_dummy_subset,
         dummy_subset_size=dummy_subset_size,
     )
-    logger.info(f"Added image segmentation and category properties for {len(text_ds)} entries")
-    # 4. Add IC scores
+    logger.info(f"Added COCO-A properties for {len(text_ds)} entries")
+    # 3. Add IC scores
     ic_scores_ds = add_ic_scores(
-        vg_coco_overlap_graph=image_segmentation_ds,
+        coco_graph=image_segmentation_ds,
         ic_scores_file=ic_scores_file,
         save_to_disk=save_intermediate_steps,
         save_dummy_subset=save_dummy_subset,
@@ -848,57 +628,14 @@ def add_all_properties(
     return ic_scores_ds
 
 
-@click.command()
-@click.option("--vg_objs_file", type=str, default=VG_OBJECTS_FILE)
-@click.option("--vg_rels_file", type=str, default=VG_RELATIONSHIPS_FILE)
-def create_searchable_vg_rel_obj_idx(
-    vg_objs_file: str = VG_OBJECTS_FILE,
-    vg_rels_file: str = VG_RELATIONSHIPS_FILE,
-) -> Dict[str, Dict[str, List]]:
-    """Create a dictionary that maps the vg_image_id to the indices in the relationships and objects file.
-
-    :param vg_objs_file: Path to the json file with the VG objects
-    :type vg_objs_file: str
-    :param vg_rels_file: Path to the json file with the VG relationships
-    :type vg_rels_file: str
-    :return: Dictionary with vg_image_id (str) mapped a Dict containing "rels" and "objs" as keys, and the List of
-        indices from the vg_objs_file and vg_rels_file matching the vg_image_id, respectively
-    :rtype: Dict[str, Dict[str, List]]
-    """
-    # Load the files
-    output_dir = os.path.dirname(vg_objs_file)
-    with open(vg_objs_file, "r") as f:
-        vg_objs = json.load(f)
-    with open(vg_rels_file, "r") as f:
-        vg_rels = json.load(f)
-    # Initialize the result
-    all_ids = set([x["image_id"] for x in vg_objs]).intersection(set([x["image_id"] for x in vg_rels]))
-    res_dict: Dict[str, Dict[str, List]] = {vg_image_id: {"rels": [], "objs": []} for vg_image_id in all_ids}
-
-    # Iterate over all objects
-    for i, obj in tqdm(enumerate(vg_objs), desc="Iterating through all objects"):
-        res_dict[obj["image_id"]]["objs"].append(i)
-    # Iterate over all relationships
-    for i, obj in tqdm(enumerate(vg_rels), desc="Iterating through all relationships"):
-        res_dict[obj["image_id"]]["rels"].append(i)
-
-    # Save the result
-    with open(os.path.join(output_dir, "vg_objs_rels_idx.json"), "w") as f:
-        json.dump(res_dict, f)
-
-    return res_dict
-
-
 @click.group()
 def cli() -> None:
-    """Preprocess the VG + COCO overlap dataset, first for text, then for graph properties (on top of text)."""
+    """Preprocess the COCO dataset, first for text, then for graph properties and image complexity (on top of text)."""
 
 
 if __name__ == "__main__":
     cli.add_command(add_text_properties_wrapper)
     cli.add_command(add_graph_properties_wrapper)
-    cli.add_command(add_coco_properties_wrapper)
     cli.add_command(add_ic_scores_wrapper)
     cli.add_command(add_all_properties)
-    cli.add_command(create_searchable_vg_rel_obj_idx)
     cli()
