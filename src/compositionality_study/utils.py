@@ -93,20 +93,36 @@ def derive_text_depth_features(
     :return: The batch with the added features
     :rtype: Dict[str, List]
     """
-    result: Dict = {"parse_tree_depth": [], "n_verbs": [], "amr_graph_depth": []}
+    result: Dict = {
+        "parse_tree_depth": [],
+        "n_verbs": [],
+        "amr_graph_depth": [],
+        "amr_graph": [],
+        "amr_n_nodes": [],
+        "amr_n_edges": [],
+    }
     doc_batched = nlp.pipe(examples["sentences_raw"])
 
     for doc in doc_batched:
         # Also derive the AMR graph for the caption and derive its depth
         amr_graph = doc._.to_amr()[0]  # noqa
         try:
-            amr_depth = get_amr_graph_depth(amr_graph)
+            amr_depth, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)
+            n_nodes = nx.number_of_nodes(amr_graph)
+            n_edges = nx.number_of_edges(amr_graph)
+            amr_graph = nx.to_numpy_array(amr_graph)
         except penman.exceptions.DecodeError:
             amr_depth = 0
+            n_nodes = 0
+            n_edges = 0
+            amr_graph = []
         # Determine the depth of the dependency parse tree
         result["parse_tree_depth"].append(walk_tree(next(doc.sents).root, 0))
         result["n_verbs"].append(len([token for token in doc if token.pos_ == "VERB"]))
         result["amr_graph_depth"].append(amr_depth)
+        result["amr_graph"].append(amr_graph)
+        result["amr_n_nodes"].append(n_nodes)
+        result["amr_n_edges"].append(n_edges)
 
     return examples | result
 

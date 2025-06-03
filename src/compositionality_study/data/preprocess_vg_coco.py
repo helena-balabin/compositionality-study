@@ -572,8 +572,11 @@ def determine_graph_complexity_measures(
             ),
             "n_connected_components": nx.number_connected_components(graph),
             "n_obj": len(obj["objects"]),
+            "n_filtered_obj": len([o for o in obj["objects"] if o["object_id"] in filtered_graph.nodes()]),
             "n_rel": len(rel["relationships"]),
             "n_filtered_rel": len(filtered_rels),
+            "graph": nx.to_numpy_array(graph),
+            "filtered_graph": nx.to_numpy_array(filtered_graph),
         }
         # Append them to the list
         graph_measures.append(measures)
@@ -834,11 +837,11 @@ def add_all_properties(
     )
     logger.info(f"Added image complexity scores for {len(text_ds)} entries")
     # Save the dataset
-    ic_scores_ds.save_to_disk(os.path.join(output_dir, "vg_coco_preprocessed_all"))
+    ic_scores_ds.save_to_disk(os.path.join(output_dir, "coco_a_preprocessed_all"))
     # Save the dummy subset
     if save_dummy_subset:
         ic_scores_ds.select(range(dummy_subset_size)).save_to_disk(
-            os.path.join(output_dir, "vg_coco_preprocessed_all_dummy")
+            os.path.join(output_dir, "coco_a_preprocessed_all_dummy")
         )
     logger.info(f"Saved the preprocessed dataset to {output_dir}")
 
