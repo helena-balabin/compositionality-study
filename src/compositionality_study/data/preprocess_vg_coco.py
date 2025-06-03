@@ -244,6 +244,9 @@ def add_graph_properties(
     preprocessed_df = preprocessed_df.set_index("cocoid")
     # Merge the two datasets
     joined_df = preprocessed_df.join(coco_obj_seg_df, how="inner")
+    # Convert 2D numpy array adjacency matrix to a list of lists for coco_a_graph and amr_graph
+    joined_df["coco_a_graph"] = joined_df["coco_a_graph"].apply(lambda x: [y.tolist() for y in x])
+    joined_df["amr_graph"] = joined_df["amr_graph"].apply(lambda x: [y.tolist() for y in x])
     graph_ds = Dataset.from_pandas(joined_df)
     # Rename the index column back to cocoid
     if "__index_level_0__" in graph_ds.column_names:
@@ -350,18 +353,7 @@ def add_ic_scores(
     ic_scores_df.index.name = "cocoid"
     # Merge the two datasets based on the cocoid
     joined_df = preprocessed_df.merge(ic_scores_df, on="cocoid")
-    joined_df["ic_score"] = joined_df["ic_score_x"].combine_first(joined_df["ic_score_y"])
-    joined_df.drop(columns=["ic_score_x", "ic_score_y"], inplace=True)
-    # If present, remove the "__index_level_0__", "id" and "split" columns
-    if "__index_level_0__" in joined_df.columns:
-        joined_df = joined_df.drop(columns=["__index_level_0__"])
-    if "id" in joined_df.columns:
-        joined_df = joined_df.drop(columns=["id"])
-    if "split" in joined_df.columns:
-        joined_df = joined_df.drop(columns=["split"])
     graph_ds = Dataset.from_pandas(joined_df)
-
-    # Also get the aspect ratio by loading the image from
 
     # Save to disk
     if save_to_disk:
@@ -458,7 +450,6 @@ def get_coco_obj_seg_df(
     :return: Dataframe with the number of objects per coco id
     :rtype: pd.DataFrame
     """
-    # TODO more graph properties, e.g. number of edges, number of nodes, and the whole graph
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
         coco_data_tr = json.load(f)
@@ -514,9 +505,6 @@ def get_coco_obj_seg_df(
         coco_a_filtered[coco_a_id]["coco_a_edges"] = coco_a_graph["coco_a_graph"].number_of_edges()
         coco_a_filtered[coco_a_id]["coco_a_nodes"] = coco_a_graph["coco_a_graph"].number_of_nodes()
         coco_a_filtered[coco_a_id]["coco_a_graph"] = nx.to_numpy_array(coco_a_graph["coco_a_graph"])
-        # Remove the number of actions from the dictionary
-        # Remove the graph from the dictionary
-        coco_a_filtered[coco_a_id].pop("coco_a_graph")
 
     # Create dataframes from the dictionaries
     coco_obj_seg_df = pd.DataFrame.from_dict(
@@ -527,7 +515,7 @@ def get_coco_obj_seg_df(
     coco_a_df = pd.DataFrame.from_dict(
         coco_a_filtered,
         orient="index",
-        columns=["n_coco_a_actions", "coco_a_graph_depth"],
+        columns=["n_coco_a_actions", "coco_a_graph_depth", "coco_a_edges", "coco_a_nodes", "coco_a_graph"],
     )
     # Merge the two dataframes (rows where there is data for both)
     coco_obj_seg_df = coco_obj_seg_df.join(coco_a_df, how="inner")

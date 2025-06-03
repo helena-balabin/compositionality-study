@@ -77,6 +77,7 @@ def download_coco(
     # Also save a small dummy subset of dummy_subset_size many entries
     if save_dummy_subset:
         coco_ds.select(list(range(dummy_subset_size))).save_to_disk(os.path.join(output_dir, "coco_dummy"))
+        coco_a_ds.select(list(range(dummy_subset_size))).save_to_disk(os.path.join(output_dir, "coco_a_dummy"))
     return
 
 
