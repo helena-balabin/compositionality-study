@@ -121,7 +121,7 @@ def derive_text_depth_features(
             amr_depth = 0
             n_nodes = 0
             n_edges = 0
-            amr_graph = []
+            amr_graph = nx.to_numpy_array(nx.DiGraph())
         # Determine the depth of the dependency parse tree
         result["parse_tree_depth"].append(walk_tree(next(doc.sents).root, 0))
         result["n_verbs"].append(len([token for token in doc if token.pos_ == "VERB"]))

@@ -583,7 +583,6 @@ def add_all_properties(
         dummy_subset_size=dummy_subset_size,
     )
     logger.info(f"Added text properties for {len(text_ds)} entries")
-    logger.info(f"Added graph properties for {len(text_ds)} entries")
     # 2. Add COCO graph, image segmentation + category properties
     image_segmentation_ds = add_graph_properties(
         coco_graph=text_ds,
