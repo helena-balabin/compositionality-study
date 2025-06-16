@@ -22,10 +22,10 @@ from tqdm import tqdm
 
 from compositionality_study.constants import (
     COCO_A_ANNOT_FILE,
+    COCO_DIR,
     COCO_LOCAL_STIMULI_DIR,
     COCO_OBJ_SEG_DIR,
     COCO_SELECTED_STIMULI_DIR,
-    DIR,
     IMAGES_COCO_SELECTED_STIMULI_DIR,
     METADATA_FILE,
 )
@@ -361,7 +361,7 @@ def plot_graph_statistics(
 @click.option(
     "--visualizations_dir",
     type=str,
-    default=os.path.join(DIR, "visualizations"),
+    default=os.path.join(COCO_DIR, "visualizations"),
     help="Directory where visualizations will be saved",
 )
 @click.option(
@@ -378,7 +378,7 @@ def plot_graph_statistics(
 )
 def get_summary_statistics(
     stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
-    visualizations_dir: str = os.path.join(DIR, "visualizations"),
+    visualizations_dir: str = os.path.join(COCO_DIR, "visualizations"),
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     metadata_file: str = os.path.join(METADATA_FILE),
 ):
@@ -535,13 +535,13 @@ def get_summary_statistics(
 @click.option(
     "--output_dir",
     type=str,
-    default=os.path.join(DIR, "visualizations"),
+    default=os.path.join(COCO_DIR, "visualizations"),
     help="Directory where visualizations will be saved",
 )
 def check_control_variables_balance(
     selected_stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
-    output_dir: str = os.path.join(DIR, "visualizations"),
+    output_dir: str = os.path.join(COCO_DIR, "visualizations"),
 ) -> pd.DataFrame:
     """Check if control variables are balanced between high and low complexity groups.
 
