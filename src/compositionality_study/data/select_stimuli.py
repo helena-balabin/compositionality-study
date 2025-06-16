@@ -269,7 +269,8 @@ def select_stimuli(
         t_stat, p_val = ttest_ind(high, low)
         logger.info(
             f"Variable {var}: t-statistic={t_stat:.3f}, p-value={p_val:.3e}"
-            f"mean_high={np.mean(high):.3f}, mean_low={np.mean(low):.3f}",
+            f"mean_high={np.mean(high):.3f} +- ({np.std(high):.3f}),"
+            f"mean_low={np.mean(low):.3f} +- ({np.std(low):.3f})",
         )
 
     # Save the dataset
