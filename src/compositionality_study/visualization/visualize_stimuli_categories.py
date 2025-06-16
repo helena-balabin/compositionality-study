@@ -10,19 +10,19 @@ import seaborn as sns
 from datasets import load_from_disk
 from scipy.stats import chi2_contingency
 
-from compositionality_study.constants import VG_COCO_SELECTED_STIMULI_DIR, VISUALIZATIONS_DIR
+from compositionality_study.constants import COCO_SELECTED_STIMULI_DIR, VISUALIZATIONS_DIR
 
 
 @click.command()
-@click.option("--selected_stimuli_dir", default=VG_COCO_SELECTED_STIMULI_DIR, type=str)
+@click.option("--selected_stimuli_dir", default=COCO_SELECTED_STIMULI_DIR, type=str)
 @click.option("--output_dir", default=VISUALIZATIONS_DIR, type=str)
 def visualize_categories_in_images(
-    selected_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
+    selected_stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
     output_dir: str = VISUALIZATIONS_DIR,
 ):
     """Visualize the category distribution in the selected stimuli across conditions (high/low complexity).
 
-    :param selected_stimuli_dir: Directory with the selected stimuli, defaults to VG_COCO_SELECTED_STIMULI_DIR
+    :param selected_stimuli_dir: Directory with the selected stimuli, defaults to COCO_SELECTED_STIMULI_DIR
     :type selected_stimuli_dir: str
     :param output_dir: Output directory for the visualization, defaults to VISUALIZATIONS_DIR
     :type output_dir: str
@@ -59,9 +59,7 @@ def visualize_categories_in_images(
     _, p, _, _ = chi2_contingency(crosstab)
 
     # Annotate the plot with the overall p-value
-    plt.title(
-        f"Distribution of COCO Categories by Complexity with a Chi-Squared Test resulting in p={round(p, 5)}"
-    )
+    plt.title(f"Distribution of COCO Categories by Complexity with a Chi-Squared Test resulting in p={round(p, 5)}")
 
     # Save the figure
     plt.savefig(

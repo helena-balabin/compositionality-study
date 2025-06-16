@@ -1,5 +1,6 @@
 """Generate the psychopy experiment files for the fMRI experiment based on the chosen stimuli."""
 
+import glob
 import os
 import random
 from typing import List
@@ -9,9 +10,8 @@ import pandas as pd
 from PIL import Image, ImageOps
 from psychopy import core, event, logging, visual
 from tqdm import tqdm
-import glob
 
-from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_PRACTICE_STIMULI_DIR
+from compositionality_study.constants import COCO_LOCAL_STIMULI_DIR, COCO_PRACTICE_STIMULI_DIR
 
 # Set a random seed for reproducibility
 random.seed(42)
@@ -202,8 +202,8 @@ def run_single_run(
 
 
 @click.command()
-@click.option("--local_stimuli_dir", type=str, default=VG_COCO_LOCAL_STIMULI_DIR)
-@click.option("--practice_stimuli_dir", type=str, default=VG_COCO_PRACTICE_STIMULI_DIR)
+@click.option("--local_stimuli_dir", type=str, default=COCO_LOCAL_STIMULI_DIR)
+@click.option("--practice_stimuli_dir", type=str, default=COCO_PRACTICE_STIMULI_DIR)
 @click.option("--subject_id", type=int, default=1)
 @click.option("--duration", type=float, default=3.0)
 @click.option("--inter_stimulus_interval", type=float, default=3.0)
@@ -215,8 +215,8 @@ def run_single_run(
 @click.option("--break_duration", type=float, default=30.0)
 @click.option("--session", type=int, default=1)
 def run_psychopy_exp(
-    local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
-    practice_stimuli_dir: str = VG_COCO_PRACTICE_STIMULI_DIR,
+    local_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
+    practice_stimuli_dir: str = COCO_PRACTICE_STIMULI_DIR,
     subject_id: int = 1,
     duration: float = 3.0,
     inter_stimulus_interval: float = 3.0,

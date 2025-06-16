@@ -22,14 +22,14 @@ from tqdm import tqdm
 
 from compositionality_study.constants import (
     COCO_A_ANNOT_FILE,
-    IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
-    VG_COCO_LOCAL_STIMULI_DIR,
-    VG_COCO_OBJ_SEG_DIR,
-    VG_COCO_SELECTED_STIMULI_DIR,
-    VG_DIR,
-    VG_METADATA_FILE,
+    COCO_LOCAL_STIMULI_DIR,
+    COCO_OBJ_SEG_DIR,
+    COCO_SELECTED_STIMULI_DIR,
+    DIR,
+    IMAGES_COCO_SELECTED_STIMULI_DIR,
+    METADATA_FILE,
 )
-from compositionality_study.data.preprocess_vg_coco import (
+from compositionality_study.data.preprocess_coco import (
     determine_graph_complexity_measures,
     get_coco_a_graphs,
 )
@@ -51,7 +51,7 @@ def load_coco_actions(
 
 
 def load_coco_annotations(
-    input_dir: str = VG_COCO_OBJ_SEG_DIR,
+    input_dir: str = COCO_OBJ_SEG_DIR,
 ) -> List[Dict]:
     """Load COCO image annotations.
 
@@ -154,23 +154,23 @@ def visualize_image_with_actions(
 @click.option(
     "--dataset_path",
     type=str,
-    default=VG_COCO_SELECTED_STIMULI_DIR,
+    default=COCO_SELECTED_STIMULI_DIR,
     help="Path to the dataset containing selected stimuli",
 )
 @click.option(
-    "--coco_annotations_dir", type=str, default=VG_COCO_OBJ_SEG_DIR, help="Directory containing COCO image annotations"
+    "--coco_annotations_dir", type=str, default=COCO_OBJ_SEG_DIR, help="Directory containing COCO image annotations"
 )
 @click.option(
     "--output_dir",
     type=str,
-    default=IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    default=IMAGES_COCO_SELECTED_STIMULI_DIR,
     help="Directory where visualizations will be saved",
 )
 def visualize_actions(
-    dataset_path: str = VG_COCO_SELECTED_STIMULI_DIR,
+    dataset_path: str = COCO_SELECTED_STIMULI_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
-    coco_annotations_dir: str = VG_COCO_OBJ_SEG_DIR,
-    output_dir: str = IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    coco_annotations_dir: str = COCO_OBJ_SEG_DIR,
+    output_dir: str = IMAGES_COCO_SELECTED_STIMULI_DIR,
 ) -> None:
     """Visualize actions for selected stimuli from the dataset.
 
@@ -225,7 +225,7 @@ def visualize_actions(
 @click.option(
     "--dataset_path",
     type=str,
-    default=VG_COCO_SELECTED_STIMULI_DIR,
+    default=COCO_SELECTED_STIMULI_DIR,
     help="Path to the dataset containing selected stimuli",
 )
 @click.option(
@@ -237,13 +237,13 @@ def visualize_actions(
 @click.option(
     "--output_dir",
     type=str,
-    default=IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    default=IMAGES_COCO_SELECTED_STIMULI_DIR,
     help="Directory where visualizations will be saved",
 )
 def visualize_amr_text(
-    dataset_path: str = VG_COCO_SELECTED_STIMULI_DIR,
+    dataset_path: str = COCO_SELECTED_STIMULI_DIR,
     spacy_model: str = "en_core_web_trf",
-    output_dir: str = IMAGES_VG_COCO_SELECTED_STIMULI_DIR,
+    output_dir: str = IMAGES_COCO_SELECTED_STIMULI_DIR,
 ):
     """Visualize AMR graphs for the text stimuli.
 
@@ -355,13 +355,13 @@ def plot_graph_statistics(
 @click.option(
     "--stimuli_dir",
     type=str,
-    default=VG_COCO_SELECTED_STIMULI_DIR,
+    default=COCO_SELECTED_STIMULI_DIR,
     help="Path to the dataset containing selected stimuli",
 )
 @click.option(
     "--visualizations_dir",
     type=str,
-    default=os.path.join(VG_DIR, "visualizations"),
+    default=os.path.join(DIR, "visualizations"),
     help="Directory where visualizations will be saved",
 )
 @click.option(
@@ -371,16 +371,16 @@ def plot_graph_statistics(
     help="Path to the COCO-A annotations file",
 )
 @click.option(
-    "--vg_metadata_file",
+    "--metadata_file",
     type=str,
-    default=VG_METADATA_FILE,
+    default=METADATA_FILE,
     help="Path to the VG metadata file",
 )
 def get_summary_statistics(
-    stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
-    visualizations_dir: str = os.path.join(VG_DIR, "visualizations"),
+    stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
+    visualizations_dir: str = os.path.join(DIR, "visualizations"),
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
-    vg_metadata_file: str = os.path.join(VG_METADATA_FILE),
+    metadata_file: str = os.path.join(METADATA_FILE),
 ):
     """Generate summary statistics plots for the selected stimuli.
 
@@ -436,26 +436,26 @@ def get_summary_statistics(
 
     # Get the overlap with visual genome
     # Get the VG images that have COCO overlap
-    with open(vg_metadata_file, "r") as f:
-        vg_metadata = json.load(f)
+    with open(metadata_file, "r") as f:
+        metadata = json.load(f)
     vg = [
         {
             "cocoid": m["coco_id"],
-            "vg_image_id": m["image_id"],
-            "vg_url": m["url"],
+            "image_id": m["image_id"],
+            "url": m["url"],
             "aspect_ratio": m["width"] / m["height"],
         }
-        for m in vg_metadata
+        for m in metadata
         if m["coco_id"] is not None
     ]
-    vg_df = pd.DataFrame(data=vg)
+    df = pd.DataFrame(data=vg)
     # Merge based on the COCO ID
-    vg_coco_overlap = stimuli_df.merge(vg_df, on="cocoid", how="inner")
+    coco_overlap = stimuli_df.merge(df, on="cocoid", how="inner")
     # Log the number of stimuli that have COCO overlap
-    logger.info(f"Number of stimuli with VG-COCO overlap: {len(vg_coco_overlap)}")
+    logger.info(f"Number of stimuli with VG-COCO overlap: {len(coco_overlap)}")
 
-    vg_graphs, _ = determine_graph_complexity_measures(
-        image_ids=list(vg_coco_overlap["vg_image_id"]),
+    graphs, _ = determine_graph_complexity_measures(
+        image_ids=list(coco_overlap["image_id"]),
         return_graphs=True,
     )
 
@@ -497,9 +497,9 @@ def get_summary_statistics(
 
     # Plot statistics for VG graphs
     plot_graph_statistics(
-        vg_graphs,
-        f"VG Graph Statistics for {len(vg_graphs)} VG-COCO Overlapping Stimuli",
-        os.path.join(visualizations_dir, "vg_graph_statistics.png"),
+        graphs,
+        f"VG Graph Statistics for {len(graphs)} VG-COCO Overlapping Stimuli",
+        os.path.join(visualizations_dir, "graph_statistics.png"),
     )
 
     # Plot statistics for COCO-A graphs
@@ -523,25 +523,25 @@ def get_summary_statistics(
 @click.option(
     "--selected_stimuli_dir",
     type=str,
-    default=VG_COCO_SELECTED_STIMULI_DIR,
+    default=COCO_SELECTED_STIMULI_DIR,
     help="Path to the dataset containing selected stimuli",
 )
 @click.option(
     "--local_stimuli_dir",
     type=str,
-    default=VG_COCO_LOCAL_STIMULI_DIR,
+    default=COCO_LOCAL_STIMULI_DIR,
     help="Directory containing local stimuli",
 )
 @click.option(
     "--output_dir",
     type=str,
-    default=os.path.join(VG_DIR, "visualizations"),
+    default=os.path.join(DIR, "visualizations"),
     help="Directory where visualizations will be saved",
 )
 def check_control_variables_balance(
-    selected_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
-    local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
-    output_dir: str = os.path.join(VG_DIR, "visualizations"),
+    selected_stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
+    local_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
+    output_dir: str = os.path.join(DIR, "visualizations"),
 ) -> pd.DataFrame:
     """Check if control variables are balanced between high and low complexity groups.
 
@@ -560,54 +560,56 @@ def check_control_variables_balance(
     selected_df = load_from_disk(selected_stimuli_dir).to_pandas()
     # Filter by available local stimuli
     local_stimuli = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
-    selected_df = selected_df[selected_df['cocoid'].isin(local_stimuli['cocoid'])]
+    selected_df = selected_df[selected_df["cocoid"].isin(local_stimuli["cocoid"])]
 
     # Add image metrics
     def get_image_metrics(row):
-        img = Image.open(os.path.join(local_stimuli_dir, row['img_path']))
+        img = Image.open(os.path.join(local_stimuli_dir, row["img_path"]))
         width, height = img.size
-        return pd.Series({'aspect_ratio': width/height, 'image_height': height})
+        return pd.Series({"aspect_ratio": width / height, "image_height": height})
 
     image_metrics = local_stimuli.apply(get_image_metrics, axis=1)
-    image_metrics = pd.concat([local_stimuli['cocoid'], image_metrics], axis=1)
-    selected_df = selected_df.merge(image_metrics, on='cocoid')
+    image_metrics = pd.concat([local_stimuli["cocoid"], image_metrics], axis=1)
+    selected_df = selected_df.merge(image_metrics, on="cocoid")
 
     # Split into high/low groups
-    high_group = selected_df[selected_df['amr_graph_depth'] == 2]
-    low_group = selected_df[selected_df['amr_graph_depth'] == 1]
+    high_group = selected_df[selected_df["amr_graph_depth"] == 2]
+    low_group = selected_df[selected_df["amr_graph_depth"] == 1]
 
     # Check all variables
-    all_vars = control_vars + ['aspect_ratio', 'image_height']
+    all_vars = control_vars + ["aspect_ratio", "image_height"]
     results = {}
 
     for var in all_vars:
         stat, pval = ttest_ind(high_group[var], low_group[var], equal_var=False)
         results[var] = {
-            'high_mean': high_group[var].mean(),
-            'high_std': high_group[var].std(),
-            'low_mean': low_group[var].mean(),
-            'low_std': low_group[var].std(),
-            't_stat': stat,
-            'p_value': pval
+            "high_mean": high_group[var].mean(),
+            "high_std": high_group[var].std(),
+            "low_mean": low_group[var].mean(),
+            "low_std": low_group[var].std(),
+            "t_stat": stat,
+            "p_value": pval,
         }
 
     # Create a visualization directory if it does not exist
     os.makedirs(output_dir, exist_ok=True)
 
     # Save results to a DataFrame and write to a CSV file
-    results_df = pd.DataFrame.from_dict(results, orient='index')
+    results_df = pd.DataFrame.from_dict(results, orient="index")
     results_df.to_csv(os.path.join(output_dir, "control_variable_balance_check.csv"))
 
     # Save means and p-values to a DataFrame and write to a CSV file
-    summary_df = pd.DataFrame({
-        'Variable': results.keys(),
-        'High Mean': [stats['high_mean'] for stats in results.values()],
-        'High Std': [stats['high_std'] for stats in results.values()],
-        'Low Mean': [stats['low_mean'] for stats in results.values()],
-        'Low Std': [stats['low_std'] for stats in results.values()],
-        'p-value': [stats['p_value'] for stats in results.values()],
-        'Significant Difference': ['Yes' if stats['p_value'] < 0.05 else 'No' for stats in results.values()]
-    })
+    summary_df = pd.DataFrame(
+        {
+            "Variable": results.keys(),
+            "High Mean": [stats["high_mean"] for stats in results.values()],
+            "High Std": [stats["high_std"] for stats in results.values()],
+            "Low Mean": [stats["low_mean"] for stats in results.values()],
+            "Low Std": [stats["low_std"] for stats in results.values()],
+            "p-value": [stats["p_value"] for stats in results.values()],
+            "Significant Difference": ["Yes" if stats["p_value"] < 0.05 else "No" for stats in results.values()],
+        }
+    )
     summary_df.to_csv(os.path.join(output_dir, "control_variable_summary.csv"), index=False)
 
     # Log the results

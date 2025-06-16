@@ -11,25 +11,25 @@ from datasets import load_from_disk
 from tqdm import tqdm
 
 from compositionality_study.constants import (
+    COCO_LOCAL_STIMULI_DIR,
+    COCO_PREP_ALL,
+    IMAGE_DIR,
     MEMORY_TEST_DIR,
-    VG_COCO_LOCAL_STIMULI_DIR,
-    VG_COCO_PREP_ALL,
-    VG_IMAGE_DIR,
 )
 
 
 @click.command()
 @click.option("--n_subjects", type=int, default=12, help="Number of subjects.")
 @click.option("--n_days", type=int, default=3, help="Number of days.")
-@click.option("--input_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str, help="Directory with the true stimuli.")
-@click.option("--preprocessed_vg_coco_dir", default=VG_COCO_PREP_ALL, type=str, help="Directory with the lure stimuli.")
+@click.option("--input_dir", default=COCO_LOCAL_STIMULI_DIR, type=str, help="Directory with the true stimuli.")
+@click.option("--preprocessed_coco_dir", default=COCO_PREP_ALL, type=str, help="Directory with the lure stimuli.")
 @click.option("--output_dir", default=MEMORY_TEST_DIR, type=str, help="Directory to save the memory test.")
 @click.option("--n_test", default=50, type=int, help="Number of stimuli in the memory test.")
 def create_all_memory_tests(
     n_subjects: int,
     n_days: int,
     input_dir: str,
-    preprocessed_vg_coco_dir: str,
+    preprocessed_coco_dir: str,
     output_dir: str,
     n_test: int = 50,
 ) -> None:
@@ -41,8 +41,8 @@ def create_all_memory_tests(
     :type n_days: int
     :param input_dir: Directory with the stimuli.
     :type input_dir: str
-    :param preprocessed_vg_coco_dir: Directory with the lure stimuli.
-    :type preprocessed_vg_coco_dir: str
+    :param preprocessed_coco_dir: Directory with the lure stimuli.
+    :type preprocessed_coco_dir: str
     :param output_dir: Directory to save the memory test.
     :type output_dir: str
     :param n_test: Number of stimuli in the memory test, defaults to 50.
@@ -54,7 +54,7 @@ def create_all_memory_tests(
                 day=str(day),
                 subject_id=subject_id,
                 input_dir=input_dir,
-                preprocessed_vg_coco_dir=preprocessed_vg_coco_dir,
+                preprocessed_coco_dir=preprocessed_coco_dir,
                 output_dir=output_dir,
                 n_test=n_test,
             )
@@ -102,8 +102,8 @@ def copy_memory_test_images(
                 img_id,
             )
         else:
-            # Lure stimuli are in the VG_IMAGE_DIR
-            src_path = os.path.join(VG_IMAGE_DIR, img_id)
+            # Lure stimuli are in the IMAGE_DIR
+            src_path = os.path.join(IMAGE_DIR, img_id)
 
         # Copy image to the memory test folder
         if "COCO" in img_id:
@@ -116,7 +116,7 @@ def create_memory_test_helper(
     day: str,
     subject_id: int,
     input_dir: str,
-    preprocessed_vg_coco_dir: str,
+    preprocessed_coco_dir: str,
     output_dir: str,
     n_test: int = 50,
 ) -> None:
@@ -128,8 +128,8 @@ def create_memory_test_helper(
     :type subject_id: int
     :param input_dir: Directory with the stimuli.
     :type input_dir: str
-    :param preprocessed_vg_coco_dir: Directory with the lure stimuli.
-    :type preprocessed_vg_coco_dir: str
+    :param preprocessed_coco_dir: Directory with the lure stimuli.
+    :type preprocessed_coco_dir: str
     :param output_dir: Directory to save the memory test.
     :type output_dir: str
     :param n_test: Number of stimuli in the memory test, defaults to 50.
@@ -138,7 +138,7 @@ def create_memory_test_helper(
     shown_stimuli = load_stimuli(day=day, subject_id=subject_id, input_dir=input_dir)
     # Remove any blank stimuli from the shown stimuli
     shown_stimuli = shown_stimuli[shown_stimuli["stimulus"] != "blank"]
-    all_stimuli = load_from_disk(preprocessed_vg_coco_dir).to_pandas()
+    all_stimuli = load_from_disk(preprocessed_coco_dir).to_pandas()
     # Rename imgid to img_id in all_stimuli
     all_stimuli.rename(columns={"imgid": "img_id"}, inplace=True)
 

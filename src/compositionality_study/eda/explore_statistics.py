@@ -13,34 +13,34 @@ from loguru import logger
 from tqdm import tqdm
 
 from compositionality_study.constants import (
-    VG_COCO_OVERLAP_DIR,
-    VG_COCO_PREP_TEXT_GRAPH_DIR,
+    COCO_OVERLAP_DIR,
+    COCO_PREP_TEXT_GRAPH_DIR,
     VISUALIZATIONS_DIR,
 )
 from compositionality_study.utils import walk_tree
 
 
 @click.command()
-@click.option("--coco_vg_ds_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--coco_ds_dir", type=str, default=COCO_OVERLAP_DIR)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#66C2A5")
 def sent_len_histogram(
-    coco_vg_ds_dir: str = VG_COCO_OVERLAP_DIR,
+    coco_ds_dir: str = COCO_OVERLAP_DIR,
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#66C2A5",
 ):
     """Plot a histogram of the sentence lengths for all COCO captions.
 
-    :param coco_vg_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
-    :type coco_vg_ds_dir: str
+    :param coco_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
+    :type coco_ds_dir: str
     :param vis_output_dir: Where to save the figures of the plots to, defaults to VISUALIZATIONS_DIR
     :type vis_output_dir: str
     :param color: Color of the bars in the histogram, defaults to "#66C2A5"
     :type color: str
     """
     # Get the sentences and their lengths
-    coco_vg_ds = datasets.load_from_disk(coco_vg_ds_dir)
-    captions_nested = coco_vg_ds["sentences_raw"]
+    coco_ds = datasets.load_from_disk(coco_ds_dir)
+    captions_nested = coco_ds["sentences_raw"]
     captions = [sent for sent_list in captions_nested for sent in sent_list]
     sent_lens = [len(sent.split()) for sent in captions]
 
@@ -64,26 +64,26 @@ def sent_len_histogram(
 
 
 @click.command()
-@click.option("--coco_vg_ds_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--coco_ds_dir", type=str, default=COCO_OVERLAP_DIR)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#FFD966")
 def dep_parse_tree_depth_histogram(
-    coco_vg_ds_dir: str = VG_COCO_OVERLAP_DIR,
+    coco_ds_dir: str = COCO_OVERLAP_DIR,
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#FFD966",
 ):
     """Plot a histogram of the dependency parse tree depths for all COCO captions.
 
-    :param coco_vg_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
-    :type coco_vg_ds_dir: str
+    :param coco_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
+    :type coco_ds_dir: str
     :param vis_output_dir: Where to save the figures of the plots to, defaults to VISUALIZATIONS_DIR
     :type vis_output_dir: str
     :param color: Color of the bars in the histogram, defaults to "#66C2A5"
     :type color: str
     """
     # Get the sentences
-    coco_vg_ds = datasets.load_from_disk(coco_vg_ds_dir)
-    captions_nested = coco_vg_ds["sentences_raw"]
+    coco_ds = datasets.load_from_disk(coco_ds_dir)
+    captions_nested = coco_ds["sentences_raw"]
     captions = [sent for sent_list in captions_nested for sent in sent_list]
 
     # Get the dependency parse tree depths
@@ -114,26 +114,26 @@ def dep_parse_tree_depth_histogram(
 
 
 @click.command()
-@click.option("--coco_vg_ds_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--coco_ds_dir", type=str, default=COCO_OVERLAP_DIR)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#9B9ED4")
 def sent_len_dep_depth_correlation(
-    coco_vg_ds_dir: str = VG_COCO_OVERLAP_DIR,
+    coco_ds_dir: str = COCO_OVERLAP_DIR,
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#9B9ED4",
 ):
     """Plot a scatter plot of the sentence lengths and dependency parse tree depths for all COCO captions.
 
-    :param coco_vg_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
-    :type coco_vg_ds_dir: str
+    :param coco_ds_dir: The VG + COCO overlap dataset with the captions to plot the histogram for
+    :type coco_ds_dir: str
     :param vis_output_dir: Where to save the figures of the plots to, defaults to VISUALIZATIONS_DIR
     :type vis_output_dir: str
     :param color: Color of the bars in the histogram, defaults to "#66C2A5"
     :type color: str
     """
     # Get the sentences
-    coco_vg_ds = datasets.load_from_disk(coco_vg_ds_dir)
-    captions_nested = coco_vg_ds["sentences_raw"]
+    coco_ds = datasets.load_from_disk(coco_ds_dir)
+    captions_nested = coco_ds["sentences_raw"]
     captions = [sent for sent_list in captions_nested for sent in sent_list]
 
     # Get their sentence lengths and dep parse tree depths
@@ -165,7 +165,7 @@ def sent_len_dep_depth_correlation(
 
 
 @click.command()
-@click.option("--vg_coco_text_graph_dir", type=str, default=VG_COCO_PREP_TEXT_GRAPH_DIR)
+@click.option("--coco_text_graph_dir", type=str, default=COCO_PREP_TEXT_GRAPH_DIR)
 @click.option(
     "--columns",
     type=str,
@@ -175,15 +175,15 @@ def sent_len_dep_depth_correlation(
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#6C8EBF")
 def all_properties_corr(
-    vg_coco_text_graph_dir: str = VG_COCO_PREP_TEXT_GRAPH_DIR,
+    coco_text_graph_dir: str = COCO_PREP_TEXT_GRAPH_DIR,
     columns: List[str] = ["sentence_length", "parse_tree_depth", "n_obj", "n_rel"],  # noqa
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#6C8EBF",
 ):
     """Plot a pairplot of the text and graph properties of the VG + COCO overlap dataset.
 
-    :param vg_coco_text_graph_dir: The VG + COCO overlap dataset to plot the pairplot for
-    :type vg_coco_text_graph_dir: str
+    :param coco_text_graph_dir: The VG + COCO overlap dataset to plot the pairplot for
+    :type coco_text_graph_dir: str
     :param columns: The columns to plot the pairplot for,
         defaults to ["sentence_length", "parse_tree_depth", "n_obj", "n_rel"]
     :type columns: List[str]
@@ -193,8 +193,8 @@ def all_properties_corr(
     :type color: str
     """
     # Load the dataset and convert to pandas
-    vg_ds = datasets.load_from_disk(vg_coco_text_graph_dir)
-    vg_df = vg_ds.to_pandas()
+    ds = datasets.load_from_disk(coco_text_graph_dir)
+    df = ds.to_pandas()
 
     # Set seaborn theme
     plt.rcParams["font.family"] = ["sans-serif"]
@@ -202,7 +202,7 @@ def all_properties_corr(
 
     # Create a pairplot
     pairplot = sns.pairplot(
-        vg_df[list(columns)],
+        df[list(columns)],
         kind="reg",
         diag_kind="kde",
         plot_kws={"color": color, "scatter_kws": {"s": 1}},
@@ -211,7 +211,7 @@ def all_properties_corr(
     plt.tight_layout()
 
     # Calculate correlation coefficients
-    correlation_matrix = vg_df[list(columns)].corr()
+    correlation_matrix = df[list(columns)].corr()
 
     # Add correlation coefficients as annotations
     for i, (ax_row, correlation_row) in enumerate(zip(pairplot.axes, correlation_matrix.values)):
@@ -234,24 +234,24 @@ def all_properties_corr(
 
 
 @click.command()
-@click.option("--vg_coco_dir", type=str, default=VG_COCO_OVERLAP_DIR)
+@click.option("--coco_dir", type=str, default=COCO_OVERLAP_DIR)
 @click.option("--spacy_model", type=str, default="en_core_web_trf")
 def check_captions_for_verbs(
-    vg_coco_dir: str = VG_COCO_OVERLAP_DIR,
+    coco_dir: str = COCO_OVERLAP_DIR,
     spacy_model: str = "en_core_web_trf",
 ):
     """Check how many of the captions actually have a verb in them.
 
-    :param vg_coco_dir: The VG + COCO overlap dataset to check the captions for verbs for
-    :type vg_coco_dir: str
+    :param coco_dir: The VG + COCO overlap dataset to check the captions for verbs for
+    :type coco_dir: str
     :param spacy_model: The spaCy model to use for POS tagging, defaults to "en_core_web_trf"
     :type spacy_model: str
     """
     # Load the dataset
-    vg_coco_ds = datasets.load_from_disk(vg_coco_dir)
+    coco_ds = datasets.load_from_disk(coco_dir)
 
     # Get the captions
-    captions = vg_coco_ds["sentences_raw"]
+    captions = coco_ds["sentences_raw"]
 
     # Check how many of the captions have a verb in them
     nlp = spacy.load(spacy_model)

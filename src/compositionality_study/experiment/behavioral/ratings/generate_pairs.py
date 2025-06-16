@@ -6,7 +6,7 @@ from itertools import product
 import click
 import pandas as pd
 
-from compositionality_study.constants import BEHAV_INPUT_DIR, VG_COCO_LOCAL_STIMULI_DIR
+from compositionality_study.constants import BEHAV_INPUT_DIR, COCO_LOCAL_STIMULI_DIR
 
 
 def create_all_stim_pairings(
@@ -44,11 +44,11 @@ def create_all_stim_pairings(
 
 
 @click.command()
-@click.option("--filtered_stimuli_dir", type=str, default=VG_COCO_LOCAL_STIMULI_DIR)
+@click.option("--filtered_stimuli_dir", type=str, default=COCO_LOCAL_STIMULI_DIR)
 @click.option("--fraction", type=float, default=0.1)
 @click.option("--output_dir", type=str, default=BEHAV_INPUT_DIR)
 def create_pairing_files(
-    filtered_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    filtered_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
     output_dir: str = BEHAV_INPUT_DIR,
 ) -> pd.DataFrame:
     """Create the behavioral files.

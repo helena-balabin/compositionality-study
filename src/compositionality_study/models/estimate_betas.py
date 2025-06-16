@@ -12,14 +12,14 @@ from loguru import logger
 from compositionality_study.constants import (
     BETAS_DIR,
     BIDS_DIR,
+    COCO_LOCAL_STIMULI_DIR,
     PREPROC_MRI_DIR,
-    VG_COCO_LOCAL_STIMULI_DIR,
 )
 
 
 def map_events_files(
     event_file: str,
-    design_matrix_mapping_file: str = os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
@@ -30,7 +30,7 @@ def map_events_files(
     :param event_file: Path to the events file.
     :type event_file: str
     :param design_matrix_mapping_file: Path to the design matrix mapping file,
-        defaults to os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv")
+        defaults to os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv")
     :type design_matrix_mapping_file: str
     :param tr: Repetition time (TR) of the fMRI experiment in seconds, defaults to 1.5.
     :type tr: float
@@ -94,7 +94,7 @@ def map_events_files(
 @click.option(
     "--design_matrix_mapping_file",
     type=str,
-    default=os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    default=os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
     help="Design matrix mapping file.",
 )
 @click.option("--tr", type=float, default=1.5, help="Repetition time in seconds.")
@@ -114,7 +114,7 @@ def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
     events_input_dir: str = BIDS_DIR,
     output_dir: str = BETAS_DIR,
-    design_matrix_mapping_file: str = os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
@@ -133,7 +133,7 @@ def estimate_betas(
     :param output_dir: Path to the folder to save beta estimates to, defaults to BETAS_DIR.
     :type output_dir: str
     :param design_matrix_mapping_file: Path to the design matrix mapping file,
-        defaults to os.path.join(VG_COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv").
+        defaults to os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv").
     :type design_matrix_mapping_file: str
     :param tr: Repetition time (TR) of the fMRI experiment in seconds, defaults to 1.5.
     :type tr: float
