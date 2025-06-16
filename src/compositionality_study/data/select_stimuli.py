@@ -177,7 +177,6 @@ def select_stimuli(
     # Remove duplicates based on the sentids
     df_n_stimuli = df_n_stimuli.drop_duplicates(subset=["sentids"])
     # Use propensity score matching to select maxmimally close pairs of high/low, unique by sentids
-    # TODO parameterize
     control_vars = [
         "sentence_length",
         "coco_person",
@@ -204,7 +203,6 @@ def select_stimuli(
     )
     psm.logistic_ps(balance=False)
     psm.knn_matched(caliper=0.2, replacement=False)
-    # TODO how to return all/more maybe
     matched = psm.df_matched
     # Take the group of the first element
     gr = matched["group"].iloc[0]
@@ -252,7 +250,6 @@ def select_stimuli(
     logger.info(f"After PSM, selected {len(ds_n_stimuli)} stimuli.")
 
     # For the control variables, do ttest_ind to check if the means are significantly different
-    # TODO parameterize
     # Map image quality
     ds_n_stimuli = ds_n_stimuli.map(
         lambda x: {
