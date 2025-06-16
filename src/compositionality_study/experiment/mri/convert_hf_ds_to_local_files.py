@@ -9,9 +9,14 @@ import click
 import numpy as np
 import pandas as pd
 from datasets import load_from_disk
+from PIL import Image
 from tqdm import tqdm
 
-from compositionality_study.constants import VG_COCO_LOCAL_STIMULI_DIR, VG_COCO_SELECTED_STIMULI_DIR
+from compositionality_study.constants import (
+    COCO_IMAGE_DIR,
+    COCO_LOCAL_STIMULI_DIR,
+    COCO_SELECTED_STIMULI_DIR,
+)
 from compositionality_study.utils import apply_gamma_correction
 
 # Set a random seed for reproducibility
@@ -37,7 +42,6 @@ def create_balanced_conditions(
     :return: The randomized dataframe.
     :rtype: pd.DataFrame
     """
-    # TODO fix n_groups
     # Group by complexity and modality
     stimuli_rep_df_grouped = df.groupby(["complexity", "modality"])
     # Create separate dataframes for the groups
@@ -119,14 +123,16 @@ def generate_non_word_sentence(
 
 
 @click.command()
-@click.option("--hf_stimuli_dir", default=VG_COCO_SELECTED_STIMULI_DIR, type=str)
-@click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
-@click.option("--text_feature", default="amr_graph_depth", type=str)
+@click.option("--hf_stimuli_dir", default=COCO_SELECTED_STIMULI_DIR, type=str)
+@click.option("--local_stimuli_dir", default=COCO_LOCAL_STIMULI_DIR, type=str)
+@click.option("--coco_image_dir", default=COCO_IMAGE_DIR, type=str)
+@click.option("--text_feature", default="amr_n_nodes", type=str)
 @click.option("--delete_existing", default=True, type=bool)
 def convert_hf_dataset_to_local_stimuli(
-    hf_stimuli_dir: str = VG_COCO_SELECTED_STIMULI_DIR,
-    local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
-    text_feature: str = "amr_graph_depth",
+    hf_stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
+    local_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
+    coco_image_dir: str = COCO_IMAGE_DIR,
+    text_feature: str = "amr_n_nodes",
     delete_existing: bool = True,
 ) -> pd.DataFrame:
     """Convert the stimuli from the huggingface dataset to locally stimuli (images/text).
@@ -135,6 +141,8 @@ def convert_hf_dataset_to_local_stimuli(
     :type hf_stimuli_dir: str
     :param local_stimuli_dir: The directory to save the locally stimuli to.
     :type local_stimuli_dir: str
+    :param coco_image_dir: The directory containing the COCO images.
+    :type coco_image_dir: str
     :param text_feature: The text feature to use for the description of the local stimuli.
     :type text_feature: str
     :param delete_existing: Whether to delete the existing stimuli in the local stimuli directory.
@@ -157,8 +165,9 @@ def convert_hf_dataset_to_local_stimuli(
 
     # Iterate through the dataset and load the images
     for ex in tqdm(dataset, desc="Loading images"):
-        # Load the image
-        img = ex["img"]
+        # Load the image using filepath
+        img = Image.open(os.path.join(coco_image_dir, ex["filepath"]))
+
         # Get the aspect ratio of the image
         aspect_ratio = img.size[0] / img.size[1]
         output_name = f"{ex['sentids']}"
@@ -179,11 +188,11 @@ def convert_hf_dataset_to_local_stimuli(
                         "img_path": output_name + ".png",
                         "img_id": f"{ex['sentids']}",
                         text_feature: ex[text_feature],
-                        "coco_a_graph_depth": ex["coco_a_graph_depth"],
+                        "coco_a_edges": ex["coco_a_edges"],
                         "cocoid": ex["cocoid"],
                         "coco_person": ex["coco_person"],
                         "aspect_ratio": aspect_ratio,
-                        "complexity": "high" if ex["coco_a_graph_depth"] > 1 else "low",
+                        "complexity": "high" if ex["coco_a_edges"] > 1 else "low",
                     },
                     index=[0],
                 ),
@@ -198,7 +207,7 @@ def convert_hf_dataset_to_local_stimuli(
 
 
 @click.command()
-@click.option("--local_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
+@click.option("--local_stimuli_dir", default=COCO_LOCAL_STIMULI_DIR, type=str)
 @click.option("--n_subjects", default=12, type=int)
 @click.option("--n_runs", default=36, type=int)
 @click.option("--n_run_blocks", default=6, type=int)
@@ -209,7 +218,7 @@ def convert_hf_dataset_to_local_stimuli(
 @click.option("--n_sessions", default=3, type=int)
 @click.option("--dummy_scan_duration", default=12.0, type=float)
 def generate_subject_specific_stimulus_files(
-    local_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    local_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
     n_subjects: int = 12,
     n_runs: int = 36,
     n_run_blocks: int = 6,
@@ -377,14 +386,14 @@ def generate_subject_specific_stimulus_files(
 
 
 @click.command()
-@click.option("--filtered_stimuli_dir", default=VG_COCO_LOCAL_STIMULI_DIR, type=str)
+@click.option("--filtered_stimuli_dir", default=COCO_LOCAL_STIMULI_DIR, type=str)
 def map_stimuli_ids_to_design_matrix_idx(
-    filtered_stimuli_dir: str = VG_COCO_LOCAL_STIMULI_DIR,
+    filtered_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
 ):
     """Map the stimuli IDs to the design matrix indices for later GLMSingle beta estimation.
 
     :param filtered_stimuli_dir: The directory containing the filtered stimuli images and text,
-        defaults to VG_COCO_LOCAL_STIMULI_DIR.
+        defaults to COCO_LOCAL_STIMULI_DIR.
     :type filtered_stimuli_dir: str
     """
     # TODO load the stimuli dataframe, get all texts, all images and sort each by ID
