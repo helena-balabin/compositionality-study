@@ -23,16 +23,13 @@ from tqdm import tqdm
 from compositionality_study.constants import (
     COCO_A_ANNOT_FILE,
     COCO_DIR,
+    COCO_IMAGE_DIR,
     COCO_LOCAL_STIMULI_DIR,
     COCO_OBJ_SEG_DIR,
     COCO_SELECTED_STIMULI_DIR,
     IMAGES_COCO_SELECTED_STIMULI_DIR,
-    METADATA_FILE,
 )
-from compositionality_study.data.preprocess_coco import (
-    determine_graph_complexity_measures,
-    get_coco_a_graphs,
-)
+from compositionality_study.data.preprocess_coco import get_coco_a_graphs
 from compositionality_study.utils import dependency_parse_to_nx, get_amr_graph_depth
 
 
@@ -170,6 +167,7 @@ def visualize_actions(
     dataset_path: str = COCO_SELECTED_STIMULI_DIR,
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
     coco_annotations_dir: str = COCO_OBJ_SEG_DIR,
+    coco_image_dir: str = COCO_IMAGE_DIR,
     output_dir: str = IMAGES_COCO_SELECTED_STIMULI_DIR,
 ) -> None:
     """Visualize actions for selected stimuli from the dataset.
@@ -180,6 +178,8 @@ def visualize_actions(
     :type coco_a_annot_file: str
     :param coco_annotations_dir: Directory containing COCO image annotations (instances_train/val)
     :type coco_annotations_dir: str
+    :param coco_image_dir: Directory containing COCO images
+    :type coco_image_dir: str
     :param output_dir: Directory where visualizations will be saved
     :type output_dir: str
     """
@@ -209,7 +209,7 @@ def visualize_actions(
         image_coco_annots = [i for i in coco_train_val_filtered if i["image_id"] == image_id]
 
         # Get the PIL image from the dataset
-        img = item["img"]
+        img = Image.open(os.path.join(coco_image_dir, item["filepath"]))
         image_output_id = item["sentids"]
         output_path = os.path.join(output_dir, f"{image_output_id}_image.png")
 
@@ -370,17 +370,10 @@ def plot_graph_statistics(
     default=COCO_A_ANNOT_FILE,
     help="Path to the COCO-A annotations file",
 )
-@click.option(
-    "--metadata_file",
-    type=str,
-    default=METADATA_FILE,
-    help="Path to the VG metadata file",
-)
 def get_summary_statistics(
     stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
     visualizations_dir: str = os.path.join(COCO_DIR, "visualizations"),
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
-    metadata_file: str = os.path.join(METADATA_FILE),
 ):
     """Generate summary statistics plots for the selected stimuli.
 
@@ -434,31 +427,6 @@ def get_summary_statistics(
     # Filter by those present in the stimuli
     coco_a_graphs = {k: v for k, v in coco_a_graphs.items() if k in stimuli_df["cocoid"].values}
 
-    # Get the overlap with visual genome
-    # Get the VG images that have COCO overlap
-    with open(metadata_file, "r") as f:
-        metadata = json.load(f)
-    vg = [
-        {
-            "cocoid": m["coco_id"],
-            "image_id": m["image_id"],
-            "url": m["url"],
-            "aspect_ratio": m["width"] / m["height"],
-        }
-        for m in metadata
-        if m["coco_id"] is not None
-    ]
-    df = pd.DataFrame(data=vg)
-    # Merge based on the COCO ID
-    coco_overlap = stimuli_df.merge(df, on="cocoid", how="inner")
-    # Log the number of stimuli that have COCO overlap
-    logger.info(f"Number of stimuli with VG-COCO overlap: {len(coco_overlap)}")
-
-    graphs, _ = determine_graph_complexity_measures(
-        image_ids=list(coco_overlap["image_id"]),
-        return_graphs=True,
-    )
-
     # Initialize spaCy model
     nlp = spacy.load("en_core_web_trf")
     # Prefer GPU if available
@@ -493,13 +461,6 @@ def get_summary_statistics(
         parse_trees,
         "Dependency Parse Tree Statistics",
         os.path.join(visualizations_dir, "parse_tree_statistics.png"),
-    )
-
-    # Plot statistics for VG graphs
-    plot_graph_statistics(
-        graphs,
-        f"VG Graph Statistics for {len(graphs)} VG-COCO Overlapping Stimuli",
-        os.path.join(visualizations_dir, "graph_statistics.png"),
     )
 
     # Plot statistics for COCO-A graphs
