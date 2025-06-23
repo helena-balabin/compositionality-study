@@ -525,6 +525,13 @@ def check_control_variables_balance(
 
     # Add image metrics
     def get_image_metrics(row):
+        """Get image metrics for a given row.
+
+        :param row: Row of the DataFrame
+        :type row: pd.Series
+        :return: Series with aspect ratio and image height
+        :rtype: pd.Series
+        """
         img = Image.open(os.path.join(local_stimuli_dir, row["img_path"]))
         width, height = img.size
         return pd.Series({"aspect_ratio": width / height, "image_height": height})
