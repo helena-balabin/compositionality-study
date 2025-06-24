@@ -146,14 +146,14 @@ def select_stimuli(
     # it needs to be in the 90% quantile range
     coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.05, 0.95])
     amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.05, 0.95])
-    coco_person_quantiles = df_n_stimuli["coco_person"].quantile([0.05, 0.95])
+    coco_person_quantiles = df_n_stimuli["coco_person"].quantile([0.2, 0.8])
     df_n_stimuli = df_n_stimuli[
         (df_n_stimuli["coco_a_nodes"] <= coco_a_nodes_quantiles[0.95])
         & (df_n_stimuli["coco_a_nodes"] >= coco_a_nodes_quantiles[0.05])
         & (df_n_stimuli["amr_n_nodes"] <= amr_n_nodes_quantiles[0.95])
         & (df_n_stimuli["amr_n_nodes"] >= amr_n_nodes_quantiles[0.05])
-        & (df_n_stimuli["coco_person"] <= coco_person_quantiles[0.95])
-        & (df_n_stimuli["coco_person"] >= coco_person_quantiles[0.05])
+        & (df_n_stimuli["coco_person"] >= coco_person_quantiles[0.2])
+        & (df_n_stimuli["coco_person"] <= coco_person_quantiles[0.8])
     ]
     logger.info(
         f"Filtered out extreme values for coco_a_nodes and amr_n_nodes, " f"{len(df_n_stimuli)} entries remain."
