@@ -45,9 +45,9 @@ COCO_IMAGE_DIR = os.path.join(COCO_DIR, "coco_images")
 COCO_PREP_TEXT_GRAPH_DIR = os.path.join(COCO_DIR, "coco_preprocessed_text_graphs")
 COCO_PREP_IMAGE_GRAPH_DIR = os.path.join(COCO_DIR, "coco_preprocessed_text_image_graphs")
 COCO_PREP_ALL = os.path.join(COCO_DIR, "coco_a_preprocessed_all")
-COCO_SELECTED_STIMULI_DIR = os.path.join(COCO_DIR, "coco_316_stimuli")
+COCO_SELECTED_STIMULI_DIR = os.path.join(COCO_DIR, "coco_328_stimuli")
 THINGS_IMAGE_DIR = os.path.join(COCO_DIR, "images_things")
-IMAGES_COCO_SELECTED_STIMULI_DIR = os.path.join(COCO_DIR, "coco_316_stimuli")
+IMAGES_COCO_SELECTED_STIMULI_DIR = os.path.join(COCO_DIR, "coco_328_stimuli")
 # Path to COCO action annotations
 COCO_A_ANNOT_FILE = os.path.join(COCO_DIR, "coco_annotations", "cocoa_beta2015.json")
 # Directory for stimuli converted into local files for psychopy
