@@ -28,9 +28,6 @@ from compositionality_study.constants import COCO_IMAGE_DIR, COCO_PREP_ALL
 @click.option("--text_feature", type=str, default="amr_graph_depth")
 @click.option("--graph_feature", type=str, default="coco_a_graph_depth")
 @click.option("--image_quality_threshold", type=int, default=300)
-@click.option("--filter_by_person", type=bool, default=True)
-@click.option("--person_count", type=int, default=5)
-@click.option("--person_tol", type=int, default=2)
 @click.option("--n_stimuli", type=int, default=252)
 @click.option("--buffer_stimuli_fraction", type=float, default=0.3)
 def select_stimuli(
@@ -44,9 +41,6 @@ def select_stimuli(
     text_feature: str = "amr_graph_depth",
     graph_feature: str = "coco_a_graph_depth",
     image_quality_threshold: int = 300,
-    filter_by_person: bool = True,
-    person_count: int = 5,
-    person_tol: int = 2,
     n_stimuli: int = 252,
     buffer_stimuli_fraction: float = 0.3,
 ):
@@ -73,13 +67,6 @@ def select_stimuli(
     :type graph_feature: str
     :param image_quality_threshold: Minimum number of pixels (height) of the image, defaults to 300
     :type image_quality_threshold: int
-    :param filter_by_person: Whether to filter out images that do not contain any people based on the COCO annotation
-        data, defaults to True
-    :type filter_by_person: bool
-    :param person_count: The number of people to filter for, defaults to 5
-    :type person_count: int
-    :param person_tol: The tolerance for the number of people (+- person_tol within person_count), defaults to 2
-    :type person_tol: int
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
@@ -106,17 +93,6 @@ def select_stimuli(
         f"Controlled the dataset for a sentence length of {sent_len} within a tolerance of {sent_len_tol}, "
         f"{len(ds)} entries remain."
     )
-
-    # Filter by person based on the desired number of people in the dataset
-    if filter_by_person:
-        ds = ds.filter(
-            lambda x: np.abs(person_count - x["coco_person"]) <= person_tol,
-            num_proc=24,
-        )
-        logger.info(
-            f"Controlled the dataset for the number of people {person_count} +- {person_tol},"
-            f"{len(ds)} entries remain."
-        )
 
     # Filter by image complexity (within a tolerance)
     ds = ds.filter(
@@ -157,7 +133,7 @@ def select_stimuli(
 
     # Filter the dataset based on the quantiles, only keep entries that are outside the quantiles
     ds_n_stimuli = ds.filter(
-        lambda x: (x[text_feature] == 1 & x[graph_feature] == 1) or (x[text_feature] == 2 & x[graph_feature] == 2),
+        lambda x: (x[text_feature] == 1 and x[graph_feature] == 1) or (x[text_feature] == 2 and x[graph_feature] == 2),
         num_proc=24,
     )
     logger.info(
@@ -167,14 +143,17 @@ def select_stimuli(
     df_n_stimuli = ds_n_stimuli.to_pandas()
 
     # Filter out extreme values for amr_n_nodes and coco_a_nodes,
-    # it needs to be in the 10-90% quantile range
-    coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.1, 0.9])
-    amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.1, 0.9])
+    # it needs to be in the 90% quantile range
+    coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.05, 0.95])
+    amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.05, 0.95])
+    coco_person_quantiles = df_n_stimuli["coco_person"].quantile([0.05, 0.95])
     df_n_stimuli = df_n_stimuli[
-        (df_n_stimuli["coco_a_nodes"] <= coco_a_nodes_quantiles[0.9])
-        & (df_n_stimuli["coco_a_nodes"] >= coco_a_nodes_quantiles[0.1])
-        & (df_n_stimuli["amr_n_nodes"] >= amr_n_nodes_quantiles[0.1])
-        & (df_n_stimuli["amr_n_nodes"] <= amr_n_nodes_quantiles[0.9])
+        (df_n_stimuli["coco_a_nodes"] <= coco_a_nodes_quantiles[0.95])
+        & (df_n_stimuli["coco_a_nodes"] >= coco_a_nodes_quantiles[0.05])
+        & (df_n_stimuli["amr_n_nodes"] <= amr_n_nodes_quantiles[0.95])
+        & (df_n_stimuli["amr_n_nodes"] >= amr_n_nodes_quantiles[0.05])
+        & (df_n_stimuli["coco_person"] <= coco_person_quantiles[0.95])
+        & (df_n_stimuli["coco_person"] >= coco_person_quantiles[0.05])
     ]
     logger.info(
         f"Filtered out extreme values for coco_a_nodes and amr_n_nodes, " f"{len(df_n_stimuli)} entries remain."
@@ -205,7 +184,10 @@ def select_stimuli(
         indx="sentids",
     )
     psm.logistic_ps(balance=False)
-    psm.knn_matched(replacement=False, matcher="propensity_score")
+    psm.knn_matched(
+        replacement=False,
+        matcher="propensity_score",
+    )
     matched = psm.df_matched
     # Take the group of the first element
     gr = matched["group"].iloc[0]
