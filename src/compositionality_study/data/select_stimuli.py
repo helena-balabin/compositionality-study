@@ -25,9 +25,8 @@ from compositionality_study.constants import COCO_IMAGE_DIR, COCO_PREP_ALL
 @click.option("--img_comp_tol", type=float, default=0.3)
 @click.option("--asp_min", type=float, default=1.0)
 @click.option("--asp_max", type=float, default=2.0)
-@click.option("--text_feature", type=str, default="amr_n_edges")
-@click.option("--graph_feature", type=str, default="coco_a_edges")
-@click.option("--quantile", type=float, default=0.3)
+@click.option("--text_feature", type=str, default="amr_graph_depth")
+@click.option("--graph_feature", type=str, default="coco_a_graph_depth")
 @click.option("--image_quality_threshold", type=int, default=300)
 @click.option("--filter_by_person", type=bool, default=True)
 @click.option("--person_count", type=int, default=5)
@@ -42,9 +41,8 @@ def select_stimuli(
     img_comp_tol: float = 0.3,
     asp_min: float = 1.0,
     asp_max: float = 2.0,
-    text_feature: str = "amr_n_edges",
-    graph_feature: str = "coco_a_edges",
-    quantile: float = 0.3,
+    text_feature: str = "amr_graph_depth",
+    graph_feature: str = "coco_a_graph_depth",
     image_quality_threshold: int = 300,
     filter_by_person: bool = True,
     person_count: int = 5,
@@ -69,9 +67,9 @@ def select_stimuli(
     :type asp_min: float
     :param asp_max: The max aspect ratio of the images to select stimuli for, defaults to 2.0
     :type asp_max: float
-    :param text_feature: The text feature to parameterize with, defaults to "amr_n_edges"
+    :param text_feature: The text feature to parameterize with, defaults to "amr_graph_depth"
     :type text_feature: str
-    :param graph_feature: The graph feature to parameterize with, defaults to "coco_a_edges"
+    :param graph_feature: The graph feature to parameterize with, defaults to "coco_a_graph_depth"
     :type graph_feature: str
     :param quantile: The quantile to use for the selection of the stimuli, defaults to 0.3
     :type quantile: float
@@ -80,7 +78,7 @@ def select_stimuli(
     :param filter_by_person: Whether to filter out images that do not contain any people based on the COCO annotation
         data, defaults to True
     :type filter_by_person: bool
-    :param person_count: The number of people to filter for, defaults to 3
+    :param person_count: The number of people to filter for, defaults to 5
     :type person_count: int
     :param person_tol: The tolerance for the number of people (+- person_tol within person_count), defaults to 2
     :type person_tol: int
@@ -159,38 +157,40 @@ def select_stimuli(
     )
     logger.info(f"Filtered out low quality images, {len(ds)} " f"entries remain.")
 
-    # Pre-compute arrays for faster access
-    text_complexities = np.array(ds[text_feature])
-    img_complexities = np.array(ds[graph_feature])
-
-    # Compute 25th & 75th percentiles
-    q_text_low, q_text_high = np.quantile(text_complexities, [quantile, 1 - quantile])
-    q_img_low, q_img_high = np.quantile(img_complexities, [quantile, 1 - quantile])
-
     # Filter the dataset based on the quantiles, only keep entries that are outside the quantiles
     ds_n_stimuli = ds.filter(
-        lambda x: (x[text_feature] <= q_text_low and x[graph_feature] <= q_img_low)
-        or (x[text_feature] >= q_text_high and x[graph_feature] >= q_img_high),
+        lambda x: (x[text_feature] == 1 & x[graph_feature] == 1) or (x[text_feature] == 2 & x[graph_feature] == 2),
         num_proc=24,
     )
+    logger.info(
+        f"Filtered the dataset for entries with {text_feature} and {graph_feature} "
+        f"being either 1 or 2, {len(ds_n_stimuli)} entries remain."
+    )
     df_n_stimuli = ds_n_stimuli.to_pandas()
+    # Filter out extreme values for amr_n_nodes and coco_a_nodes, it needs to be in the lower 90% quantile range
+    coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.9])
+    amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.9])
+    df_n_stimuli = df_n_stimuli[
+        (df_n_stimuli["coco_a_nodes"] <= coco_a_nodes_quantiles[0.9])
+        & (df_n_stimuli["amr_n_nodes"] <= amr_n_nodes_quantiles[0.9])
+    ]
+    logger.info(
+        f"Filtered out extreme values for coco_a_nodes and amr_n_nodes, " f"{len(df_n_stimuli)} entries remain."
+    )
     # Remove duplicates based on the sentids
     df_n_stimuli = df_n_stimuli.drop_duplicates(subset=["sentids"])
     # Use propensity score matching to select maxmimally close pairs of high/low, unique by sentids
     control_vars = [
-        "sentence_length",
-        "coco_person",
+        "coco_a_nodes",
+        "amr_n_nodes",
     ]
-    logger.info(f"Text complexity quantiles ({quantile*100}%, {(1-quantile)*100}%): {q_text_low}, {q_text_high}")
-    logger.info(f"Img complexity quantiles ({quantile*100}%, {(1-quantile)*100}%): {q_img_low}, {q_img_high}")
 
     # Build a DataFrame
     df = pd.DataFrame(
         {
             "sentids": df_n_stimuli["sentids"],
             "group": (
-                (np.array(df_n_stimuli[text_feature]) >= q_text_high)
-                & (np.array(df_n_stimuli[graph_feature]) >= q_img_high)
+                (np.array(df_n_stimuli[text_feature]) == 2) & (np.array(df_n_stimuli[graph_feature]) == 2)
             ).astype(int),
             **{v: df_n_stimuli[v] for v in control_vars},
         }
@@ -202,7 +202,7 @@ def select_stimuli(
         indx="sentids",
     )
     psm.logistic_ps(balance=False)
-    psm.knn_matched(caliper=0.2, replacement=False)
+    psm.knn_matched(replacement=False, matcher="propensity_score")
     matched = psm.df_matched
     # Take the group of the first element
     gr = matched["group"].iloc[0]
@@ -244,7 +244,7 @@ def select_stimuli(
     ds_n_stimuli = Dataset.from_pandas(df_n_stimuli.reset_index(drop=True))
     # Map the condition "group" to 0/1 based on the text and image complexities
     ds_n_stimuli = ds_n_stimuli.map(
-        lambda x: {"group": ((x[text_feature] >= q_text_high) and (x[graph_feature] >= q_img_high)).astype(int)},
+        lambda x: {"group": 1 if ((x[text_feature] == 2) and (x[graph_feature] == 2)) else 0},
         num_proc=24,
     )
     logger.info(f"After PSM, selected {len(ds_n_stimuli)} stimuli.")
@@ -269,6 +269,9 @@ def select_stimuli(
             f"mean_high={np.mean(high):.3f} +- ({np.std(high):.3f}),"
             f"mean_low={np.mean(low):.3f} +- ({np.std(low):.3f})",
         )
+        # Print a warning if the p-value is below 0.05
+        if p_val < 0.05:
+            logger.warning(f"Variable {var} has a significant difference between the groups (p-value={p_val:.3e}).")
 
     # Save the dataset
     output_dir = os.path.split(coco_preprocessed_dir)[0]
