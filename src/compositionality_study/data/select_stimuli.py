@@ -32,7 +32,7 @@ from compositionality_study.constants import COCO_IMAGE_DIR, COCO_PREP_ALL
 @click.option("--person_count", type=int, default=5)
 @click.option("--person_tol", type=int, default=2)
 @click.option("--n_stimuli", type=int, default=252)
-@click.option("--buffer_stimuli_fraction", type=float, default=0.25)
+@click.option("--buffer_stimuli_fraction", type=float, default=0.3)
 def select_stimuli(
     coco_preprocessed_dir: str = COCO_PREP_ALL,
     sent_len: int = 10,
@@ -48,7 +48,7 @@ def select_stimuli(
     person_count: int = 5,
     person_tol: int = 2,
     n_stimuli: int = 252,
-    buffer_stimuli_fraction: float = 0.25,
+    buffer_stimuli_fraction: float = 0.3,
 ):
     """Select stimuli from the COCO overlap dataset.
 
@@ -71,8 +71,6 @@ def select_stimuli(
     :type text_feature: str
     :param graph_feature: The graph feature to parameterize with, defaults to "coco_a_graph_depth"
     :type graph_feature: str
-    :param quantile: The quantile to use for the selection of the stimuli, defaults to 0.3
-    :type quantile: float
     :param image_quality_threshold: Minimum number of pixels (height) of the image, defaults to 300
     :type image_quality_threshold: int
     :param filter_by_person: Whether to filter out images that do not contain any people based on the COCO annotation
@@ -85,7 +83,7 @@ def select_stimuli(
     :param n_stimuli: The number of stimuli to select
     :type n_stimuli: int
     :param buffer_stimuli_fraction: The fraction of stimuli to buffer for the parametric stimuli selection, defaults to
-        0.25, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
+        0.3, meaning that in total n_stimuli * (1 + buffer_stimuli_fraction) stimuli will be selected
     """
     # Apply a buffer to the number of stimuli to select
     n_stimuli = int(n_stimuli * (1 + buffer_stimuli_fraction))
@@ -140,7 +138,7 @@ def select_stimuli(
         f"{len(ds)} entries remain."
     )
 
-    # Filter out black and white images and images with text on them and images with low quality
+    # Filter out images with low quality
     # Add the images to the dataset, load based on the filenames
     # Avoid PIL-related bugs by copying the images
     ds = ds.map(
@@ -152,7 +150,7 @@ def select_stimuli(
     )
     # Filter out images with low quality
     ds = ds.filter(
-        lambda x: x["img"].size[0] > 1.5 * image_quality_threshold and x["img"].size[1] > image_quality_threshold,
+        lambda x: x["img"].size[1] > image_quality_threshold,
         num_proc=24,
     )
     logger.info(f"Filtered out low quality images, {len(ds)} " f"entries remain.")
@@ -167,11 +165,15 @@ def select_stimuli(
         f"being either 1 or 2, {len(ds_n_stimuli)} entries remain."
     )
     df_n_stimuli = ds_n_stimuli.to_pandas()
-    # Filter out extreme values for amr_n_nodes and coco_a_nodes, it needs to be in the lower 90% quantile range
-    coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.9])
-    amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.9])
+
+    # Filter out extreme values for amr_n_nodes and coco_a_nodes,
+    # it needs to be in the 10-90% quantile range
+    coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.1, 0.9])
+    amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.1, 0.9])
     df_n_stimuli = df_n_stimuli[
         (df_n_stimuli["coco_a_nodes"] <= coco_a_nodes_quantiles[0.9])
+        & (df_n_stimuli["coco_a_nodes"] >= coco_a_nodes_quantiles[0.1])
+        & (df_n_stimuli["amr_n_nodes"] >= amr_n_nodes_quantiles[0.1])
         & (df_n_stimuli["amr_n_nodes"] <= amr_n_nodes_quantiles[0.9])
     ]
     logger.info(
@@ -183,6 +185,7 @@ def select_stimuli(
     control_vars = [
         "coco_a_nodes",
         "amr_n_nodes",
+        "coco_person",
     ]
 
     # Build a DataFrame
@@ -259,11 +262,11 @@ def select_stimuli(
         },
         num_proc=24,
     )
-    check_vars = control_vars + ["ic_score", "aspect_ratio", "image_quality"]
+    check_vars = control_vars + ["ic_score", "aspect_ratio", "image_quality", "sentence_length", "coco_person"]
     for var in check_vars:
         high = ds_n_stimuli.filter(lambda x: x["group"] == 1)[var]
         low = ds_n_stimuli.filter(lambda x: x["group"] == 0)[var]
-        t_stat, p_val = ttest_ind(high, low)
+        t_stat, p_val = ttest_ind(high, low, equal_var=False)
         logger.info(
             f"Variable {var}: t-statistic={t_stat:.3f}, p-value={p_val:.3e}"
             f"mean_high={np.mean(high):.3f} +- ({np.std(high):.3f}),"
