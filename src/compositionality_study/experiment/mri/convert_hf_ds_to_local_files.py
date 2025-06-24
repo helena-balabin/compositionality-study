@@ -126,7 +126,7 @@ def generate_non_word_sentence(
 @click.option("--hf_stimuli_dir", default=COCO_SELECTED_STIMULI_DIR, type=str)
 @click.option("--local_stimuli_dir", default=COCO_LOCAL_STIMULI_DIR, type=str)
 @click.option("--coco_image_dir", default=COCO_IMAGE_DIR, type=str)
-@click.option("--text_feature", default="amr_n_nodes", type=str)
+@click.option("--text_feature", default="amr_graph_depth", type=str)
 @click.option("--delete_existing", default=True, type=bool)
 def convert_hf_dataset_to_local_stimuli(
     hf_stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
@@ -188,11 +188,13 @@ def convert_hf_dataset_to_local_stimuli(
                         "img_path": output_name + ".png",
                         "img_id": f"{ex['sentids']}",
                         text_feature: ex[text_feature],
+                        "amr_graph_depth": ex["amr_graph_depth"],
+                        "coco_a_graph_depth": ex["coco_a_graph_depth"],
                         "coco_a_edges": ex["coco_a_edges"],
                         "cocoid": ex["cocoid"],
                         "coco_person": ex["coco_person"],
                         "aspect_ratio": aspect_ratio,
-                        "complexity": "high" if ex["coco_a_edges"] > 1 else "low",
+                        "complexity": "high" if ex["coco_a_graph_depth"] > 1 else "low",
                     },
                     index=[0],
                 ),
