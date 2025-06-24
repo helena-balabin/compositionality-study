@@ -52,8 +52,8 @@ def load_coco_annotations(
 ) -> List[Dict]:
     """Load COCO image annotations.
 
-    :param input_path: Path to the COCO image annotations dir
-    :type input_path: str
+    :param input_dir: Path to the COCO image annotations dir
+    :type input_dir: str
     :return: COCO image annotations
     :rtype: List[Dict]
     """
@@ -155,7 +155,10 @@ def visualize_image_with_actions(
     help="Path to the dataset containing selected stimuli",
 )
 @click.option(
-    "--coco_annotations_dir", type=str, default=COCO_OBJ_SEG_DIR, help="Directory containing COCO image annotations"
+    "--coco_annotations_dir",
+    type=str,
+    default=COCO_OBJ_SEG_DIR,
+    help="Directory containing COCO image annotations",
 )
 @click.option(
     "--output_dir",
@@ -218,7 +221,7 @@ def visualize_actions(
                 img, item["coco_a_graph_depth"], image_actions, image_coco_annots, str(output_path)
             )
         except Exception as e:
-            print(f"Error processing image {image_id}: {e}")
+            logger.info(f"Error processing image {image_id}: {e}")
 
 
 @click.command()
@@ -241,7 +244,7 @@ def visualize_actions(
     help="Directory where visualizations will be saved",
 )
 def visualize_amr_text(
-    dataset_path: str = COCO_SELECTED_STIMULI_DIR,
+    dataset_path: str = COCO_SELECTED_STIMULI_DIR,  # noqa
     spacy_model: str = "en_core_web_trf",
     output_dir: str = IMAGES_COCO_SELECTED_STIMULI_DIR,
 ):
@@ -249,14 +252,13 @@ def visualize_amr_text(
 
     :param dataset_path: Path to the dataset containing selected stimuli
     :type dataset_path: str
-    :spacy_model: spaCy model to use for text processing
+    :param spacy_model: spaCy model to use for text processing
     :type spacy_model: str
     :param output_dir: Directory where visualizations will be saved
     :type output_dir: str
     """
 
-    # Initialize the spaCy pipeline
-    @Language.component("force_single_sentence")
+    @Language.component("force_single_sentence")  # noqa
     def one_sentence_per_doc(
         doc: spacy.tokens.Doc,  # noqa
     ) -> spacy.tokens.Doc:  # noqa
@@ -372,7 +374,7 @@ def plot_graph_statistics(
 )
 def get_summary_statistics(
     stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
-    visualizations_dir: str = os.path.join(COCO_DIR, "visualizations"),
+    visualizations_dir: str = os.path.join(COCO_DIR, "visualizations"),  # noqa
     coco_a_annot_file: str = COCO_A_ANNOT_FILE,
 ):
     """Generate summary statistics plots for the selected stimuli.
@@ -409,7 +411,11 @@ def get_summary_statistics(
     # Generate a seaborn KDE plot of the textual and image complexity values
     sns.kdeplot(stimuli_df, x="amr_graph_depth", y="coco_a_graph_depth", cmap="Blues", fill=True)
     # Draw a diagonal line from (0,0) to (max_depth, max_depth)
-    plt.plot([0, max(stimuli_df["amr_graph_depth"])], [0, max(stimuli_df["coco_a_graph_depth"])], color="blue")
+    plt.plot(
+        [0, max(stimuli_df["amr_graph_depth"])],
+        [0, max(stimuli_df["coco_a_graph_depth"])],
+        color="blue",
+    )
     # And save it to a visualization directory
     plt.savefig(os.path.join(visualizations_dir, f"textual_vs_image_complexity_{n_stimuli}.png"))
 
@@ -502,7 +508,7 @@ def get_summary_statistics(
 def check_control_variables_balance(
     selected_stimuli_dir: str = COCO_SELECTED_STIMULI_DIR,
     local_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
-    output_dir: str = os.path.join(COCO_DIR, "visualizations"),
+    output_dir: str = os.path.join(COCO_DIR, "visualizations"),  # noqa
 ) -> pd.DataFrame:
     """Check if control variables are balanced between high and low complexity groups.
 

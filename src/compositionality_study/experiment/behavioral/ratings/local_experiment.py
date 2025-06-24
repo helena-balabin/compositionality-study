@@ -63,14 +63,14 @@ def trial():
             return redirect(url_for("complete"))
 
     # Get current trial stimuli
-    stim_A = stimuli.iloc[current_trial]["A"]
-    stim_B = stimuli.iloc[current_trial]["B"]
+    stim_a = stimuli.iloc[current_trial]["A"]
+    stim_b = stimuli.iloc[current_trial]["B"]
 
     return render_template(
         "trial.html",
         modality=current_modality,
-        stim_A=stim_A,
-        stim_B=stim_B,
+        stim_A=stim_a,
+        stim_B=stim_b,
         trial_num=current_trial + 1,
         total_trials=len(stimuli),
     )
@@ -79,7 +79,6 @@ def trial():
 @app.route("/complete")
 def complete():
     """Save results and complete the experiment."""
-
     # Save responses
     pd.DataFrame(responses).to_csv(
         os.path.join(BEHAV_OUTPUT_DIR, f"subject_{current_subject}_results.csv"), index=False
@@ -89,4 +88,4 @@ def complete():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8000)
+    app.run(port=8000)

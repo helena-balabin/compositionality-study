@@ -22,7 +22,6 @@ def get_aspect_ratio(filepath: str):
     :return: The aspect ratio of the image
     :rtype: float
     """
-
     # Load the image
     try:
         with Image.open(filepath) as img:
@@ -136,8 +135,7 @@ def derive_text_depth_features(
 def dependency_parse_to_nx(
     sents: List[spacy.tokens.doc.Doc],
 ):
-    """
-    Converts spaCy sentence objects into a NetworkX directed graph representing the dependency parse tree.
+    """Convert spaCy sentence objects into a NetworkX directed graph representing the dependency parse tree.
 
     :param sents: A list of spaCy sentence objects
     :type sents: List[spacy.tokens.doc.Doc]

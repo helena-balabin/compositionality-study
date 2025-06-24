@@ -253,7 +253,7 @@ def run_psychopy_exp(
     :param break_duration: The duration of the break after every two runs in seconds.
     :type break_duration: float
     :param session: The session identifier.
-    :type session: str
+    :type session: int
     """
     logging_dir = os.path.join(local_stimuli_dir, "logs")
     os.makedirs(logging_dir, exist_ok=True)

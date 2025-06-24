@@ -22,7 +22,12 @@ from compositionality_study.constants import (
 @click.option("--n_subjects", type=int, default=12, help="Number of subjects.")
 @click.option("--n_days", type=int, default=3, help="Number of days.")
 @click.option("--input_dir", default=COCO_LOCAL_STIMULI_DIR, type=str, help="Directory with the true stimuli.")
-@click.option("--preprocessed_coco_dir", default=COCO_PREP_ALL, type=str, help="Directory with the lure stimuli.")
+@click.option(
+    "--preprocessed_coco_dir",
+    default=COCO_PREP_ALL,
+    type=str,
+    help="Directory with the lure stimuli.",
+)
 @click.option("--output_dir", default=MEMORY_TEST_DIR, type=str, help="Directory to save the memory test.")
 @click.option("--n_test", default=50, type=int, help="Number of stimuli in the memory test.")
 def create_all_memory_tests(
@@ -46,7 +51,7 @@ def create_all_memory_tests(
     :param output_dir: Directory to save the memory test.
     :type output_dir: str
     :param n_test: Number of stimuli in the memory test, defaults to 50.
-    :type n_test: int, optional
+    :type n_test: int
     """
     for subject_id in range(1, n_subjects + 1):
         for day in range(1, n_days + 1):
@@ -120,7 +125,7 @@ def create_memory_test_helper(
     output_dir: str,
     n_test: int = 50,
 ) -> None:
-    """Helper function to create a memory test for a single subject and day.
+    """Create a memory test for a single subject and day.
 
     :param day: Day of the experiment.
     :type day: str
@@ -133,7 +138,7 @@ def create_memory_test_helper(
     :param output_dir: Directory to save the memory test.
     :type output_dir: str
     :param n_test: Number of stimuli in the memory test, defaults to 50.
-    :type n_test: int, optional
+    :type n_test: int
     """
     shown_stimuli = load_stimuli(day=day, subject_id=subject_id, input_dir=input_dir)
     # Remove any blank stimuli from the shown stimuli
@@ -170,7 +175,10 @@ def create_memory_test_helper(
     memory_test["stimulus"] = memory_test["stimulus"].str.replace("COCO_train2014_000000", "")
     memory_test.to_csv(
         os.path.join(
-            output_dir, f"sub-{subject_id}", f"ses-{day}", f"memory_test_day_{day}_subject_{subject_id}_with_labels.csv"
+            output_dir,
+            f"sub-{subject_id}",
+            f"ses-{day}",
+            f"memory_test_day_{day}_subject_{subject_id}_with_labels.csv",
         ),
         index=False,
     )
@@ -214,7 +222,9 @@ def load_stimuli(
     """
     stimuli = []
     pattern = os.path.join(
-        input_dir, "subject_specific_stimuli", f"sub-{subject_id}_ses-{day}_task-comp_run-*_events.tsv"
+        input_dir,
+        "subject_specific_stimuli",
+        f"sub-{subject_id}_ses-{day}_task-comp_run-*_events.tsv",
     )
     for file_path in glob.glob(pattern):
         df = pd.read_csv(file_path, sep="\t")

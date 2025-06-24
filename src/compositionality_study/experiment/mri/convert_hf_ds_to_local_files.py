@@ -316,7 +316,7 @@ def generate_subject_specific_stimulus_files(
             .apply(
                 lambda x: x.sample(
                     frac=1,
-                    random_state=subject + x["run"].iloc[0] + x["block"].iloc[0] * 1000,
+                    random_state=subject + x["run"].iloc[0] + x["block"].iloc[0] * 1000,  # noqa
                 )
             )
             .reset_index(drop=True)
@@ -343,7 +343,11 @@ def generate_subject_specific_stimulus_files(
             insert_positions.sort()
             for i, insert_position in enumerate(insert_positions):
                 run_df = pd.concat(
-                    [run_df.iloc[: insert_position + i], blank_trials.iloc[[i]], run_df.iloc[insert_position + i :]]
+                    [
+                        run_df.iloc[: insert_position + i],
+                        blank_trials.iloc[[i]],
+                        run_df.iloc[insert_position + i :],
+                    ]
                 ).reset_index(drop=True)
 
             subj_stimuli_rep_df = pd.concat(

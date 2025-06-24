@@ -22,7 +22,7 @@ def create_all_stim_pairings(
     :type low_comp: pd.Series
     :param fraction: Fraction of pairings to generate from all possible pairings,
         defaults to 0.1
-    :type fraction: float, optional
+    :type fraction: float
     :return: Dataframe with all possible pairings
     :rtype: pd.DataFrame
     """
@@ -45,7 +45,6 @@ def create_all_stim_pairings(
 
 @click.command()
 @click.option("--filtered_stimuli_dir", type=str, default=COCO_LOCAL_STIMULI_DIR)
-@click.option("--fraction", type=float, default=0.1)
 @click.option("--output_dir", type=str, default=BEHAV_INPUT_DIR)
 def create_pairing_files(
     filtered_stimuli_dir: str = COCO_LOCAL_STIMULI_DIR,
@@ -55,9 +54,6 @@ def create_pairing_files(
 
     :param filtered_stimuli_dir: Path to the directory with the filtered stimuli
     :type filtered_stimuli_dir: str
-    :param fraction: Fraction of pairings to generate from all possible pairings,
-        defaults to 0.1
-    :type fraction: float, optional
     :param output_dir: Path to the directory to save the behavioral files to
     :type output_dir: str
     :return: Dataframe with the pairings for the behavioral experiment

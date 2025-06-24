@@ -18,8 +18,18 @@ from compositionality_study.constants import BETAS_DIR, MVPA_DIR, PREPROC_MRI_DI
 @click.option("--events_dir", required=True, type=str, help="Path to the events CSV containing trial info.")
 @click.option("--betas_dir", default=BETAS_DIR, type=str, help="Path to the estimated betas.")
 @click.option("--on_off_mask_dir", default=PREPROC_MRI_DIR, type=str, help="Path to the 'on-off' brain mask.")
-@click.option("--output_dir", default=MVPA_DIR, type=str, help="Where to save the searchlight decoding results.")
-@click.option("--fwhm", type=float, default=4.0, help="Full-width half-maximum for smoothing the 'on-off' mask.")
+@click.option(
+    "--output_dir",
+    default=MVPA_DIR,
+    type=str,
+    help="Where to save the searchlight decoding results.",
+)
+@click.option(
+    "--fwhm",
+    type=float,
+    default=4.0,
+    help="Full-width half-maximum for smoothing the 'on-off' mask.",
+)
 def run_searchlight_decoding(
     events_dir: str,
     betas_dir: str = BETAS_DIR,

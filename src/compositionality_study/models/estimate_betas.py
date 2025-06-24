@@ -19,7 +19,7 @@ from compositionality_study.constants import (
 
 def map_events_files(
     event_file: str,
-    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),  # noqa
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
@@ -114,7 +114,7 @@ def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
     events_input_dir: str = BIDS_DIR,
     output_dir: str = BETAS_DIR,
-    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),
+    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),  # noqa
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
@@ -122,7 +122,7 @@ def estimate_betas(
     file_pattern: str = "desc-prep",
     chunklen: int = 100000,
     n_folds: int = 3,
-    subjects: list[str] = ["sub-01"],
+    subjects: list[str] = ["sub-01"],  # noqa
 ) -> None:
     """Estimate beta coefficients for each trial in a BIDS-formatted fMRI dataset.
 
