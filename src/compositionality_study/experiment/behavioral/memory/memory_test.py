@@ -57,7 +57,7 @@ def create_all_memory_tests(
         for day in range(1, n_days + 1):
             create_memory_test_helper(
                 day=str(day),
-                subject_id=subject_id,
+                subject_id=subject_id + 1,
                 input_dir=input_dir,
                 preprocessed_coco_dir=preprocessed_coco_dir,
                 output_dir=output_dir,
