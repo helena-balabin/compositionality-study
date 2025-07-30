@@ -11,9 +11,9 @@ from datasets import load_from_disk
 from tqdm import tqdm
 
 from compositionality_study.constants import (
+    COCO_IMAGE_DIR,
     COCO_LOCAL_STIMULI_DIR,
     COCO_PREP_ALL,
-    IMAGE_DIR,
     MEMORY_TEST_DIR,
 )
 
@@ -107,8 +107,8 @@ def copy_memory_test_images(
                 img_id,
             )
         else:
-            # Lure stimuli are in the IMAGE_DIR
-            src_path = os.path.join(IMAGE_DIR, img_id)
+            # Lure stimuli are in the COCO_IMAGE_DIR
+            src_path = os.path.join(COCO_IMAGE_DIR, img_id)
 
         # Copy image to the memory test folder
         if "COCO" in img_id:
