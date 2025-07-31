@@ -13,7 +13,7 @@ from loguru import logger
 from tqdm import tqdm
 
 from compositionality_study.constants import (
-    COCO_OVERLAP_DIR,
+    COCO_PREP_ALL,
     COCO_PREP_TEXT_GRAPH_DIR,
     VISUALIZATIONS_DIR,
 )
@@ -21,11 +21,11 @@ from compositionality_study.utils import walk_tree
 
 
 @click.command()
-@click.option("--coco_ds_dir", type=str, default=COCO_OVERLAP_DIR)
+@click.option("--coco_ds_dir", type=str, default=COCO_PREP_ALL)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#66C2A5")
 def sent_len_histogram(
-    coco_ds_dir: str = COCO_OVERLAP_DIR,
+    coco_ds_dir: str = COCO_PREP_ALL,
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#66C2A5",
 ):
@@ -64,11 +64,11 @@ def sent_len_histogram(
 
 
 @click.command()
-@click.option("--coco_ds_dir", type=str, default=COCO_OVERLAP_DIR)
+@click.option("--coco_ds_dir", type=str, default=COCO_PREP_ALL)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#FFD966")
 def dep_parse_tree_depth_histogram(
-    coco_ds_dir: str = COCO_OVERLAP_DIR,
+    coco_ds_dir: str = COCO_PREP_ALL,
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#FFD966",
 ):
@@ -114,11 +114,11 @@ def dep_parse_tree_depth_histogram(
 
 
 @click.command()
-@click.option("--coco_ds_dir", type=str, default=COCO_OVERLAP_DIR)
+@click.option("--coco_ds_dir", type=str, default=COCO_PREP_ALL)
 @click.option("--vis_output_dir", type=str, default=VISUALIZATIONS_DIR)
 @click.option("--color", type=str, default="#9B9ED4")
 def sent_len_dep_depth_correlation(
-    coco_ds_dir: str = COCO_OVERLAP_DIR,
+    coco_ds_dir: str = COCO_PREP_ALL,
     vis_output_dir: str = VISUALIZATIONS_DIR,
     color: str = "#9B9ED4",
 ):
@@ -234,10 +234,10 @@ def all_properties_corr(
 
 
 @click.command()
-@click.option("--coco_dir", type=str, default=COCO_OVERLAP_DIR)
+@click.option("--coco_dir", type=str, default=COCO_PREP_ALL)
 @click.option("--spacy_model", type=str, default="en_core_web_trf")
 def check_captions_for_verbs(
-    coco_dir: str = COCO_OVERLAP_DIR,
+    coco_dir: str = COCO_PREP_ALL,
     spacy_model: str = "en_core_web_trf",
 ):
     """Check how many of the captions actually have a verb in them.

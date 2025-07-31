@@ -1,6 +1,6 @@
 """Utils for the compositionality project."""
 
-from typing import Dict, List
+from typing import Dict, List, Tuple, Union
 
 import amrlib
 import networkx as nx
@@ -34,7 +34,7 @@ def get_aspect_ratio(filepath: str):
 def get_amr_graph_depth(
     amr_graph: str,
     return_graph=False,
-) -> int:
+) -> Union[int, Tuple[int, nx.DiGraph]]:
     """Get the depth of the AMR graph for a given example.
 
     :param amr_graph: The AMR graph to get the depth for (output of a spacy doc._.to_amr()[0] call)
@@ -112,7 +112,7 @@ def derive_text_depth_features(
         # Also derive the AMR graph for the caption and derive its depth
         amr_graph = doc._.to_amr()[0]  # noqa
         try:
-            amr_depth, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)
+            amr_depth, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True) # type: ignore
             n_nodes = nx.number_of_nodes(amr_graph)
             n_edges = nx.number_of_edges(amr_graph)
             amr_graph = nx.to_numpy_array(amr_graph)

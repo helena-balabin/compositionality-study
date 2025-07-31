@@ -202,8 +202,8 @@ def visualize_actions(
     coco_train_val_filtered = [i for i in coco_train_val if i["image_id"] in dataset_ids]
 
     # Create output directory with if needed
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(output_dir)  # type: ignore
+    output_dir.mkdir(parents=True, exist_ok=True)  # type: ignore
 
     # Process each image in our dataset
     for item in tqdm(dataset, desc="Processing images"):
@@ -308,18 +308,18 @@ def visualize_amr_text(
 
 
 def plot_graph_statistics(
-    graphs: List[nx.DiGraph],
+    graphs: Dict[str, nx.DiGraph],
     title: str,
     output_path: str,
 ):
     """Plot statistics for the given graphs.
 
-    :param graphs: List of graphs
-    :type graphs: List[nx.DiGraph]
+    :param graphs: Dictionary of graphs where keys are identifiers and values are NetworkX directed graphs
+    :type graphs: Dict[str, nx.DiGraph]
     :param title: Title of the plot
     :type title: str
     :param output_path: Path to save the plot
-    :type output
+    :type output_path: str
     """
     num_nodes = [len(graph.nodes) for graph in graphs.values()]
     num_edges = [len(graph.edges) for graph in graphs.values()]
@@ -448,7 +448,7 @@ def get_summary_statistics(
         # Re-generate AMR graph
         doc = nlp(example["sentences_raw"])
         amr_graph = doc._.to_amr()[0]
-        _, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)
+        _, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)  # type: ignore
         amr_graphs[example["cocoid"]] = amr_graph
 
         # Re-generate dependency parse tree

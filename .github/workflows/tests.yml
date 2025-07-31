@@ -14,14 +14,17 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz graphviz-dev
       - name: Install dependencies
         run: |
-          sudo apt-get install graphviz
           pip install tox
       - name: Check manifest
         run: tox run -e manifest
@@ -31,6 +34,7 @@ jobs:
         run: tox run -e pyroma
       - name: Check static typing with MyPy
         run: tox run -e mypy
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
@@ -38,19 +42,23 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz graphviz-dev
       - name: Install dependencies
         run: |
           pip install tox
-          sudo apt-get install graphviz
       - name: Check RST conformity with doc8
         run: tox run -e doc8
       - name: Check docstring coverage
         run: tox run -e docstr-coverage
+
   tests:
     name: Tests
     runs-on: ${{ matrix.os }}
@@ -59,13 +67,22 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz graphviz-dev
+      - name: Install dependencies
+        run: |
+          pip install tox
+      - name: Run tests
+        run: tox run -e py
       - name: Upload coverage report to codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         if: success()
         with:
           file: coverage.xml

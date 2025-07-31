@@ -420,12 +420,12 @@ def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[st
         desc="Adding COCO-A features",
         total=len(coco_a_data),
     ):
-        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])
+        coco_a_filtered[coco_a_entry["image_id"]]["n_coco_a_actions"] += len(coco_a_entry["visual_actions"])  # type: ignore
 
         if coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"]:
             # If there is already a graph, add the entry to the existing graph
-            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"].add_edges_from(
-                create_coco_a_sub_graph(coco_a_entry).edges()
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"].add_edges_from(  # type: ignore
+                create_coco_a_sub_graph(coco_a_entry).edges()  # type: ignore
             )
         else:
             # If there is no graph data for that image_id yet, create a new graph
