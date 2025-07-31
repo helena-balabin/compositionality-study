@@ -82,7 +82,9 @@ def estimate_letter_frequency(
     text = " ".join(text_series.values)
 
     # Count the number of occurrences of each letter, but filter out vowels
-    letter_counts = [text.count(letter) for letter in string.ascii_lowercase if letter not in "aeiou"]
+    letter_counts = [
+        text.count(letter) for letter in string.ascii_lowercase if letter not in "aeiou"
+    ]
 
     # Return the letter frequencies
     return [count / sum(letter_counts) * 100 for count in letter_counts]
@@ -232,10 +234,10 @@ def generate_subject_specific_stimulus_files(
 ) -> None:
     """Generate subject specific stimulus files with balanced modality assignment across participants.
 
-    Each of the 252 text-image pairs will be split across participants such that each participant 
-    sees only one modality (either text or image) per pair. Across all participants, each item 
-    will be shown in both modalities, with half of the participants viewing the text and the 
-    other half viewing the corresponding image. Each participant will see 126 texts (from one half 
+    Each of the 252 text-image pairs will be split across participants such that each participant
+    sees only one modality (either text or image) per pair. Across all participants, each item
+    will be shown in both modalities, with half of the participants viewing the text and the
+    other half viewing the corresponding image. Each participant will see 126 texts (from one half
     of the stimulus set) and 126 images (from the other half), totaling 252 stimuli per participant.
     Each stimulus will be presented six times, yielding a total of 252 × 6 = 1512 trials per participant.
 
@@ -274,7 +276,7 @@ def generate_subject_specific_stimulus_files(
     # Each participant will see only one modality per stimulus pair
     # Split 1: all stimuli from first half as text + all stimuli from second half as images
     # Split 2: all stimuli from first half as images + all stimuli from second half as text
-    
+
     # Sort stimuli by complexity and img_id to ensure balanced splits
     stimuli_df = stimuli_df.sort_values(["complexity", "img_id"]).reset_index(drop=True)
 
@@ -289,42 +291,45 @@ def generate_subject_specific_stimulus_files(
     # First half of stimuli (for modality assignment)
     first_half_low = low_complexity.iloc[:n_low_per_split].copy()
     first_half_high = high_complexity.iloc[:n_high_per_split].copy()
-    
+
     # Second half of stimuli (for modality assignment)
-    second_half_low = low_complexity.iloc[n_low_per_split: n_low_per_split * 2].copy()
-    second_half_high = high_complexity.iloc[n_high_per_split: n_high_per_split * 2].copy()
+    second_half_low = low_complexity.iloc[n_low_per_split : n_low_per_split * 2].copy()
+    second_half_high = high_complexity.iloc[n_high_per_split : n_high_per_split * 2].copy()
 
     # Create dataframes for each split
     def create_split_df(text_low, text_high, image_low, image_high):
+        """Create a split dataframe with text and image stimuli."""
         split_data = []
-        
+
         # Add text stimuli
         for df in [text_low, text_high]:
             df_copy = df.copy()
             df_copy["stimulus"] = df_copy["text"]
             df_copy["modality"] = "text"
             split_data.append(df_copy)
-        
-        # Add image stimuli  
+
+        # Add image stimuli
         for df in [image_low, image_high]:
             df_copy = df.copy()
             df_copy["stimulus"] = df_copy["img_path"]
             df_copy["modality"] = "image"
             split_data.append(df_copy)
-            
+
         result_df = pd.concat(split_data, ignore_index=True)
         result_df.drop(columns=["text", "img_path"], inplace=True)
         return result_df
 
     # Split 1: first half as text + second half as images
     split1_df = create_split_df(first_half_low, first_half_high, second_half_low, second_half_high)
-    # Split 2: first half as images + second half as text  
+    # Split 2: first half as images + second half as text
     split2_df = create_split_df(second_half_low, second_half_high, first_half_low, first_half_high)
     # Create list of splits for assignment to subjects
     splits = [split1_df, split2_df]
 
     # Iterate through the subjects and generate the stimulus files
-    for subject in tqdm(range(1, n_subjects + 1), desc="Generating subject specific stimulus files"):
+    for subject in tqdm(
+        range(1, n_subjects + 1), desc="Generating subject specific stimulus files"
+    ):
         # Assign split based on subject number: first half gets split 1, second half gets split 2
         subject_stimuli_df = splits[subject % 2].copy()
 
@@ -362,7 +367,9 @@ def generate_subject_specific_stimulus_files(
         # Randomly change the run order by mapping the run numbers to a random permutation of the run numbers, using
         # the subject number as the random seed
         new_run_order = np.random.RandomState(subject).permutation(np.arange(n_runs))
-        subj_stimuli_rep_df["run"] = subj_stimuli_rep_df["run"].map(lambda x: new_run_order[x])  # noqa
+        subj_stimuli_rep_df["run"] = subj_stimuli_rep_df["run"].map(
+            lambda x: new_run_order[x]  # noqa
+        )
 
         # Within each run, create blocks of stimuli
         subj_stimuli_rep_df = (
@@ -402,7 +409,9 @@ def generate_subject_specific_stimulus_files(
             run_df = subj_stimuli_rep_df[subj_stimuli_rep_df["run"] == run].copy()
             blank_trials = pd.DataFrame([blank_trial] * n_blanks_per_run)
             blank_trials["run"] = run
-            blank_trials["block"] = np.random.RandomState(subject + run).randint(n_run_blocks, size=n_blanks_per_run)
+            blank_trials["block"] = np.random.RandomState(subject + run).randint(
+                n_run_blocks, size=n_blanks_per_run
+            )
             insert_positions = np.random.RandomState(subject + run).choice(
                 len(run_df) + 1, n_blanks_per_run, replace=False
             )
@@ -443,12 +452,18 @@ def generate_subject_specific_stimulus_files(
         n_runs_per_session = n_runs // n_sessions
         for session in range(n_sessions):
             # Select the runs for the current session
-            session_runs = np.arange(session * n_runs_per_session, (session + 1) * n_runs_per_session)
-            session_stimuli_rep_df = subj_stimuli_rep_df[subj_stimuli_rep_df["run"].isin(session_runs)].copy()
+            session_runs = np.arange(
+                session * n_runs_per_session, (session + 1) * n_runs_per_session
+            )
+            session_stimuli_rep_df = subj_stimuli_rep_df[
+                subj_stimuli_rep_df["run"].isin(session_runs)
+            ].copy()
 
             # Save each run as a separate file within the session
             for run in session_runs:
-                run_stimuli_rep_df = session_stimuli_rep_df[session_stimuli_rep_df["run"] == run].copy()
+                run_stimuli_rep_df = session_stimuli_rep_df[
+                    session_stimuli_rep_df["run"] == run
+                ].copy()
                 # Run % n_runs_per_session
                 run_stimuli_rep_df["run"] = run % n_runs_per_session + 1
                 run_stimuli_rep_df.to_csv(
