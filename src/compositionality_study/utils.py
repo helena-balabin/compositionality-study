@@ -112,7 +112,7 @@ def derive_text_depth_features(
         # Also derive the AMR graph for the caption and derive its depth
         amr_graph = doc._.to_amr()[0]  # noqa
         try:
-            amr_depth, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True) # type: ignore
+            amr_depth, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)  # type: ignore
             n_nodes = nx.number_of_nodes(amr_graph)
             n_edges = nx.number_of_edges(amr_graph)
             amr_graph = nx.to_numpy_array(amr_graph)
