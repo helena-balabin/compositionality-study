@@ -21,10 +21,6 @@ jobs:
       run: |
         echo "Formatting .py files in src/"
         find src/ -type f -name "*.py" -exec black {} +
-    - name: Auto-format .ipynb files in notebooks/ with Black
-      run: |
-        echo "Formatting .ipynb files in notebooks/"
-        find notebooks/ -type f -name "*.ipynb" -exec black {} +
 
     - name: Commit and push changes
       run: |
