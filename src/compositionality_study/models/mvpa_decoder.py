@@ -15,9 +15,13 @@ from compositionality_study.constants import BETAS_DIR, MVPA_DIR, PREPROC_MRI_DI
 
 
 @click.command()
-@click.option("--events_dir", required=True, type=str, help="Path to the events CSV containing trial info.")
+@click.option(
+    "--events_dir", required=True, type=str, help="Path to the events CSV containing trial info."
+)
 @click.option("--betas_dir", default=BETAS_DIR, type=str, help="Path to the estimated betas.")
-@click.option("--on_off_mask_dir", default=PREPROC_MRI_DIR, type=str, help="Path to the 'on-off' brain mask.")
+@click.option(
+    "--on_off_mask_dir", default=PREPROC_MRI_DIR, type=str, help="Path to the 'on-off' brain mask."
+)
 @click.option(
     "--output_dir",
     default=MVPA_DIR,

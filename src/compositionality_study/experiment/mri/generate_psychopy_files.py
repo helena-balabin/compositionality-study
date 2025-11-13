@@ -119,7 +119,9 @@ def run_single_run(
         if isinstance(stim, Image.Image):
             stim_objects.append(visual.ImageStim(win, image=stim))
         else:
-            stim_objects.append(visual.TextStim(win, text=add_line_break(stim), color=(0.0, 0.0, 0.0), wrapWidth=2))
+            stim_objects.append(
+                visual.TextStim(win, text=add_line_break(stim), color=(0.0, 0.0, 0.0), wrapWidth=2)
+            )
 
     # Get the number of frames for time durations in seconds
     n_frames_stimuli = int(duration * frame_rate)

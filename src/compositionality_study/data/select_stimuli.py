@@ -133,7 +133,8 @@ def select_stimuli(
 
     # Filter the dataset based on the quantiles, only keep entries that are outside the quantiles
     ds_n_stimuli = ds.filter(
-        lambda x: (x[text_feature] == 1 and x[graph_feature] == 1) or (x[text_feature] == 2 and x[graph_feature] == 2),
+        lambda x: (x[text_feature] == 1 and x[graph_feature] == 1)
+        or (x[text_feature] == 2 and x[graph_feature] == 2),
         num_proc=24,
     )
     logger.info(
@@ -156,7 +157,8 @@ def select_stimuli(
         & (df_n_stimuli["coco_person"] <= coco_person_quantiles[0.8])
     ]
     logger.info(
-        f"Filtered out extreme values for coco_a_nodes and amr_n_nodes, " f"{len(df_n_stimuli)} entries remain."
+        f"Filtered out extreme values for coco_a_nodes and amr_n_nodes, "
+        f"{len(df_n_stimuli)} entries remain."
     )
     # Remove duplicates based on the sentids
     df_n_stimuli = df_n_stimuli.drop_duplicates(subset=["sentids"])
@@ -172,7 +174,8 @@ def select_stimuli(
         {
             "sentids": df_n_stimuli["sentids"],
             "group": (
-                (np.array(df_n_stimuli[text_feature]) == 2) & (np.array(df_n_stimuli[graph_feature]) == 2)
+                (np.array(df_n_stimuli[text_feature]) == 2)
+                & (np.array(df_n_stimuli[graph_feature]) == 2)
             ).astype(int),
             **{v: df_n_stimuli[v] for v in control_vars},
         }
@@ -196,7 +199,9 @@ def select_stimuli(
     matched["matched_imgid"] = matched["matched_ID"].apply(
         lambda x: df_n_stimuli[df_n_stimuli["sentids"] == x]["imgid"].values[0]
     )
-    matched["imgid"] = matched["sentids"].apply(lambda x: df_n_stimuli[df_n_stimuli["sentids"] == x]["imgid"].values[0])
+    matched["imgid"] = matched["sentids"].apply(
+        lambda x: df_n_stimuli[df_n_stimuli["sentids"] == x]["imgid"].values[0]
+    )
     # Remove any duplicates based on "imgid"
     matched = matched.drop_duplicates(subset=["imgid"])
     # And also based on "matched_imgid"
@@ -244,7 +249,13 @@ def select_stimuli(
         },
         num_proc=24,
     )
-    check_vars = control_vars + ["ic_score", "aspect_ratio", "image_quality", "sentence_length", "coco_person"]
+    check_vars = control_vars + [
+        "ic_score",
+        "aspect_ratio",
+        "image_quality",
+        "sentence_length",
+        "coco_person",
+    ]
     for var in check_vars:
         high = ds_n_stimuli.filter(lambda x: x["group"] == 1)[var]
         low = ds_n_stimuli.filter(lambda x: x["group"] == 0)[var]
@@ -256,7 +267,9 @@ def select_stimuli(
         )
         # Print a warning if the p-value is below 0.05
         if p_val < 0.05:
-            logger.warning(f"Variable {var} has a significant difference between the groups (p-value={p_val:.3e}).")
+            logger.warning(
+                f"Variable {var} has a significant difference between the groups (p-value={p_val:.3e})."
+            )
 
     # Save the dataset
     output_dir = os.path.split(coco_preprocessed_dir)[0]

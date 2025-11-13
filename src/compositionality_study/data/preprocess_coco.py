@@ -255,7 +255,8 @@ def add_graph_properties(
     # For each image, get the aspect ratio by loading the image from the local directory with
     # the "filepath" column
     graph_ds = graph_ds.map(
-        lambda example: example | {"aspect_ratio": get_aspect_ratio(os.path.join(coco_image_dir, example["filepath"]))},
+        lambda example: example
+        | {"aspect_ratio": get_aspect_ratio(os.path.join(coco_image_dir, example["filepath"]))},
         num_proc=24,
     )
 
@@ -346,7 +347,9 @@ def add_ic_scores(
     ic_scores_df = pd.read_json(ic_scores_file, orient="index")
     ic_scores_df.columns = ["ic_score"]
     # In case that the index contains "COCO": Only take the last numbers of the file name without leading zeros
-    ic_scores_df.index = ic_scores_df.index.map(lambda x: int(x.split("_")[-1]) if type(x) == str else x)  # noqa
+    ic_scores_df.index = ic_scores_df.index.map(
+        lambda x: int(x.split("_")[-1]) if type(x) == str else x
+    )  # noqa
     # Convert the index to int
     ic_scores_df.index = ic_scores_df.index.astype(int)
     # Rename the index column to cocoid
@@ -429,7 +432,9 @@ def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[st
             )
         else:
             # If there is no graph data for that image_id yet, create a new graph
-            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"] = create_coco_a_sub_graph(coco_a_entry)
+            coco_a_filtered[coco_a_entry["image_id"]]["coco_a_graph"] = create_coco_a_sub_graph(
+                coco_a_entry
+            )
 
     return coco_a_filtered
 
@@ -453,11 +458,15 @@ def get_coco_obj_seg_df(
     # Load the COCO annotations with the standard json dataset loader because load_dataset does not work
     with open(os.path.join(coco_obj_seg_dir, "instances_train2017.json"), "r") as f:
         coco_data_tr = json.load(f)
-        coco_obj_seg_tr = [(ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]]
+        coco_obj_seg_tr = [
+            (ex["image_id"], ex["category_id"]) for ex in coco_data_tr["annotations"]
+        ]
         coco_cats_tr = {ex["id"]: ex["supercategory"] for ex in coco_data_tr["categories"]}
     with open(os.path.join(coco_obj_seg_dir, "instances_val2017.json"), "r") as f:
         coco_data_val = json.load(f)
-        coco_obj_seg_val = [(ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]]
+        coco_obj_seg_val = [
+            (ex["image_id"], ex["category_id"]) for ex in coco_data_val["annotations"]
+        ]
         coco_cats_val = {ex["id"]: ex["supercategory"] for ex in coco_data_val["categories"]}
     with open(coco_a_annot_file, "r") as f:
         # Load the version of the dataset with an annotator agreement of 3 persons
@@ -471,7 +480,9 @@ def get_coco_obj_seg_df(
     coco_cat_mappings = {**coco_cats_tr, **coco_cats_val}
 
     # Create a dictionary counting the number of objects per image id as well as a list of the categories
-    coco_obj_seg_filtered = {k: {"n_graph_obj": 0, "coco_person": 0, "coco_categories": []} for k in set(coco_obj_seg)}
+    coco_obj_seg_filtered = {
+        k: {"n_graph_obj": 0, "coco_person": 0, "coco_categories": []} for k in set(coco_obj_seg)
+    }
 
     # Get all the COCO features
     for coco_id, coco_cat_id in tqdm(
@@ -515,7 +526,13 @@ def get_coco_obj_seg_df(
     coco_a_df = pd.DataFrame.from_dict(
         coco_a_filtered,
         orient="index",
-        columns=["n_coco_a_actions", "coco_a_graph_depth", "coco_a_edges", "coco_a_nodes", "coco_a_graph"],
+        columns=[
+            "n_coco_a_actions",
+            "coco_a_graph_depth",
+            "coco_a_edges",
+            "coco_a_nodes",
+            "coco_a_graph",
+        ],
     )
     # Merge the two dataframes (rows where there is data for both)
     coco_obj_seg_df = coco_obj_seg_df.join(coco_a_df, how="inner")

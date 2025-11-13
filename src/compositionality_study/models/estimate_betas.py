@@ -19,7 +19,9 @@ from compositionality_study.constants import (
 
 def map_events_files(
     event_file: str,
-    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),  # noqa
+    design_matrix_mapping_file: str = os.path.join(
+        COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"
+    ),  # noqa
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
@@ -63,7 +65,9 @@ def map_events_files(
         if "blank" not in event["modality"]:
             event_name = str(int(event["cocoid"])) + "_" + event["modality"]
             # Look up the event in the design matrix mapping to get the column index
-            event_idx = design_matrix_mapping[design_matrix_mapping["coco_id"] == event_name]["design_matrix_idx"]
+            event_idx = design_matrix_mapping[design_matrix_mapping["coco_id"] == event_name][
+                "design_matrix_idx"
+            ]
             # Calculate the TR index/index in time for the event
             tr_idx = n_dummy_trs + idx * n_tr_per_trial
             # Set the corresponding point in time to 1
@@ -109,12 +113,16 @@ def map_events_files(
 @click.option("--file_pattern", type=str, default="desc-prep", help="Pattern to match NIfTI files.")
 @click.option("--chunklen", type=int, default=100000, help="Chunk length for the GLM_single model.")
 @click.option("--n_folds", type=int, default=3, help="Number of cross-validation folds.")
-@click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
+@click.option(
+    "--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"]
+)
 def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
     events_input_dir: str = BIDS_DIR,
     output_dir: str = BETAS_DIR,
-    design_matrix_mapping_file: str = os.path.join(COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"),  # noqa
+    design_matrix_mapping_file: str = os.path.join(
+        COCO_LOCAL_STIMULI_DIR, "design_matrix_mapping.csv"
+    ),  # noqa
     tr: float = 1.5,
     stim_dur: float = 3.0,
     isi: float = 3.0,
@@ -173,8 +181,12 @@ def estimate_betas(
         # Get all NIfTI files and events.tsvs for all sessions
         for ses_idx, session_folder in enumerate(session_folders):
             nifti_files += [
-                nib.load(os.path.join(prep_input_dir, subject, session_folder, "func", f)).get_fdata()
-                for f in sorted(os.listdir(os.path.join(prep_input_dir, subject, session_folder, "func")))
+                nib.load(
+                    os.path.join(prep_input_dir, subject, session_folder, "func", f)
+                ).get_fdata()
+                for f in sorted(
+                    os.listdir(os.path.join(prep_input_dir, subject, session_folder, "func"))
+                )
                 if (f.endswith(".nii") or f.endswith(".nii.gz")) and file_pattern in f
             ]
             events_files += [
@@ -186,13 +198,17 @@ def estimate_betas(
                     isi=isi,
                     dummy_scan_duration=dummy_scan_duration,
                 )
-                for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
+                for f in sorted(
+                    os.listdir(os.path.join(events_input_dir, subject, session_folder, "func"))
+                )
                 if f.endswith("events.tsv")
             ]
             session_indicator += [ses_idx + 1] * len(
                 [
                     f
-                    for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
+                    for f in sorted(
+                        os.listdir(os.path.join(events_input_dir, subject, session_folder, "func"))
+                    )
                     if f.endswith("events.tsv")
                 ]
             )

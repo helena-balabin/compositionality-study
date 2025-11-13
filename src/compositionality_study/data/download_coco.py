@@ -60,7 +60,9 @@ def download_coco(
         coco_ds = datasets.concatenate_datasets([coco_ds, coco_ds_val_splits, coco_ds_test_splits])
 
     # Subset relevant columns
-    coco_ds = coco_ds.select_columns(["filepath", "sentids", "imgid", "cocoid", "sentences_raw", "id"])
+    coco_ds = coco_ds.select_columns(
+        ["filepath", "sentids", "imgid", "cocoid", "sentences_raw", "id"]
+    )
     # Flatten the sentences_raw column
     # Save the COCO dataset to disk
     coco_ds = coco_ds.filter(lambda example: len(example["sentences_raw"]) > 0, num_proc=4)
@@ -76,8 +78,12 @@ def download_coco(
 
     # Also save a small dummy subset of dummy_subset_size many entries
     if save_dummy_subset:
-        coco_ds.select(list(range(dummy_subset_size))).save_to_disk(os.path.join(output_dir, "coco_dummy"))
-        coco_a_ds.select(list(range(dummy_subset_size))).save_to_disk(os.path.join(output_dir, "coco_a_dummy"))
+        coco_ds.select(list(range(dummy_subset_size))).save_to_disk(
+            os.path.join(output_dir, "coco_dummy")
+        )
+        coco_a_ds.select(list(range(dummy_subset_size))).save_to_disk(
+            os.path.join(output_dir, "coco_a_dummy")
+        )
     return
 
 

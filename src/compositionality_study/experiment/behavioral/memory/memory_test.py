@@ -21,14 +21,18 @@ from compositionality_study.constants import (
 @click.command()
 @click.option("--n_subjects", type=int, default=12, help="Number of subjects.")
 @click.option("--n_days", type=int, default=3, help="Number of days.")
-@click.option("--input_dir", default=COCO_LOCAL_STIMULI_DIR, type=str, help="Directory with the true stimuli.")
+@click.option(
+    "--input_dir", default=COCO_LOCAL_STIMULI_DIR, type=str, help="Directory with the true stimuli."
+)
 @click.option(
     "--preprocessed_coco_dir",
     default=COCO_PREP_ALL,
     type=str,
     help="Directory with the lure stimuli.",
 )
-@click.option("--output_dir", default=MEMORY_TEST_DIR, type=str, help="Directory to save the memory test.")
+@click.option(
+    "--output_dir", default=MEMORY_TEST_DIR, type=str, help="Directory to save the memory test."
+)
 @click.option("--n_test", default=50, type=int, help="Number of stimuli in the memory test.")
 def create_all_memory_tests(
     n_subjects: int,
@@ -153,7 +157,9 @@ def create_memory_test_helper(
     lure_test = lure_stimuli.sample(n=len(real_test), random_state=subject_id * int(day) + int(day))
 
     # Randomly choose between sentences_raw and filepath for each lure stimulus
-    lure_test["stimulus"] = lure_test.apply(lambda row: row[np.random.choice(["sentences_raw", "filepath"])], axis=1)
+    lure_test["stimulus"] = lure_test.apply(
+        lambda row: row[np.random.choice(["sentences_raw", "filepath"])], axis=1
+    )
 
     # Combine the real and lure test stimuli
     memory_test = pd.concat([real_test, lure_test])

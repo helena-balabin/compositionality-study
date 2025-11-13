@@ -398,12 +398,16 @@ def get_summary_statistics(
     chi2_amr, p_value_amr, _, _ = chi2_contingency(contingency_table_amr)
 
     # Perform a Chi-square test between coco_person and coco_a_graph_depth
-    contingency_table_coco_a = pd.crosstab(stimuli_df["coco_person"], stimuli_df["coco_a_graph_depth"])
+    contingency_table_coco_a = pd.crosstab(
+        stimuli_df["coco_person"], stimuli_df["coco_a_graph_depth"]
+    )
     chi2_coco_a, p_value_coco_a, _, _ = chi2_contingency(contingency_table_coco_a)
 
     # Save the Chi-square test results to a file in the visualization directory
     with open(os.path.join(visualizations_dir, "chi_square_test_results.txt"), "w") as f:
-        f.write(f"Chi-square test between COCO person and AMR depth: Chi2 = {chi2_amr}, p-value = {p_value_amr}\n")
+        f.write(
+            f"Chi-square test between COCO person and AMR depth: Chi2 = {chi2_amr}, p-value = {p_value_amr}\n"
+        )
         f.write(
             f"Chi-square test between COCO person and COCO-A depth: Chi2 = {chi2_coco_a}, p-value = {p_value_coco_a}\n"
         )
@@ -581,7 +585,9 @@ def check_control_variables_balance(
             "Low Mean": [stats["low_mean"] for stats in results.values()],
             "Low Std": [stats["low_std"] for stats in results.values()],
             "p-value": [stats["p_value"] for stats in results.values()],
-            "Significant Difference": ["Yes" if stats["p_value"] < 0.05 else "No" for stats in results.values()],
+            "Significant Difference": [
+                "Yes" if stats["p_value"] < 0.05 else "No" for stats in results.values()
+            ],
         }
     )
     summary_df.to_csv(os.path.join(output_dir, "control_variable_summary.csv"), index=False)

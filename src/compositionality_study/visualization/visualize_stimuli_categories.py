@@ -59,7 +59,9 @@ def visualize_categories_in_images(
     _, p, _, _ = chi2_contingency(crosstab)
 
     # Annotate the plot with the overall p-value
-    plt.title(f"Distribution of COCO Categories by Complexity with a Chi-Squared Test resulting in p={round(p, 5)}")
+    plt.title(
+        f"Distribution of COCO Categories by Complexity with a Chi-Squared Test resulting in p={round(p, 5)}"
+    )
 
     # Save the figure
     plt.savefig(

@@ -80,7 +80,8 @@ def create_pairing_files(
     # Split each pairing file into 8 files of 1/8th of the pairings (for each subject)
     for pairing, mod in zip([text_pairings, img_pairings], ["text", "img"]):
         pairing_split = [
-            pairing.iloc[i : i + int(len(pairing) / 8)] for i in range(0, len(pairing), int(len(pairing) / 8))
+            pairing.iloc[i : i + int(len(pairing) / 8)]
+            for i in range(0, len(pairing), int(len(pairing) / 8))
         ]
         for i, split in enumerate(pairing_split):
             split.to_csv(os.path.join(output_dir, f"{mod}_pairings_{i}.csv"), index=False)
