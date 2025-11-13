@@ -348,7 +348,7 @@ def add_ic_scores(
     ic_scores_df.columns = ["ic_score"]
     # In case that the index contains "COCO": Only take the last numbers of the file name without leading zeros
     ic_scores_df.index = ic_scores_df.index.map(
-        lambda x: int(x.split("_")[-1]) if type(x) == str else x
+        lambda x: int(x.split("_")[-1]) if isinstance(x, str) else x
     )  # noqa
     # Convert the index to int
     ic_scores_df.index = ic_scores_df.index.astype(int)
