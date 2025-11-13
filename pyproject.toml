@@ -1,11 +1,117 @@
-# See https://setuptools.readthedocs.io/en/latest/build_meta.html
 [build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta:__legacy__"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "compositionality-study"
+version = "0.0.1-dev"
+description = "Code for the fMRI experiment on compositionality in text and images"
+authors = [
+    { name = "Helena Balabin", email = "helena.balabin@kuleuven.be" }
+]
+maintainers = [
+    { name = "Helena Balabin", email = "helena.balabin@kuleuven.be" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["snekpack", "cookiecutter", "natural language processing"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Framework :: Pytest",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com//compositionality-study"
+Repository = "https://github.com//compositionality-study"
+Documentation = "https://compositionality_study.readthedocs.io"
+"Bug Tracker" = "https://github.com//compositionality-study/issues"
+"Source Code" = "https://github.com//compositionality-study"
+
+[project.scripts]
+compositionality_study = "compositionality_study.cli:main"
+
+[tool.poetry]
+packages = [
+    { include = "compositionality_study", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+more-itertools = "*"
+tqdm = "*"
+click = "*"
+more-click = "*"
+loguru = "*"
+python-dotenv = "*"
+diffusers = "*"
+torch = "*"
+torchvision = "*"
+opencv-python = "*"
+pytesseract = "*"
+visual-genome = "*"
+unidecode = "*"
+accelerate = "*"
+amrlib = "*"
+datasets = "*"
+nltk = "*"
+penman = "*"
+transformers = "*"
+spacy = "*"
+networkx = "*"
+flask = "*"
+nibabel = "*"
+nilearn = "*"
+mriqc = "*"
+psmpy = "*"
+pybids = "*"
+pycocotools = "*"
+pandas = "*"
+numpy = "*"
+scipy = "*"
+verstack = "*"
+matplotlib = "*"
+matplotlib-label-lines = "*"
+seaborn = "*"
+spacy-streamlit = "*"
+streamlit = "*"
+
+[tool.poetry.group.dev.dependencies]
+tox = "*"
+pytest = "*"
+flake8 = "*"
+coverage = "*"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "*"
+sphinx-rtd-theme = "*"
+sphinx-click = "*"
+sphinx-autodoc-typehints = "*"
+sphinx-automodapi = "*"
+
+[tool.poetry.group.gui]
+optional = true
+
+[tool.poetry.group.gui.dependencies]
+psychopy = "*"
+wxPython = "*"
+pyo = "*"
 
 [tool.black]
 line-length = 100
-target-version = ["py38", "py39", "py310"]
+target-version = ["py39", "py310"]
 
 [tool.isort]
 profile = "black"
@@ -13,3 +119,29 @@ multi_line_output = 3
 line_length = 100
 include_trailing_comma = true
 reverse_relative = true
+
+[tool.coverage.run]
+branch = true
+source = ["compositionality_study"]
+omit = ["tests/*", "docs/*"]
+
+[tool.coverage.paths]
+source = [
+    "src/compositionality_study",
+    ".tox/*/lib/python*/site-packages/compositionality_study"
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == \"__main__\":",
+    "if TYPE_CHECKING:",
+    "def __str__",
+    "def __repr__"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
