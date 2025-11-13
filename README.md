@@ -12,7 +12,7 @@ This figure shows example text-image pairs with low and high compositional compl
 
 ## 🔬 Reproducibility
 
-This study sets out to achieve a high degree of reproducibility through open science practices. We make our code publicly available and publish our research as a registered report, a publication format where the study design, hypotheses, and planned analyses are peer-reviewed and accepted before data collection begins. 
+This study sets out to achieve a high degree of reproducibility through open science practices. We make our code publicly available and publish our research as a registered report, a publication format where the study design, hypotheses, and planned analyses are peer-reviewed and accepted before data collection begins.
 
 **Registered Report — Stage 1: In-Principle Acceptance (IPA)**: This study has received Stage 1 IPA. The methodology and proposed analyses were peer-reviewed and provisionally accepted for publication in [Neurobiology of Language (NoL)](https://direct.mit.edu/nol/pages/registered-reports), pending successful execution of the approved protocol.
 
