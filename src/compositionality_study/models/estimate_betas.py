@@ -163,7 +163,6 @@ def estimate_betas(
     :type subjects: list[str]
     """
     # Create the output directory
-    output_dir = os.path.join(output_dir, "beta_estimates")
     os.makedirs(output_dir, exist_ok=True)
 
     # Iterate over all subjects
