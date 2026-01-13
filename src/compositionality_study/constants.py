@@ -74,9 +74,6 @@ IC_SCORES_FILE = os.path.join(IC9000_IMG_COM_OUTPUT_DIR, "ic_scores.json")
 IMG_DUMMY_DIR = os.path.join(DATA_DIR, "dummy_images")
 os.makedirs(IC9000_IMG_COM_OUTPUT_DIR, exist_ok=True)
 
-# Directory for text-to-image model outputs
-TEXT_TO_IMAGE_OUTPUT_DIR = os.path.join(COCO_DIR, "text_to_image")
-
 # Excluded WordNet verb synsets for action-based filtering of relationships
 # Consumption had to be excluded because of food-related stimuli that had a high number of verbs but no actions
 # Body verbs mostly describe wearing clothes, which is static
@@ -85,14 +82,13 @@ WN_SYNSET_FILTER = ["be", "have", "along"]
 WN_PREDICATE_FILTER = ["with", "on", "in"]
 # "verb.contact", "verb.change", "verb.weather", "verb.stative", "verb.possession"
 
-# Add a path to the NSD dataset
-NSD_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "nsd")
-
 # Directory for raw and preprocessed MRI data
 MRI_DIR = os.path.join(os.getenv("LARGE_STORAGE_PATH") or DATA_DIR, "comp_fmri_study_2025")
 BIDS_DIR = os.path.join(MRI_DIR, "bids")
 PREPROC_MRI_DIR = os.path.join(MRI_DIR, "fmriprep")
 MRIQC_DIR = os.path.join(MRI_DIR, "mriqc")
 BETAS_DIR = os.path.join(MRI_DIR, "betas")
+MEMORY_TEST_DIR = os.path.join(MRI_DIR, "memory_test")
 MVPA_DIR = os.path.join(MRI_DIR, "mvpa")
 os.makedirs(BIDS_DIR, exist_ok=True)
+os.makedirs(PREPROC_MRI_DIR, exist_ok=True)
