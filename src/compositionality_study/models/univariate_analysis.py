@@ -574,6 +574,7 @@ def run_univariate_glm(
         )
 
         # TODO is a z- to t-map conversion needed here, or does nilearn do it in its 2nd-level model?
+
         # Accumulate contrast maps from all subjects for group-level analysis
         for name, path in contrasts.items():
             all_contrasts[name].append(path)
