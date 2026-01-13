@@ -314,21 +314,25 @@ def run_subject_glm(
             if relevant_cols:
                 n_scans = len(conf_df)
                 # Create empty dataframe for stimulus regressors
+                # We initialize with 0.0. The "2 off" (ISI) periods will remain 0.0 because
+                # we only write to the rows corresponding to the stimulus presentation.
                 stim_regs = pd.DataFrame(0.0, index=np.arange(n_scans), columns=relevant_cols)
+
+                # Stimulus is presented for 3s. With TR=1.5s, this corresponds to 2 TRs.
+                # This ensures 2 rows of data followed by 2 rows of zeros (ISI) for each 6s trial.
+                n_tr_stim = int(round(3.0 / tr))
 
                 for _, row in ev_df.iterrows():
                     onset = row["onset"]
-                    duration = row["duration"]
                     
-                    # Convert time to TR index
-                    start_tr = int(np.floor(onset / tr))
-                    # duration covers ceil(duration / tr) scans
-                    n_trs = int(np.ceil(duration / tr))
-                    end_tr = start_tr + n_trs
+                    # Convert time to TR index; round ensures alignment to the nearest TR
+                    start_tr = int(np.round(onset / tr))
+                    end_tr = start_tr + n_tr_stim
 
                     if start_tr < n_scans:
                         actual_end = min(end_tr, n_scans)
-                        stim_regs.iloc[start_tr:actual_end] = row[relevant_cols].values
+                        if actual_end > start_tr:
+                            stim_regs.iloc[start_tr:actual_end] = row[relevant_cols].values
 
                 conf_df = pd.concat([conf_df, stim_regs], axis=1)
         
