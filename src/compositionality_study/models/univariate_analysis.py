@@ -14,9 +14,9 @@ from nilearn.glm.second_level import SecondLevelModel
 from nilearn.glm.thresholding import threshold_stats_img
 from nilearn.masking import apply_mask
 from scipy.stats import norm
-from datasets import load_dataset
 
-from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR, HF_DATASET_NAME
+from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR
+from compositionality_study.utils import get_coco_df, get_stimulus_features_lookup, get_stimulus_data
 
 
 # -----------------------------------------------------------------------------
@@ -195,51 +195,25 @@ def collect_runs(
     return runs
 
 
-_COCO_DF = None
-
-
-def _get_coco_df() -> pd.DataFrame:
-    """Load and cache the COCO dataset."""
-    global _COCO_DF
-    if _COCO_DF is None:
-        ds = load_dataset(HF_DATASET_NAME, split="train")
-        _COCO_DF = ds.to_pandas()
-    return _COCO_DF
-
-
 def _load_stimulus_confounds(events: pd.DataFrame, n_scans: int, tr: float = TR) -> pd.DataFrame:
     """Generate extra confounds based on stimulus properties."""
-    coco_df = _get_coco_df()
+    coco_df = get_coco_df()
 
     text_cols = ["sentence_length", "amr_n_nodes"]
     img_cols = ["coco_a_nodes", "ic_score", "aspect_ratio", "coco_person"]
     all_cols = text_cols + img_cols
 
     confounds = pd.DataFrame(0.0, index=range(n_scans), columns=all_cols)
-
-    # Use 'sentences_raw' for text, 'cocoid' for images
-    txt_df = coco_df.drop_duplicates(
-        "sentences_raw"
-    ).set_index("sentences_raw") if "sentences_raw" in coco_df.columns else pd.DataFrame()
-    
-    # Image confounds are constant for a given cocoid, so we can safely drop duplicates.
-    img_df = coco_df.drop_duplicates("cocoid").set_index("cocoid") if "cocoid" in coco_df.columns else pd.DataFrame()
+    txt_df, img_df = get_stimulus_features_lookup(coco_df)
 
     for _, row in events.iterrows():
-        modality = row.get("modality")
-        stim = row.get("stimulus")
-        data = None
-
-        if modality == "text" and stim in txt_df.index:
-            data = txt_df.loc[stim]
-        elif modality == "image":
-            cid = row.get("cocoid")
-            if pd.notna(cid):
-                # Try direct match or int cast for IDs
-                if cid in img_df.index:
-                    data = img_df.loc[cid]
-                elif int(cid) in img_df.index:
-                    data = img_df.loc[int(cid)]
+        data = get_stimulus_data(
+            modality=row.get("modality"),
+            stimulus=row.get("stimulus"),
+            cocoid=row.get("cocoid"),
+            txt_df=txt_df,
+            img_df=img_df,
+        )
 
         if data is None:
             continue
@@ -251,7 +225,7 @@ def _load_stimulus_confounds(events: pd.DataFrame, n_scans: int, tr: float = TR)
         if start_tr >= n_scans:
             continue
 
-        cols = text_cols if modality == "text" else img_cols
+        cols = text_cols if row.get("modality") == "text" else img_cols
         valid_cols = [c for c in cols if c in data]
         if valid_cols:
             confounds.iloc[start_tr:end_tr, confounds.columns.get_indexer(valid_cols)] = data[valid_cols].values

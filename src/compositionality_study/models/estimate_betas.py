@@ -15,6 +15,7 @@ from compositionality_study.constants import (
     COCO_LOCAL_STIMULI_DIR,
     PREPROC_MRI_DIR,
 )
+from compositionality_study.utils import get_coco_df, get_stimulus_features_lookup, get_stimulus_data
 
 
 def map_events_files(
@@ -69,7 +70,51 @@ def map_events_files(
             # Set the corresponding point in time to 1
             design_matrix[tr_idx, event_idx] = 1
 
-    return design_matrix
+
+def map_confounds_files(
+    event_file: str,
+    tr: float = 1.5,
+    stim_dur: float = 3.0,
+    isi: float = 3.0,
+    dummy_scan_duration: float = 12.0,
+) -> np.array:
+    """Generate extra confounds based on stimulus properties."""
+    coco_df = get_coco_df()
+    events_df = pd.read_csv(event_file, sep="\t")
+
+    n_tr_per_trial = int((stim_dur + isi) // tr)
+    n_dummy_trs = int(dummy_scan_duration // tr)
+    total_trs = int(n_dummy_trs * 2 + n_tr_per_trial * len(events_df))
+
+    text_cols = ["sentence_length", "amr_n_nodes"]
+    img_cols = ["coco_a_nodes", "ic_score", "aspect_ratio", "coco_person"]
+    all_cols = text_cols + img_cols
+
+    confounds = pd.DataFrame(0.0, index=range(total_trs), columns=all_cols)
+    txt_df, img_df = get_stimulus_features_lookup(coco_df)
+
+    for idx, row in events_df.iterrows():
+        data = get_stimulus_data(
+            modality=row.get("modality"),
+            stimulus=row.get("stimulus"),
+            cocoid=row.get("cocoid"),
+            txt_df=txt_df,
+            img_df=img_df,
+        )
+        
+        if data is None:
+            continue
+            
+        start_tr = n_dummy_trs + idx * n_tr_per_trial
+        n_stim_trs = int(round(stim_dur / tr))
+        end_tr = min(start_tr + n_stim_trs, total_trs)
+        
+        cols = text_cols if row.get("modality") == "text" else img_cols
+        valid_cols = [c for c in cols if c in data]
+        if valid_cols:
+            confounds.iloc[start_tr:end_tr, confounds.columns.get_indexer(valid_cols)] = data[valid_cols].values
+
+    return confounds.values
 
 
 @click.command()
@@ -109,6 +154,11 @@ def map_events_files(
 @click.option("--file_pattern", type=str, default="desc-prep", help="Pattern to match NIfTI files.")
 @click.option("--chunklen", type=int, default=100000, help="Chunk length for the GLM_single model.")
 @click.option("--n_folds", type=int, default=3, help="Number of cross-validation folds.")
+@click.option(
+    "--use_stimulus_confounds/--no-use_stimulus_confounds",
+    default=False,
+    help="Include low-level stimulus features (text/image) as extra regressors.",
+)
 @click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
 def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
@@ -122,6 +172,7 @@ def estimate_betas(
     file_pattern: str = "desc-prep",
     chunklen: int = 100000,
     n_folds: int = 3,
+    use_stimulus_confounds: bool = False,
     subjects: list[str] = ["sub-01"],  # noqa
 ) -> None:
     """Estimate beta coefficients for each trial in a BIDS-formatted fMRI dataset.
@@ -151,6 +202,8 @@ def estimate_betas(
     :type chunklen: int
     :param n_folds: Number of cross-validation folds, defaults to 3.
     :type n_folds: int
+    :param use_stimulus_confounds: Whether to include low-level stimulus features as extra regressors.
+    :type use_stimulus_confounds: bool
     :param subjects: List of subjects to process, defaults to ["sub-01"].
     :type subjects: list[str]
     """
@@ -169,6 +222,7 @@ def estimate_betas(
         session_folders = [f for f in session_folders if f != "ses-01-02-03"]
         nifti_files = []
         events_files = []
+        extra_regressors = []
         session_indicator = []
 
         # Get all NIfTI files and events.tsvs for all sessions
@@ -190,6 +244,21 @@ def estimate_betas(
                 for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
                 if f.endswith("events.tsv")
             ]
+            
+            # Map confounds (extra regressors) if requested
+            if use_stimulus_confounds:
+                extra_regressors += [
+                    map_confounds_files(
+                        os.path.join(events_input_dir, subject, session_folder, "func", f),
+                        tr=tr,
+                        stim_dur=stim_dur,
+                        isi=isi,
+                        dummy_scan_duration=dummy_scan_duration,
+                    )
+                    for f in sorted(os.listdir(os.path.join(events_input_dir, subject, session_folder, "func")))
+                    if f.endswith("events.tsv")
+                ]
+
             session_indicator += [ses_idx + 1] * len(
                 [
                     f
@@ -209,6 +278,10 @@ def estimate_betas(
             "sessionindicator": np.array(session_indicator),
             "xvalscheme": np.array_split(np.arange(len(nifti_files)), n_folds),
         }
+
+        if use_stimulus_confounds and extra_regressors:
+            opt["extra_regressors"] = extra_regressors
+
         model = GLM_single(opt)
         model = model.fit(
             design=events_files,

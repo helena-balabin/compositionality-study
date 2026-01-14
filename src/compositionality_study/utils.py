@@ -9,9 +9,63 @@ import penman
 import PIL
 import spacy
 from PIL import Image, ImageOps
+import pandas as pd
+from datasets import load_dataset
+from compositionality_study.constants import HF_DATASET_NAME
 
 # Set up the spacy amrlib extension
 amrlib.setup_spacy_extension()
+
+_COCO_DF = None
+
+
+def get_coco_df() -> pd.DataFrame:
+    """Load and cache the COCO dataset."""
+    global _COCO_DF
+    if _COCO_DF is None:
+        ds = load_dataset(HF_DATASET_NAME, split="train")
+        _COCO_DF = ds.to_pandas()
+    return _COCO_DF
+
+
+def get_stimulus_features_lookup(coco_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Create optimized lookup tables for text and image features."""
+    txt_df = (
+        coco_df.drop_duplicates("sentences_raw").set_index("sentences_raw")
+        if "sentences_raw" in coco_df.columns
+        else pd.DataFrame()
+    )
+    img_df = (
+        coco_df.drop_duplicates("cocoid").set_index("cocoid")
+        if "cocoid" in coco_df.columns
+        else pd.DataFrame()
+    )
+    return txt_df, img_df
+
+
+def get_stimulus_data(
+    modality: str,
+    stimulus: str,
+    cocoid: Union[str, float, int],
+    txt_df: pd.DataFrame,
+    img_df: pd.DataFrame,
+) -> Union[pd.Series, None]:
+    """Retrieve features for a single stimulus event."""
+    if modality == "text" and stimulus in txt_df.index:
+        return txt_df.loc[stimulus]
+    elif modality == "image":
+        if pd.notna(cocoid):
+            if cocoid in img_df.index:
+                return img_df.loc[cocoid]
+            try:
+                # Handle potential float/string mismatches
+                int_cid = int(cocoid)
+                if int_cid in img_df.index:
+                    return img_df.loc[int_cid]
+            except (ValueError, TypeError):
+                pass
+    return None
+
 
 
 def get_aspect_ratio(filepath: str):
