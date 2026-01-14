@@ -531,7 +531,6 @@ def run_univariate_glm(
     group_level_dir = output_dir / "group_level"
 
     all_contrasts: Dict[str, List[Path]] = {k: [] for k in CONTRASTS}
-    conjunctions: List[Path] = []
     roi_summaries: List[pd.DataFrame] = []
     localizer_masks: List[Path] = []
 
@@ -585,11 +584,6 @@ def run_univariate_glm(
             thr_contrasts[name] = thr_path
             all_contrasts[name].append(thr_path)
 
-        # TODO why is this happening before the group-level analysis? Conjunction should only happen at group level.
-        if "img_high_vs_low" in thr_contrasts and "txt_high_vs_low" in thr_contrasts:
-            conj = conjunction_map(thr_contrasts["img_high_vs_low"], thr_contrasts["txt_high_vs_low"])
-            conjunctions.append(conj)
-
         if run_localizer:
             ses1_runs = sessions.get("ses-01", [])
             heldout_runs = [item for sess, items in sessions.items() if sess != "ses-01" for item in items]
@@ -623,12 +617,22 @@ def run_univariate_glm(
 
     run_group_level(contrast_maps=all_contrasts, output_dir=group_level_dir)
 
-    if conjunctions:
-        # TODO correct this: The conjunction is done with the two group-level modality-specific compositionality contrasts, not the 1st level output
-        mean_conj = image.mean_img(conjunctions)
-        conj_out = group_level_dir / "conjunction_mean.nii.gz"
-        mean_conj.to_filename(conj_out)
-        logger.info(f"Saved conjunction mean map to {conj_out}")
+    # Compute group-level conjunction
+    img_contrast = "img_high_vs_low"
+    txt_contrast = "txt_high_vs_low"
+    
+    # Construct expected paths for thresholded group maps
+    # Note: threshold_zmap appends '_thr.nii.gz' to the stem
+    img_map = group_level_dir / f"group_{img_contrast}_zmap.nii_thr.nii.gz"
+    txt_map = group_level_dir / f"group_{txt_contrast}_zmap.nii_thr.nii.gz"
+
+    if img_map.exists() and txt_map.exists():
+        conj_out = conjunction_map(img_map, txt_map)
+        logger.info(f"Saved group-level conjunction map to {conj_out}")
+    else:
+        logger.warning(
+            f"Could not compute group conjunction: missing {img_map} or {txt_map}"
+        )
 
     if roi_summaries:
         # TODO find out whatever this is
