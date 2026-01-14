@@ -14,8 +14,9 @@ from nilearn.glm.second_level import SecondLevelModel
 from nilearn.glm.thresholding import threshold_stats_img
 from nilearn.masking import apply_mask
 from scipy.stats import norm
+from datasets import load_dataset
 
-from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR
+from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR, HF_DATASET_NAME
 
 
 # -----------------------------------------------------------------------------
@@ -194,6 +195,70 @@ def collect_runs(
     return runs
 
 
+_COCO_DF = None
+
+
+def _get_coco_df() -> pd.DataFrame:
+    """Load and cache the COCO dataset."""
+    global _COCO_DF
+    if _COCO_DF is None:
+        ds = load_dataset(HF_DATASET_NAME, split="train")
+        _COCO_DF = ds.to_pandas()
+    return _COCO_DF
+
+
+def _load_stimulus_confounds(events: pd.DataFrame, n_scans: int, tr: float = TR) -> pd.DataFrame:
+    """Generate extra confounds based on stimulus properties."""
+    coco_df = _get_coco_df()
+
+    text_cols = ["sentence_length", "amr_n_nodes"]
+    img_cols = ["coco_a_nodes", "ic_score", "aspect_ratio", "coco_person"]
+    all_cols = text_cols + img_cols
+
+    confounds = pd.DataFrame(0.0, index=range(n_scans), columns=all_cols)
+
+    # Use 'sentences_raw' for text, 'cocoid' for images
+    txt_df = coco_df.drop_duplicates(
+        "sentences_raw"
+    ).set_index("sentences_raw") if "sentences_raw" in coco_df.columns else pd.DataFrame()
+    
+    # Image confounds are constant for a given cocoid, so we can safely drop duplicates.
+    img_df = coco_df.drop_duplicates("cocoid").set_index("cocoid") if "cocoid" in coco_df.columns else pd.DataFrame()
+
+    for _, row in events.iterrows():
+        modality = row.get("modality")
+        stim = row.get("stimulus")
+        data = None
+
+        if modality == "text" and stim in txt_df.index:
+            data = txt_df.loc[stim]
+        elif modality == "image":
+            cid = row.get("cocoid")
+            if pd.notna(cid):
+                # Try direct match or int cast for IDs
+                if cid in img_df.index:
+                    data = img_df.loc[cid]
+                elif int(cid) in img_df.index:
+                    data = img_df.loc[int(cid)]
+
+        if data is None:
+            continue
+
+        start_tr = int(round(row["onset"] / tr))
+        n_trs = int(round(row["duration"] / tr))
+        end_tr = min(start_tr + n_trs, n_scans)
+
+        if start_tr >= n_scans:
+            continue
+
+        cols = text_cols if modality == "text" else img_cols
+        valid_cols = [c for c in cols if c in data]
+        if valid_cols:
+            confounds.iloc[start_tr:end_tr, confounds.columns.get_indexer(valid_cols)] = data[valid_cols].values
+
+    return confounds
+
+
 # -----------------------------------------------------------------------------
 # GLM routines
 # -----------------------------------------------------------------------------
@@ -209,13 +274,25 @@ def run_subject_glm(
     smoothing_fwhm: float = SMOOTHING_FWHM,
     gm_threshold: float = GM_THRESHOLD,
     n_jobs: int = 1,
+    use_stimulus_confounds: bool = False,
 ) -> Dict[str, Path]:
     """Run a first-level GLM and write subject-level contrast maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     events = [load_events(f) for f in events_files]
-    confounds = [load_motion_regressors(f) for f in confounds_files]
+    motion_confounds = [load_motion_regressors(f) for f in confounds_files]
+
+    # Combine motion regressors with stimulus confounds
+    confounds = []
+    for ev, mot in zip(events, motion_confounds):
+        if use_stimulus_confounds:
+            n_scans = len(mot)
+            stim_conf = _load_stimulus_confounds(ev, n_scans, tr)
+            confounds.append(pd.concat([mot, stim_conf], axis=1))
+            confounds[-1].to_csv("test.tsv", sep="\t", index=False)  # TODO debug
+        else:
+            confounds.append(mot)
 
     # Create binary mask image object.
     # Passing this to FirstLevelModel ensures it is resampled to the functional run geometry.
@@ -342,6 +419,7 @@ def run_functional_localizer(
     smoothing_fwhm: float,
     gm_threshold: float,
     n_jobs: int = 1,
+    use_stimulus_confounds: bool = False,
 ) -> Path | None:
     """Fit a localizer (session-1) GLM for compositionality and return thresholded mask."""
 
@@ -362,6 +440,7 @@ def run_functional_localizer(
         smoothing_fwhm=smoothing_fwhm,
         gm_threshold=gm_threshold,
         n_jobs=n_jobs,
+        use_stimulus_confounds=use_stimulus_confounds,
     )
     # TODO double check - is the localizer saved?
 
@@ -383,6 +462,7 @@ def summarize_roi_effects(
     smoothing_fwhm: float,
     gm_threshold: float,
     n_jobs: int = 1,
+    use_stimulus_confounds: bool = False,
 ) -> pd.DataFrame:
     """Compute mean contrast values within ROI for held-out sessions (e.g., ses-02/03)."""
 
@@ -402,6 +482,7 @@ def summarize_roi_effects(
         smoothing_fwhm=smoothing_fwhm,
         gm_threshold=gm_threshold,
         n_jobs=n_jobs,
+        use_stimulus_confounds=use_stimulus_confounds,
     )
 
     records = []
@@ -501,6 +582,11 @@ def summarize_roi_effects(
     default=-1,
     help="Number of CPUs to use for parallel processing. -1 uses all available.",
 )
+@click.option(
+    "--use-stimulus-confounds/--no-use-stimulus-confounds",
+    default=False,
+    help="Include low-level stimulus features (text/image) as confounds.",
+)
 def run_univariate_glm(
     fmriprep_dir: Path,
     bids_dir: Path,
@@ -515,6 +601,7 @@ def run_univariate_glm(
     run_localizer: bool,
     max_runs: int | None,
     n_jobs: int,
+    use_stimulus_confounds: bool,
 ) -> None:
     """Run subject-level and group-level univariate GLM analyses."""
 
@@ -567,6 +654,7 @@ def run_univariate_glm(
             smoothing_fwhm=smoothing_fwhm,
             gm_threshold=gm_threshold,
             n_jobs=n_jobs,
+            use_stimulus_confounds=use_stimulus_confounds,
         )
 
         # Threshold subject maps and build conjunction_map
@@ -597,6 +685,7 @@ def run_univariate_glm(
                 smoothing_fwhm=smoothing_fwhm,
                 gm_threshold=gm_threshold,
                 n_jobs=n_jobs,
+                use_stimulus_confounds=use_stimulus_confounds,
             )
 
             if loc_mask:
@@ -611,6 +700,7 @@ def run_univariate_glm(
                     smoothing_fwhm=smoothing_fwhm,
                     gm_threshold=gm_threshold,
                     n_jobs=n_jobs,
+                    use_stimulus_confounds=use_stimulus_confounds,
                 )
                 if not summary.empty:
                     roi_summaries.append(summary)
