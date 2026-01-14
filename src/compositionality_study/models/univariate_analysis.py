@@ -7,9 +7,6 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 import click
 import pandas as pd
-import numpy as np
-from datasets import load_dataset
-from functools import lru_cache
 from loguru import logger
 from nilearn import image
 from nilearn.glm.first_level import FirstLevelModel
@@ -18,7 +15,7 @@ from nilearn.glm.thresholding import threshold_stats_img
 from nilearn.masking import apply_mask
 from scipy.stats import norm
 
-from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR, HF_DATASET_NAME
+from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR
 
 
 # -----------------------------------------------------------------------------
@@ -46,18 +43,6 @@ CONTRASTS = {
     "interaction": "(image_high - image_low) - (text_high - text_low)",
 }
 
-STIMULUS_CONFOUNDS = [
-    "sentence_length",
-    "amr_n_nodes",
-    "coco_a_nodes",
-    "ic_score",
-    "aspect_ratio",
-    "coco_person",
-]
-
-IMG_CONFOUNDS = ["coco_a_nodes", "ic_score", "aspect_ratio", "coco_person"]
-TXT_CONFOUNDS = ["amr_n_nodes", "sentence_length"]
-
 DEFAULT_OUTPUT_DIR = Path(MODELS_DIR) / "univariate_glm"
 DEFAULT_VOXEL_P = 0.001
 DEFAULT_CLUSTER_ALPHA = 0.05
@@ -66,26 +51,6 @@ DEFAULT_CLUSTER_ALPHA = 0.05
 # -----------------------------------------------------------------------------
 # Utilities
 # -----------------------------------------------------------------------------
-
-
-@lru_cache(maxsize=1)
-def load_stimulus_confounds() -> pd.DataFrame:
-    """Load the mapping of stimulus confounds from HuggingFace."""
-    logger.info(f"Loading stimulus confounds from {HF_DATASET_NAME}...")
-    ds = load_dataset(HF_DATASET_NAME, split="train")
-    df = ds.to_pandas()
-
-    logger.info(f"Loaded HF dataset with {len(df)} rows.")
-    logger.info(f"HF Columns: {df.columns.tolist()}")
-    
-    # Check coverage of expected columns
-    expected = set(IMG_CONFOUNDS + TXT_CONFOUNDS)
-    found = set(df.columns)
-    missing = expected - found
-    if missing:
-        logger.warning(f"The following expected confound columns are missing from HF dataset: {missing}")
-
-    return df
 
 
 def _derive_run_id(bold_file: Path) -> str:
@@ -125,80 +90,33 @@ def load_motion_regressors(confounds_tsv: Path) -> pd.DataFrame:
     return confounds[MOTION_COLS].fillna(0.0)
 
 
-def load_events(events_tsv: Path, confounds_map: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Load events, merge extra confounds, and normalize."""
+def load_events(events_tsv: Path) -> pd.DataFrame:
+    """Load events and normalize the condition column name."""
+
     events = pd.read_csv(events_tsv, sep="\t")
-
-    # Standardize trial_type
-    if "trial_type" not in events.columns:
-        if "condition" in events.columns:
-            events = events.rename(columns={"condition": "trial_type"})
-        elif "modality" in events.columns and "complexity" in events.columns:
-            events["trial_type"] = (events["modality"].str.strip().str.lower() + "_" + 
-                                    events["complexity"].str.strip().str.lower())
-        else:
-            raise ValueError(f"Cannot derive trial_type in {events_tsv}")
-
-    if confounds_map is not None:
-        # Pre-calculate common masks
-        is_text = events["modality"] == "text"
-        is_image = events["modality"] == "image"
-
-        # 1. Merge Text Confounds (Key: stimulus == sentences_raw)
-        if "sentences_raw" in confounds_map.columns:
-            txt_cols = [c for c in TXT_CONFOUNDS if c in confounds_map.columns]
-            # Create a clean lookup table
-            hf_txt = confounds_map[["sentences_raw"] + txt_cols].copy()
-            hf_txt["stim_key"] = hf_txt["sentences_raw"].astype(str).str.strip()
-            hf_txt = hf_txt.drop_duplicates(subset=["stim_key"]).drop(columns=["sentences_raw"])
-            
-            # Map values
-            events["stim_key"] = events["stimulus"].astype(str).str.strip()
-            events = events.merge(hf_txt, on="stim_key", how="left", suffixes=("", "_hf"))
-            
-            for col in txt_cols:
-                # Prioritize HF value, then existing value
-                if f"{col}_hf" in events.columns:
-                    events[col] = events[f"{col}_hf"].combine_first(events.get(col, pd.Series(np.nan, index=events.index)))
-                    events.drop(columns=[f"{col}_hf"], inplace=True)
-            
-            events.drop(columns=["stim_key"], inplace=True)
-
-        # 2. Merge Image Confounds (Key: cocoid)
-        if "cocoid" in events.columns and "cocoid" in confounds_map.columns:
-            img_cols = [c for c in IMG_CONFOUNDS if c in confounds_map.columns]
-            
-            # Helper: float/int safe conversion to string key
-            to_key = lambda s: pd.to_numeric(s, errors='coerce').fillna(-1).astype(int).astype(str)
-
-            hf_img = confounds_map[["cocoid"] + img_cols].copy()
-            hf_img["key_id"] = to_key(hf_img["cocoid"])
-            hf_img = hf_img.drop_duplicates(subset=["key_id"]).drop(columns=["cocoid"])
-
-            events["key_id"] = to_key(events["cocoid"])
-            events = events.merge(hf_img, on="key_id", how="left", suffixes=("", "_hf"))
-
-            for col in img_cols:
-                if f"{col}_hf" in events.columns:
-                    events[col] = events[f"{col}_hf"].combine_first(events.get(col, pd.Series(np.nan, index=events.index)))
-                    events.drop(columns=[f"{col}_hf"], inplace=True)
-            
-            events.drop(columns=["key_id"], inplace=True)
-
-        # 3. Clean up NaNs and enforce Modality exclusivity
-        # Init missing columns
-        all_extra = IMG_CONFOUNDS + TXT_CONFOUNDS
-        for c in all_extra:
-            if c not in events.columns: 
-                events[c] = np.nan
-
-        # Enforce zeros for opposite modality
-        events.loc[is_text, IMG_CONFOUNDS] = 0.0
-        events.loc[is_image, TXT_CONFOUNDS] = 0.0
+    
+    # Check for trial_type or condition first
+    if "trial_type" in events.columns:
+        pass
+    elif "condition" in events.columns:
+        events = events.rename(columns={"condition": "trial_type"})
+    elif "modality" in events.columns and "complexity" in events.columns:
+        # Fallback: derive condition from modality + complexity
+        # Normalize to lowercase and strip whitespace to ensure 'image_high', 'text_low' etc.
+        modality = events["modality"].astype(str).str.strip().str.lower()
+        complexity = events["complexity"].astype(str).str.strip().str.lower()
         
-        # Fill remaining NaNs
-        events[all_extra] = events[all_extra].fillna(0.0)
+        # Map common variations if necessary (e.g. 'img' -> 'image')
+        # Here assuming standard 'image'/'text' and 'high'/'low' are target values
+        events["trial_type"] = modality + "_" + complexity
+    else:
+        raise ValueError(
+            f"No condition/trial_type column and cannot derive from modality/complexity in {events_tsv}"
+        )
 
+    # Ensure trial_type only contains valid python identifiers if possible (though nilearn handles some)
+    # But crucially, they must match CONTRASTS keys if they are used there.
+    
     return events
 
 
@@ -291,52 +209,13 @@ def run_subject_glm(
     smoothing_fwhm: float = SMOOTHING_FWHM,
     gm_threshold: float = GM_THRESHOLD,
     n_jobs: int = 1,
-    stimulus_confounds_map: pd.DataFrame | None = None,
 ) -> Dict[str, Path]:
     """Run a first-level GLM and write subject-level contrast maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    loaded_events = []
-    loaded_confounds = []
-
-    for ev_f, conf_f in zip(events_files, confounds_files):
-        # 1. Load Events
-        ev_df = load_events(ev_f, confounds_map=stimulus_confounds_map)
-        loaded_events.append(ev_df)
-
-        # 2. Load Motion Regressors
-        conf_df = load_motion_regressors(conf_f)
-
-        # 3. Add stimulus confounds as nuisance regressors (TR-aligned)
-        if stimulus_confounds_map is not None:
-            relevant_cols = [c for c in IMG_CONFOUNDS + TXT_CONFOUNDS if c in ev_df.columns]
-            if relevant_cols:
-                n_scans = len(conf_df)
-                # Create empty dataframe for stimulus regressors
-                # We initialize with 0.0. The "2 off" (ISI) periods will remain 0.0 because
-                # we only write to the rows corresponding to the stimulus presentation.
-                stim_regs = pd.DataFrame(0.0, index=np.arange(n_scans), columns=relevant_cols)
-
-                # Stimulus is presented for 3s. With TR=1.5s, this corresponds to 2 TRs.
-                # This ensures 2 rows of data followed by 2 rows of zeros (ISI) for each 6s trial.
-                n_tr_stim = int(round(3.0 / tr))
-
-                for _, row in ev_df.iterrows():
-                    onset = row["onset"]
-                    
-                    # Convert time to TR index; round ensures alignment to the nearest TR
-                    start_tr = int(np.round(onset / tr))
-                    end_tr = start_tr + n_tr_stim
-
-                    if start_tr < n_scans:
-                        actual_end = min(end_tr, n_scans)
-                        if actual_end > start_tr:
-                            stim_regs.iloc[start_tr:actual_end] = row[relevant_cols].values
-
-                conf_df = pd.concat([conf_df, stim_regs], axis=1)
-        
-        loaded_confounds.append(conf_df.fillna(0.0))
+    events = [load_events(f) for f in events_files]
+    confounds = [load_motion_regressors(f) for f in confounds_files]
 
     # Create binary mask image object.
     # Passing this to FirstLevelModel ensures it is resampled to the functional run geometry.
@@ -357,7 +236,7 @@ def run_subject_glm(
         n_jobs=n_jobs,
     )
 
-    glm = glm.fit(run_imgs=list(bold_imgs), events=loaded_events, confounds=loaded_confounds)
+    glm = glm.fit(run_imgs=list(bold_imgs), events=events, confounds=confounds)
     # TODO out of curiosity - examine output
 
     contrast_maps: Dict[str, Path] = {}
@@ -416,7 +295,7 @@ def conjunction_map(map_a: Path, map_b: Path) -> Path:
     img_a = image.math_img("img != 0", img=map_a)
     img_b = image.math_img("img != 0", img=map_b)
     conj = image.math_img("img1 * img2", img1=img_a, img2=img_b)
-    out_file = map_a.with_name("group_conjunction_img_txt.nii.gz")
+    out_file = map_a.with_name("conjunction_img_txt.nii.gz")
     conj.to_filename(out_file)
     return out_file
 
@@ -431,11 +310,10 @@ def split_runs_by_session(runs: Iterable[Tuple[Path, Path, Path]]) -> Dict[str, 
     return grouped
 
 
-def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> Dict[str, Path]:
+def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> None:
     """Run fixed-effects group analysis for each contrast."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    thresholded_maps: Dict[str, Path] = {}
 
     for contrast_name, maps in contrast_maps.items():
         if not maps:
@@ -453,9 +331,6 @@ def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> D
         # Apply standard thresholds and save
         thr_file = threshold_zmap(out_file)
         logger.info(f"Thresholded group map for {contrast_name} written to {thr_file}")
-        thresholded_maps[contrast_name] = thr_file
-
-    return thresholded_maps
 
 
 def run_functional_localizer(
@@ -467,7 +342,6 @@ def run_functional_localizer(
     smoothing_fwhm: float,
     gm_threshold: float,
     n_jobs: int = 1,
-    stimulus_confounds_map: pd.DataFrame | None = None,
 ) -> Path | None:
     """Fit a localizer (session-1) GLM for compositionality and return thresholded mask."""
 
@@ -488,7 +362,6 @@ def run_functional_localizer(
         smoothing_fwhm=smoothing_fwhm,
         gm_threshold=gm_threshold,
         n_jobs=n_jobs,
-        stimulus_confounds_map=stimulus_confounds_map,
     )
     # TODO double check - is the localizer saved?
 
@@ -510,7 +383,6 @@ def summarize_roi_effects(
     smoothing_fwhm: float,
     gm_threshold: float,
     n_jobs: int = 1,
-    stimulus_confounds_map: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Compute mean contrast values within ROI for held-out sessions (e.g., ses-02/03)."""
 
@@ -530,7 +402,6 @@ def summarize_roi_effects(
         smoothing_fwhm=smoothing_fwhm,
         gm_threshold=gm_threshold,
         n_jobs=n_jobs,
-        stimulus_confounds_map=stimulus_confounds_map,
     )
 
     records = []
@@ -630,11 +501,6 @@ def summarize_roi_effects(
     default=-1,
     help="Number of CPUs to use for parallel processing. -1 uses all available.",
 )
-@click.option(
-    "--use-stimulus-confounds",
-    is_flag=True,
-    help="Include stimulus-specific confounds (length, nodes, etc.) from HF dataset.",
-)
 def run_univariate_glm(
     fmriprep_dir: Path,
     bids_dir: Path,
@@ -649,17 +515,8 @@ def run_univariate_glm(
     run_localizer: bool,
     max_runs: int | None,
     n_jobs: int,
-    use_stimulus_confounds: bool,
 ) -> None:
     """Run subject-level and group-level univariate GLM analyses."""
-
-    stimulus_confounds_map = None
-    if use_stimulus_confounds:
-        try:
-            stimulus_confounds_map = load_stimulus_confounds()
-        except Exception as e:
-            logger.error(f"Failed to load stimulus confounds: {e}")
-            raise
 
     subject_ids = (
         list(subjects)
@@ -674,6 +531,7 @@ def run_univariate_glm(
     group_level_dir = output_dir / "group_level"
 
     all_contrasts: Dict[str, List[Path]] = {k: [] for k in CONTRASTS}
+    conjunctions: List[Path] = []
     roi_summaries: List[pd.DataFrame] = []
     localizer_masks: List[Path] = []
 
@@ -710,12 +568,27 @@ def run_univariate_glm(
             smoothing_fwhm=smoothing_fwhm,
             gm_threshold=gm_threshold,
             n_jobs=n_jobs,
-            stimulus_confounds_map=stimulus_confounds_map,
         )
 
-        # Accumulate subject maps for group-level analysis
+        # Threshold subject maps and build conjunction_map
+        # TODO why is a conjunction already prepared in the subject loop? weird ... also is a z- to t- conversion really necessary, shouldn't nilearn handle that in its 2nd level model?
+        thr_contrasts: Dict[str, Path] = {}
         for name, path in contrasts.items():
-            all_contrasts[name].append(path)
+            # TODO can't we do threshold z-map, if really needed, in run_subject_glm already?
+            thr_path = threshold_zmap(
+                path,
+                voxel_p=voxel_p,
+                cluster_alpha=cluster_alpha,
+                two_sided=True,
+                min_cluster_size=min_cluster_size,
+            )
+            thr_contrasts[name] = thr_path
+            all_contrasts[name].append(thr_path)
+
+        # TODO why is this happening before the group-level analysis? Conjunction should only happen at group level.
+        if "img_high_vs_low" in thr_contrasts and "txt_high_vs_low" in thr_contrasts:
+            conj = conjunction_map(thr_contrasts["img_high_vs_low"], thr_contrasts["txt_high_vs_low"])
+            conjunctions.append(conj)
 
         if run_localizer:
             ses1_runs = sessions.get("ses-01", [])
@@ -730,7 +603,6 @@ def run_univariate_glm(
                 smoothing_fwhm=smoothing_fwhm,
                 gm_threshold=gm_threshold,
                 n_jobs=n_jobs,
-                stimulus_confounds_map=stimulus_confounds_map,
             )
 
             if loc_mask:
@@ -745,23 +617,18 @@ def run_univariate_glm(
                     smoothing_fwhm=smoothing_fwhm,
                     gm_threshold=gm_threshold,
                     n_jobs=n_jobs,
-                    stimulus_confounds_map=stimulus_confounds_map,
                 )
                 if not summary.empty:
                     roi_summaries.append(summary)
 
-    group_thr_results = run_group_level(contrast_maps=all_contrasts, output_dir=group_level_dir)
+    run_group_level(contrast_maps=all_contrasts, output_dir=group_level_dir)
 
-    # Conjunction analysis at group level
-    # "conjunction of the group-level t-maps for highly versus lowly compositionally complex stimuli in each modality"
-    img_contrast = group_thr_results.get("img_high_vs_low")
-    txt_contrast = group_thr_results.get("txt_high_vs_low")
-
-    if img_contrast and txt_contrast:
-        conj_file = conjunction_map(img_contrast, txt_contrast)
-        logger.info(f"Saved group-level conjunction map to {conj_file}")
-    else:
-        logger.warning("Skipping conjunction: missing group-level thresholded maps for image/text contrasts.")
+    if conjunctions:
+        # TODO correct this: The conjunction is done with the two group-level modality-specific compositionality contrasts, not the 1st level output
+        mean_conj = image.mean_img(conjunctions)
+        conj_out = group_level_dir / "conjunction_mean.nii.gz"
+        mean_conj.to_filename(conj_out)
+        logger.info(f"Saved conjunction mean map to {conj_out}")
 
     if roi_summaries:
         # TODO find out whatever this is
