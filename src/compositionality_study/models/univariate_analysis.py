@@ -290,7 +290,6 @@ def run_subject_glm(
             n_scans = len(mot)
             stim_conf = _load_stimulus_confounds(ev, n_scans, tr)
             confounds.append(pd.concat([mot, stim_conf], axis=1))
-            confounds[-1].to_csv("test.tsv", sep="\t", index=False)  # TODO debug
         else:
             confounds.append(mot)
 
