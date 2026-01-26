@@ -147,12 +147,12 @@ def create_memory_test_helper(
     shown_stimuli = load_stimuli(day=day, subject_id=subject_id, input_dir=input_dir)
     # Remove any blank stimuli from the shown stimuli
     shown_stimuli = shown_stimuli[shown_stimuli["stimulus"] != "blank"]
-    all_stimuli = load_from_disk(preprocessed_coco_dir).to_pandas()
+    all_stimuli = load_from_disk(preprocessed_coco_dir).to_pandas()  # type: ignore
     # Rename imgid to img_id in all_stimuli
-    all_stimuli.rename(columns={"imgid": "img_id"}, inplace=True)
+    all_stimuli.rename(columns={"imgid": "img_id"}, inplace=True)  # type: ignore
 
     # Get the stimuli that were not shown to the subject
-    lure_stimuli = all_stimuli[~all_stimuli["img_id"].isin(shown_stimuli["img_id"])]
+    lure_stimuli = all_stimuli[~all_stimuli["img_id"].isin(shown_stimuli["img_id"])]  # type: ignore
     real_test = shown_stimuli.sample(n=n_test, random_state=42)
     lure_test = lure_stimuli.sample(n=len(real_test), random_state=subject_id * int(day) + int(day))
 

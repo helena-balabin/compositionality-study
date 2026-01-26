@@ -8,7 +8,7 @@ from typing import List
 import click
 import pandas as pd
 from PIL import Image, ImageOps
-from psychopy import core, event, logging, visual
+from psychopy import core, event, logging, visual  # type: ignore
 from tqdm import tqdm
 
 from compositionality_study.constants import COCO_LOCAL_STIMULI_DIR, COCO_PRACTICE_STIMULI_DIR

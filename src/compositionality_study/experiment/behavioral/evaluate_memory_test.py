@@ -138,7 +138,7 @@ def evaluate_memory_performance(start_subject, end_subject, n_days, bids_dir, gr
                 p_value = p_val_res.pvalue
             except AttributeError:
                 # Fallback for older scipy versions
-                from scipy.stats import binom_test
+                from scipy.stats import binom_test  # type: ignore
                 p_value = binom_test(subject_total_correct, subject_total_trials, p=0.5, alternative='greater')
 
             results.append({
@@ -151,7 +151,7 @@ def evaluate_memory_performance(start_subject, end_subject, n_days, bids_dir, gr
                 'p_value': p_value
             })
         else:
-             results.append({
+            results.append({
                 'subject': subject_id,
                 'mean_accuracy': np.nan,
                 'std_accuracy': np.nan,
@@ -179,7 +179,7 @@ def evaluate_memory_performance(start_subject, end_subject, n_days, bids_dir, gr
     print("\n=== Memory Test Performance Summary ===")
     # Format p-value for readability
     formatters = {'p_value': lambda x: f"{x:.4g}"}
-    print(df_final.to_string(index=False, formatters=formatters))
+    print(df_final.to_string(index=False, formatters=formatters))  # type: ignore
     
     if output_file:
         df_final.to_csv(output_file, index=False)

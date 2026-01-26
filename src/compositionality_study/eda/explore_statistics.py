@@ -194,7 +194,7 @@ def all_properties_corr(
     """
     # Load the dataset and convert to pandas
     ds = datasets.load_from_disk(coco_text_graph_dir)
-    df = ds.to_pandas()
+    df: pd.DataFrame = ds.to_pandas()  # type: ignore
 
     # Set seaborn theme
     plt.rcParams["font.family"] = ["sans-serif"]
@@ -258,7 +258,7 @@ def check_captions_for_verbs(
     n_verbs = 0
 
     for caption in tqdm(captions, desc="Checking captions for verbs"):
-        doc = nlp(caption)
+        doc = nlp(caption)  # type: ignore
         if "VERB" in set(i.pos_ for i in doc):
             n_verbs += 1
 

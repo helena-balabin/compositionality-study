@@ -7,8 +7,6 @@ import nibabel as nib
 import pandas as pd
 from nilearn.decoding import SearchLight
 from nilearn.image import smooth_img
-
-# from nilearn.masking import apply_mask
 from sklearn.svm import SVC
 
 from compositionality_study.constants import BETAS_DIR, MVPA_DIR, PREPROC_MRI_DIR
@@ -58,13 +56,13 @@ def run_searchlight_decoding(
     os.makedirs(output_dir, exist_ok=True)
 
     # TODO Load betas and events for each run
-    betas_img = nib.load(betas_dir)
+    betas_img = nib.load(betas_dir)  # type: ignore
     events_df = pd.read_csv(events_dir)
     labels = events_df["complexity_label"].values  # e.g., numeric or binary labels
     # TODO filter out blanks in the events
 
     # Load and smooth 'on-off' mask
-    on_off_mask = nib.load(on_off_mask_dir)
+    on_off_mask = nib.load(on_off_mask_dir)  # type: ignore
     on_off_mask_smoothed = smooth_img(on_off_mask, fwhm=fwhm)
 
     # Prepare data for searchlight
@@ -75,7 +73,7 @@ def run_searchlight_decoding(
         on_off_mask_smoothed,
         radius=5,  # example radius in voxels
         scoring="accuracy",
-        estimator=SVC(kernel="linear"),
+        estimator=SVC(kernel="linear"),  # type: ignore
         n_jobs=1,
     )
 
@@ -83,5 +81,5 @@ def run_searchlight_decoding(
     searchlight.fit(betas_img, labels)
 
     # Save results as a NIfTI
-    results_img = searchlight.scores_
-    nib.save(results_img, os.path.join(output_dir, "searchlight_decoding.nii.gz"))
+    results_img = nib.Nifti1Image(searchlight.scores_, on_off_mask.affine)  # type: ignore
+    nib.save(results_img, os.path.join(output_dir, "searchlight_decoding.nii.gz"))  # type: ignore

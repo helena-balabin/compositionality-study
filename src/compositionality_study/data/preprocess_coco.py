@@ -11,7 +11,7 @@ import pandas as pd
 import spacy
 from datasets import Dataset, load_from_disk
 from loguru import logger
-from spacy import Language
+from spacy import Language  # type: ignore
 from tqdm import tqdm
 
 from compositionality_study.constants import (
@@ -91,7 +91,7 @@ def add_text_properties(
 
     # Flatten the dataset so that there is one caption per example
     # Check if any of the features are lists
-    if any([isinstance(coco_ds[0][feature], List) for feature in coco_ds.features]):
+    if any([isinstance(coco_ds[0][feature], List) for feature in coco_ds.features]):  # type: ignore
         vs_coco_ds_flattened = coco_ds.map(flatten_examples, batched=True, num_proc=24)
     else:
         vs_coco_ds_flattened = coco_ds
@@ -104,8 +104,8 @@ def add_text_properties(
 
     @Language.component("force_single_sentence")
     def one_sentence_per_doc(
-        doc: spacy.tokens.Doc,  # noqa
-    ) -> spacy.tokens.Doc:  # noqa
+        doc: spacy.tokens.Doc,  # type: ignore
+    ) -> spacy.tokens.Doc:  # type: ignore
         """Force the document to be one sentence.
 
         :param doc: The document to force to be one sentence
@@ -136,15 +136,15 @@ def add_text_properties(
 
     # Save to disk
     if save_to_disk:
-        output_dir = os.path.split(coco)[0]
+        output_dir = os.path.split(coco)[0]  # type: ignore
         preprocessed_ds.save_to_disk(os.path.join(output_dir, "coco_preprocessed_text"))
         # Also save a small dummy subset of dummy_subset_size many entries
         if save_dummy_subset:
-            preprocessed_ds.select(list(range(dummy_subset_size))).save_to_disk(
+            preprocessed_ds.select(list(range(dummy_subset_size))).save_to_disk(  # type: ignore
                 os.path.join(output_dir, "coco_preprocessed_text_dummy")
             )
 
-    return preprocessed_ds
+    return preprocessed_ds  # type: ignore
 
 
 @click.command()
@@ -231,7 +231,7 @@ def add_graph_properties(
     """
     # Load the dataset
     preprocessed_ds = load_from_disk(coco_graph) if isinstance(coco_graph, str) else coco_graph
-    preprocessed_df = preprocessed_ds.to_pandas()
+    preprocessed_df: pd.DataFrame = preprocessed_ds.to_pandas()  # type: ignore
 
     # Get the number of objects based on the COCO annotations for image segmentation
     coco_obj_seg_df = get_coco_obj_seg_df(
@@ -341,7 +341,7 @@ def add_ic_scores(
     """
     # Load the dataset
     preprocessed_ds = load_from_disk(coco_graph) if isinstance(coco_graph, str) else coco_graph
-    preprocessed_df = preprocessed_ds.to_pandas()
+    preprocessed_df = preprocessed_ds.to_pandas()  # type: ignore
 
     # Load the image complexity scores, give it a column name
     ic_scores_df = pd.read_json(ic_scores_file, orient="index")
@@ -355,7 +355,7 @@ def add_ic_scores(
     # Rename the index column to cocoid
     ic_scores_df.index.name = "cocoid"
     # Merge the two datasets based on the cocoid
-    joined_df = preprocessed_df.merge(ic_scores_df, on="cocoid")
+    joined_df = preprocessed_df.merge(ic_scores_df, on="cocoid")  # type: ignore
     graph_ds = Dataset.from_pandas(joined_df)
 
     # Save to disk
@@ -436,7 +436,7 @@ def get_coco_a_graphs(coco_a_data: List[Dict], coco_a_ids: List[str]) -> Dict[st
                 coco_a_entry
             )
 
-    return coco_a_filtered
+    return coco_a_filtered  # type: ignore
 
 
 def get_coco_obj_seg_df(
@@ -503,7 +503,7 @@ def get_coco_obj_seg_df(
     for coco_a_id, coco_a_graph in coco_a_filtered.items():
         max_longest_shortest_path = 0
         # Iterate over all connected components
-        for comp_nodes in nx.weakly_connected_components(coco_a_graph["coco_a_graph"]):
+        for comp_nodes in nx.weakly_connected_components(coco_a_graph["coco_a_graph"]):  # type: ignore
             # Get the longest shortest path for each connected component
             subgraph = coco_a_graph["coco_a_graph"].subgraph(comp_nodes)  # type: ignore
             shortest_path_lengths = dict(nx.all_pairs_shortest_path_length(subgraph))
@@ -511,11 +511,11 @@ def get_coco_obj_seg_df(
             max_longest_shortest_path = max(max_longest_shortest_path, longest_path)
 
         # Add the longest shortest path to the image id
-        coco_a_filtered[coco_a_id]["coco_a_graph_depth"] = max_longest_shortest_path
+        coco_a_filtered[coco_a_id]["coco_a_graph_depth"] = max_longest_shortest_path  # type: ignore
         # Also add the number of edges, nodes and the entire graph
-        coco_a_filtered[coco_a_id]["coco_a_edges"] = coco_a_graph["coco_a_graph"].number_of_edges()
-        coco_a_filtered[coco_a_id]["coco_a_nodes"] = coco_a_graph["coco_a_graph"].number_of_nodes()
-        coco_a_filtered[coco_a_id]["coco_a_graph"] = nx.to_numpy_array(coco_a_graph["coco_a_graph"])
+        coco_a_filtered[coco_a_id]["coco_a_edges"] = coco_a_graph["coco_a_graph"].number_of_edges()  # type: ignore
+        coco_a_filtered[coco_a_id]["coco_a_nodes"] = coco_a_graph["coco_a_graph"].number_of_nodes()  # type: ignore
+        coco_a_filtered[coco_a_id]["coco_a_graph"] = nx.to_numpy_array(coco_a_graph["coco_a_graph"])  # type: ignore
 
     # Create dataframes from the dictionaries
     coco_obj_seg_df = pd.DataFrame.from_dict(

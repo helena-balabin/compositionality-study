@@ -82,7 +82,7 @@ def infer_one_image(
         ori_height = ori_img.height
         ori_width = ori_img.width
         img = inference_transform(ori_img)
-        img = img.to(device)
+        img = img.to(device)  # type: ignore
         img = img.unsqueeze(0)
         # Get the model predictions
         if save_ic_map:
@@ -168,16 +168,16 @@ def infer_img_source(
             if img[col_name] in results:
                 continue
         else:
-            img_path = os.path.join(img_source, img)  # noqa
+            img_path = os.path.join(img_source, img)  # type: ignore
             # Check if the image has already been processed
-            if img.strip(".jpg") in results:
+            if img.strip(".jpg") in results:  # type: ignore
                 continue
         # Infer the image complexity
         ic_score = infer_one_image(img_path, output_dir, device=device, save_ic_map=save_ic_map)
         if isinstance(img, Dict):
             results[img[col_name]] = ic_score
         else:
-            results[img.strip(".jpg")] = ic_score  # noqa
+            results[img.strip(".jpg")] = ic_score  # type: ignore
 
     return results
 

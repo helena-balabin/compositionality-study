@@ -141,14 +141,14 @@ def select_stimuli(
         f"Filtered the dataset for entries with {text_feature} and {graph_feature} "
         f"being either 1 or 2, {len(ds_n_stimuli)} entries remain."
     )
-    df_n_stimuli = ds_n_stimuli.to_pandas()
+    df_n_stimuli: pd.DataFrame = ds_n_stimuli.to_pandas()  # type: ignore
 
     # Filter out extreme values for amr_n_nodes and coco_a_nodes,
     # it needs to be in the 90% quantile range
     coco_a_nodes_quantiles = df_n_stimuli["coco_a_nodes"].quantile([0.05, 0.95])
     amr_n_nodes_quantiles = df_n_stimuli["amr_n_nodes"].quantile([0.05, 0.95])
     coco_person_quantiles = df_n_stimuli["coco_person"].quantile([0.2, 0.8])
-    df_n_stimuli = df_n_stimuli[
+    df_n_stimuli = df_n_stimuli[  
         (df_n_stimuli["coco_a_nodes"] <= coco_a_nodes_quantiles[0.95])
         & (df_n_stimuli["coco_a_nodes"] >= coco_a_nodes_quantiles[0.05])
         & (df_n_stimuli["amr_n_nodes"] <= amr_n_nodes_quantiles[0.95])

@@ -41,7 +41,7 @@ def visualize_categories_in_images(
     )
 
     # Explode the "coco_categories" column
-    df = ds.to_pandas()
+    df: pd.DataFrame = ds.to_pandas()  # type: ignore
     df = df.explode("coco_categories")
 
     # Plot the category distribution
@@ -60,7 +60,7 @@ def visualize_categories_in_images(
 
     # Annotate the plot with the overall p-value
     plt.title(
-        f"Distribution of COCO Categories by Complexity with a Chi-Squared Test resulting in p={round(p, 5)}"
+        f"Distribution of COCO Categories by Complexity with a Chi-Squared Test resulting in p={round(p, 5)}"  # type: ignore
     )
 
     # Save the figure

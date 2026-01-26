@@ -15,9 +15,9 @@ import spacy
 from amrlib.graph_processing.amr_plot import AMRPlot
 from datasets import load_from_disk
 from loguru import logger
-from PIL import Image
+from PIL import Image  # type: ignore
 from scipy.stats import chi2_contingency, ttest_ind
-from spacy import Language
+from spacy import Language  # type: ignore
 from tqdm import tqdm
 
 from compositionality_study.constants import (
@@ -68,7 +68,7 @@ def load_coco_annotations(
 
 
 def visualize_image_with_actions(
-    img: Image,
+    img: Image.Image,
     depth: int,
     actions: List[Dict],
     coco_annots: List[Dict],
@@ -106,7 +106,7 @@ def visualize_image_with_actions(
 
             # Draw the bounding boxes
             plt.gca().add_patch(
-                plt.Rectangle(
+                plt.Rectangle(  # type: ignore
                     (subject_bbox["bbox"][0], subject_bbox["bbox"][1]),
                     subject_bbox["bbox"][2],
                     subject_bbox["bbox"][3],
@@ -116,7 +116,7 @@ def visualize_image_with_actions(
                 )
             )
             plt.gca().add_patch(
-                plt.Rectangle(
+                plt.Rectangle(  # type: ignore
                     (object_bbox["bbox"][0], object_bbox["bbox"][1]),
                     object_bbox["bbox"][2],
                     object_bbox["bbox"][3],
@@ -194,7 +194,7 @@ def visualize_actions(
 
     # Load our selected stimuli dataset
     dataset = load_from_disk(dataset_path)
-    dataset_ids = [item["cocoid"] for item in dataset]
+    dataset_ids = [item["cocoid"] for item in dataset]  # type: ignore
 
     # Filter in coco_actions only the actions that are in our dataset
     coco_actions_filtered = [i for i in coco_actions if i["image_id"] in dataset_ids]
@@ -207,18 +207,18 @@ def visualize_actions(
 
     # Process each image in our dataset
     for item in tqdm(dataset, desc="Processing images"):
-        image_id = item["cocoid"]
+        image_id = item["cocoid"]  # type: ignore
         image_actions = [i for i in coco_actions_filtered if i["image_id"] == image_id]
         image_coco_annots = [i for i in coco_train_val_filtered if i["image_id"] == image_id]
 
         # Get the PIL image from the dataset
-        img = Image.open(os.path.join(coco_image_dir, item["filepath"]))
-        image_output_id = item["sentids"]
+        img = Image.open(os.path.join(coco_image_dir, item["filepath"]))  # type: ignore
+        image_output_id = item["sentids"]  # type: ignore
         output_path = os.path.join(output_dir, f"{image_output_id}_image.png")
 
         try:
             visualize_image_with_actions(
-                img, item["coco_a_graph_depth"], image_actions, image_coco_annots, str(output_path)
+                img, item["coco_a_graph_depth"], image_actions, image_coco_annots, str(output_path)  # type: ignore
             )
         except Exception as e:
             logger.info(f"Error processing image {image_id}: {e}")
@@ -260,8 +260,8 @@ def visualize_amr_text(
 
     @Language.component("force_single_sentence")  # noqa
     def one_sentence_per_doc(
-        doc: spacy.tokens.Doc,  # noqa
-    ) -> spacy.tokens.Doc:  # noqa
+        doc: spacy.tokens.Doc,  # type: ignore
+    ) -> spacy.tokens.Doc:  # type: ignore
         """Force the document to be one sentence.
 
         :param doc: The document to force to be one sentence
@@ -276,7 +276,7 @@ def visualize_amr_text(
 
     # Add dependency parse tree depth and AMR depth
     # Prefer GPU if available
-    spacy.prefer_gpu()
+    spacy.prefer_gpu()  # type: ignore
     amrlib.setup_spacy_extension()
     # Disable unnecessary components
     nlp = spacy.load(spacy_model, disable=["tok2vec", "attribute_ruler", "lemmatizer"])
@@ -284,7 +284,7 @@ def visualize_amr_text(
 
     # Load the dataset
     dataset = load_from_disk(dataset_path)
-    doc_batched = nlp.pipe(dataset["sentences_raw"])
+    doc_batched = nlp.pipe(dataset["sentences_raw"])  # type: ignore
 
     for doc, ex in tqdm(
         zip(doc_batched, dataset),
@@ -296,9 +296,9 @@ def visualize_amr_text(
         plot = AMRPlot()
         plot.build_from_graph(amr_graph, allow_deinvert=True)
         # Save the plot
-        output_path = os.path.join(output_dir, f"{ex['sentids']}_text")
+        output_path = os.path.join(output_dir, f"{ex['sentids']}_text")  # type: ignore
         graph = plot.graph
-        graph.graph_attr["label"] = f"Depth for '{ex['sentences_raw']}': {ex['amr_graph_depth']}"
+        graph.graph_attr["label"] = f"Depth for '{ex['sentences_raw']}': {ex['amr_graph_depth']}"  # type: ignore
         graph.render(output_path, format="png", cleanup=True)
 
     # Remove all .pdf files in the output directory
@@ -389,7 +389,7 @@ def get_summary_statistics(
     # Load the stimuli and convert them to a pandas DataFrame
     stimuli = load_from_disk(stimuli_dir)
     n_stimuli = len(stimuli)
-    stimuli_df = pd.DataFrame(stimuli)
+    stimuli_df = pd.DataFrame(stimuli)  # type: ignore
     # Initialize the visualization directory
     os.makedirs(visualizations_dir, exist_ok=True)
 
@@ -440,7 +440,7 @@ def get_summary_statistics(
     # Initialize spaCy model
     nlp = spacy.load("en_core_web_trf")
     # Prefer GPU if available
-    spacy.prefer_gpu()
+    spacy.prefer_gpu()  # type: ignore
     # Set up the spacy amrlib extension
     amrlib.setup_spacy_extension()
 
@@ -456,7 +456,7 @@ def get_summary_statistics(
         amr_graphs[example["cocoid"]] = amr_graph
 
         # Re-generate dependency parse tree
-        parse_tree = dependency_parse_to_nx(doc.sents)
+        parse_tree = dependency_parse_to_nx(doc.sents)  # type: ignore
         parse_trees[example["cocoid"]] = parse_tree
 
     # Plot statistics for AMR graphs
@@ -476,7 +476,7 @@ def get_summary_statistics(
     # Plot statistics for COCO-A graphs
     coco_a_graphs_flat = {k: v["coco_a_graph"] for k, v in coco_a_graphs.items()}
     plot_graph_statistics(
-        coco_a_graphs_flat,
+        coco_a_graphs_flat,  # type: ignore
         "COCO-A Graph Statistics",
         os.path.join(visualizations_dir, "coco_a_graph_statistics.png"),
     )
@@ -528,7 +528,7 @@ def check_control_variables_balance(
     # Control variables to check
     control_vars = ["sentence_length", "coco_person", "ic_score"]
     # Load selected stimuli using load_from_disk
-    selected_df = load_from_disk(selected_stimuli_dir).to_pandas()
+    selected_df: pd.DataFrame = load_from_disk(selected_stimuli_dir).to_pandas()  # type: ignore
     # Filter by available local stimuli
     local_stimuli = pd.read_csv(os.path.join(local_stimuli_dir, "stimuli_text_and_im_paths.csv"))
     selected_df = selected_df[selected_df["cocoid"].isin(local_stimuli["cocoid"])]

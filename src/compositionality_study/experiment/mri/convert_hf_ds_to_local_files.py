@@ -166,6 +166,8 @@ def convert_hf_dataset_to_local_stimuli(
 
     # Iterate through the dataset and load the images
     for ex in tqdm(dataset, desc="Loading images"):
+        # Make sure ex is a dict
+        ex = dict(ex)
         # Load the image using filepath
         img = Image.open(os.path.join(coco_image_dir, ex["filepath"]))
 
@@ -345,7 +347,7 @@ def generate_subject_specific_stimulus_files(
 
         # Now replicate each stimulus n_repetitions times and assign to different runs
         stimuli_with_runs = []
-        for _, stimulus in unique_stimuli.iterrows():
+        for _, stimulus in unique_stimuli.iterrows():  # type: ignore
             for rep in range(n_repetitions):
                 stimulus_copy = stimulus.copy()
                 # Assign this repetition to a run: base_run + rep, cycling through all runs
@@ -368,7 +370,7 @@ def generate_subject_specific_stimulus_files(
         # the subject number as the random seed
         new_run_order = np.random.RandomState(subject).permutation(np.arange(n_runs))
         subj_stimuli_rep_df["run"] = subj_stimuli_rep_df["run"].map(
-            lambda x: new_run_order[x]  # noqa
+            lambda x: new_run_order[x]  # type: ignore
         )
 
         # Within each run, create blocks of stimuli
