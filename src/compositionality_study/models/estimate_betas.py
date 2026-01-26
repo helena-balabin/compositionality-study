@@ -25,7 +25,7 @@ def map_events_files(
     stim_dur: float = 3.0,
     isi: float = 3.0,
     dummy_scan_duration: float = 12.0,
-) -> np.array:
+) -> np.ndarray:
     """Map events files to design matrix columns.
 
     :param event_file: Path to the events file.
@@ -42,7 +42,7 @@ def map_events_files(
     :param dummy_scan_duration: Duration of the dummy scan at the begin and end of the sequence in seconds,
         defaults to 12.0.
     :return: Design matrix array.
-    :rtype: np.array
+    :rtype: np.ndarray
     """
     # Read the design matrix mapping file
     design_matrix_mapping = pd.read_csv(design_matrix_mapping_file)
@@ -85,7 +85,7 @@ def map_confounds_files(
     stim_dur: float = 3.0,
     isi: float = 3.0,
     dummy_scan_duration: float = 12.0,
-) -> np.array:
+) -> np.ndarray:
     """Generate extra confounds based on stimulus properties."""
     coco_df = get_coco_df()
     events_df = pd.read_csv(event_file, sep="\t")
@@ -113,14 +113,17 @@ def map_confounds_files(
         if data is None:
             continue
             
-        start_tr = n_dummy_trs + idx * n_tr_per_trial
+        start_tr = n_dummy_trs + int(idx) * n_tr_per_trial  # type: ignore
         n_stim_trs = int(round(stim_dur / tr))
         end_tr = min(start_tr + n_stim_trs, total_trs)
         
         cols = text_cols if row.get("modality") == "text" else img_cols
         valid_cols = [c for c in cols if c in data]
         if valid_cols:
-            confounds.iloc[start_tr:end_tr, confounds.columns.get_indexer(valid_cols)] = data[valid_cols].values
+            # Assign values, broadcasting to the number of TRs if necessary
+            # We use .loc with column names which is safer than mixing iloc and get_indexer
+            # .loc range is inclusive, so end_tr - 1
+            confounds.loc[start_tr : end_tr - 1, valid_cols] = data[valid_cols].values
 
     return confounds.values
 
@@ -235,7 +238,7 @@ def estimate_betas(
 
         for ses_idx, session_folder in enumerate(session_folders):
             nifti_files += [
-                nib.load(os.path.join(prep_input_dir, subject, session_folder, "func", f)).get_fdata()
+                nib.load(os.path.join(prep_input_dir, subject, session_folder, "func", f)).get_fdata()  # type: ignore
                 for f in sorted(os.listdir(os.path.join(prep_input_dir, subject, session_folder, "func")))
                 if (f.endswith(".nii") or f.endswith(".nii.gz")) and file_pattern in f
             ]

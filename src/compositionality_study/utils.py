@@ -1,16 +1,18 @@
 """Utils for the compositionality project."""
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import amrlib
 import networkx as nx
 import numpy as np
-import penman
-import PIL
-import spacy
-from PIL import Image, ImageOps
 import pandas as pd
+import penman
 from datasets import load_dataset
+from penman.exceptions import DecodeError
+from PIL import Image, ImageOps
+from spacy.language import Language
+from spacy.tokens import Doc, Token
+
 from compositionality_study.constants import HF_DATASET_NAME
 
 # Set up the spacy amrlib extension
@@ -24,8 +26,12 @@ def get_coco_df() -> pd.DataFrame:
     global _COCO_DF
     if _COCO_DF is None:
         ds = load_dataset(HF_DATASET_NAME, split="train")
-        _COCO_DF = ds.to_pandas()
-    return _COCO_DF
+        df = ds.to_pandas()
+        if isinstance(df, pd.DataFrame):
+            _COCO_DF = df
+        else:
+            raise ValueError("Expected DataFrame")
+    return _COCO_DF # type: ignore
 
 
 def get_stimulus_features_lookup(coco_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -44,24 +50,27 @@ def get_stimulus_features_lookup(coco_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
 
 
 def get_stimulus_data(
-    modality: str,
-    stimulus: str,
-    cocoid: Union[str, float, int],
+    modality: Optional[str],
+    stimulus: Optional[str],
+    cocoid: Union[str, float, int, None],
     txt_df: pd.DataFrame,
     img_df: pd.DataFrame,
-) -> Union[pd.Series, None]:
+) -> Union[pd.Series, None]:  # type: ignore
     """Retrieve features for a single stimulus event."""
     if modality == "text" and stimulus in txt_df.index:
-        return txt_df.loc[stimulus]
+        res = txt_df.loc[stimulus]
+        return res if isinstance(res, pd.Series) else res.iloc[0]
     elif modality == "image":
         if pd.notna(cocoid):
             if cocoid in img_df.index:
-                return img_df.loc[cocoid]
+                res = img_df.loc[cocoid]
+                return res if isinstance(res, pd.Series) else res.iloc[0]
             try:
                 # Handle potential float/string mismatches
-                int_cid = int(cocoid)
+                int_cid = int(cocoid)  # type: ignore
                 if int_cid in img_df.index:
-                    return img_df.loc[int_cid]
+                    res = img_df.loc[int_cid]
+                    return res if isinstance(res, pd.Series) else res.iloc[0]
             except (ValueError, TypeError):
                 pass
     return None
@@ -119,13 +128,13 @@ def get_amr_graph_depth(
 
 
 def walk_tree(
-    node: spacy.tokens.token.Token,  # noqa
+    node: Token,
     depth: int,
 ) -> int:
     """Walk the dependency parse tree and return the maximum depth.
 
     :param node: The current node in the tree
-    :type node: spacy.tokens.token.Token
+    :type node: spacy.tokens.Token
     :param depth: The current depth in the tree
     :type depth: int
     :return: The maximum depth in the tree
@@ -139,7 +148,7 @@ def walk_tree(
 
 def derive_text_depth_features(
     examples: Dict[str, List],
-    nlp: spacy.lang,  # noqa
+    nlp: Language,
 ) -> Dict[str, List]:
     """Get the depth of the dep parse tree, number of verbs and "depth" of the AMR graph of an example caption.
 
@@ -148,7 +157,7 @@ def derive_text_depth_features(
     :param examples: A batch of hf dataset examples
     :type examples: Dict[str, List]
     :param nlp: Spacy pipeline to use, initialized using nlp = spacy.load("en_core_web_trf")
-    :type nlp: spacy.lang
+    :type nlp: spacy.language.Language
     :return: The batch with the added features
     :rtype: Dict[str, List]
     """
@@ -164,22 +173,22 @@ def derive_text_depth_features(
 
     for doc in doc_batched:
         # Also derive the AMR graph for the caption and derive its depth
-        amr_graph = doc._.to_amr()[0]  # noqa
+        amr_graph = doc._.to_amr()[0]  # type: ignore
         try:
-            amr_depth, amr_graph = get_amr_graph_depth(amr_graph, return_graph=True)  # type: ignore
-            n_nodes = nx.number_of_nodes(amr_graph)
-            n_edges = nx.number_of_edges(amr_graph)
-            amr_graph = nx.to_numpy_array(amr_graph)
-        except penman.exceptions.DecodeError:
+            amr_depth, amr_graph_obj = get_amr_graph_depth(amr_graph, return_graph=True)  # type: ignore
+            n_nodes = nx.number_of_nodes(amr_graph_obj)
+            n_edges = nx.number_of_edges(amr_graph_obj)
+            amr_graph_arr = nx.to_numpy_array(amr_graph_obj)
+        except DecodeError:
             amr_depth = 0
             n_nodes = 0
             n_edges = 0
-            amr_graph = nx.to_numpy_array(nx.DiGraph())
+            amr_graph_arr = nx.to_numpy_array(nx.DiGraph())
         # Determine the depth of the dependency parse tree
         result["parse_tree_depth"].append(walk_tree(next(doc.sents).root, 0))
         result["n_verbs"].append(len([token for token in doc if token.pos_ == "VERB"]))
         result["amr_graph_depth"].append(amr_depth)
-        result["amr_graph"].append(amr_graph)
+        result["amr_graph"].append(amr_graph_arr)
         result["amr_n_nodes"].append(n_nodes)
         result["amr_n_edges"].append(n_edges)
 
@@ -187,12 +196,12 @@ def derive_text_depth_features(
 
 
 def dependency_parse_to_nx(
-    sents: List[spacy.tokens.doc.Doc],
+    sents: List[Doc],
 ):
     """Convert spaCy sentence objects into a NetworkX directed graph representing the dependency parse tree.
 
     :param sents: A list of spaCy sentence objects
-    :type sents: List[spacy.tokens.doc.Doc]
+    :type sents: List[spacy.tokens.Doc]
     :return: A NetworkX directed graph representing the dependency parse tree
     :rtype: nx.DiGraph
     """
@@ -213,7 +222,7 @@ def dependency_parse_to_nx(
 
 def flatten_examples(
     examples: Dict[str, List],
-    flatten_col_names: List[str] = ["sentences_raw", "sentids"],  # noqa
+    flatten_col_names: List[str] = ["sentences_raw", "sentids"],
 ) -> Dict[str, List]:
     """Flattens the examples in the dataset.
 
@@ -235,17 +244,17 @@ def flatten_examples(
 
 
 def apply_gamma_correction(
-    image: PIL.Image,
+    image: Image.Image,
     target_mean=128.0,
-) -> PIL.Image:
+) -> Image.Image:
     """Apply gamma correction to an image.
 
     :param image: The image to apply gamma correction to
-    :type image: PIL.Image
+    :type image: PIL.Image.Image
     :param target_mean: The target mean brightness of the image, defaults to 128.0
     :type target_mean: float, optional
     :return: The image with gamma correction applied
-    :rtype: PIL.Image
+    :rtype: PIL.Image.Image
     """
     # Convert the PIL image to a numpy array
     img_array = np.array(image)
@@ -254,9 +263,11 @@ def apply_gamma_correction(
     current_mean = np.mean(img_array)
 
     # Calculate the gamma value to adjust the mean to the target mean
-    gamma = np.log(target_mean) / np.log(current_mean)
-
-    # Apply gamma correction to the image
-    corrected_image = ImageOps.autocontrast(image, cutoff=gamma)
-
-    return corrected_image
+    # Avoid division by zero
+    if current_mean > 0:
+        gamma = np.log(target_mean) / np.log(current_mean)
+        # Apply gamma correction to the image
+        corrected_image = ImageOps.autocontrast(image, cutoff=gamma) # type: ignore
+        return corrected_image
+    else:
+        return image
