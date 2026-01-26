@@ -48,6 +48,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.9"
 more-itertools = "*"
+glmsingle = { git = "https://github.com/cvnlab/GLMsingle.git" }
 tqdm = "*"
 click = "*"
 more-click = "*"

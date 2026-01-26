@@ -64,11 +64,19 @@ def map_events_files(
         if "blank" not in event["modality"]:
             event_name = str(int(event["cocoid"])) + "_" + event["modality"]
             # Look up the event in the design matrix mapping to get the column index
-            event_idx = design_matrix_mapping[design_matrix_mapping["coco_id"] == event_name]["design_matrix_idx"]
+            # .item() extracts the single value as a native python int
+            event_idx = design_matrix_mapping[
+                design_matrix_mapping["coco_id"] == event_name
+            ]["design_matrix_idx"].item()
+            
             # Calculate the TR index/index in time for the event
-            tr_idx = n_dummy_trs + idx * n_tr_per_trial
+            # Explicit int() cast handles the 'Hashable' warning for runtime safety
+            tr_idx = n_dummy_trs + int(idx) * n_tr_per_trial  # type: ignore
+
             # Set the corresponding point in time to 1
             design_matrix[tr_idx, event_idx] = 1
+
+    return design_matrix
 
 
 def map_confounds_files(
@@ -159,7 +167,7 @@ def map_confounds_files(
     default=False,
     help="Include low-level stimulus features (text/image) as extra regressors.",
 )
-@click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-01"])
+@click.option("--subjects", type=str, multiple=True, help="List of subjects to process.", default=["sub-02"])
 def estimate_betas(
     prep_input_dir: str = PREPROC_MRI_DIR,
     events_input_dir: str = BIDS_DIR,
@@ -225,7 +233,6 @@ def estimate_betas(
         extra_regressors = []
         session_indicator = []
 
-        # Get all NIfTI files and events.tsvs for all sessions
         for ses_idx, session_folder in enumerate(session_folders):
             nifti_files += [
                 nib.load(os.path.join(prep_input_dir, subject, session_folder, "func", f)).get_fdata()
