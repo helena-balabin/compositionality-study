@@ -12,16 +12,16 @@ from nilearn import image
 from nilearn.glm.first_level import FirstLevelModel
 from nilearn.glm.second_level import SecondLevelModel
 from nilearn.glm.thresholding import threshold_stats_img
-from nilearn.masking import apply_mask
 from scipy.stats import norm
 
 from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR
-from compositionality_study.utils import get_coco_df, get_stimulus_features_lookup, get_stimulus_data
+from compositionality_study.utils import (
+    get_coco_df, 
+    get_stimulus_features_lookup, 
+    get_stimulus_data,
+    save_brain_map,
+)
 
-
-# -----------------------------------------------------------------------------
-# Configuration
-# -----------------------------------------------------------------------------
 
 TR = 1.5
 SMOOTHING_FWHM = 6.0
@@ -49,11 +49,6 @@ DEFAULT_VOXEL_P = 0.001
 DEFAULT_CLUSTER_ALPHA = 0.05
 
 
-# -----------------------------------------------------------------------------
-# Utilities
-# -----------------------------------------------------------------------------
-
-
 def _derive_run_id(bold_file: Path) -> str:
     """Strip space/desc tokens to get the BIDS run identifier."""
 
@@ -69,14 +64,6 @@ def _derive_run_id(bold_file: Path) -> str:
         raise ValueError(f"Unable to derive run id from {bold_file}")
 
     return "_".join(parts)
-
-
-def _extract_space(bold_file: Path) -> str | None:
-    """Extract space label from BOLD filename (e.g. 'MNI152NLin2009cAsym')."""
-    for token in bold_file.name.split("_"):
-        if token.startswith("space-"):
-            return token.replace("space-", "")
-    return None
 
 
 def load_motion_regressors(confounds_tsv: Path) -> pd.DataFrame:
@@ -121,25 +108,14 @@ def load_events(events_tsv: Path) -> pd.DataFrame:
     return events
 
 
-def find_gm_mask(fmriprep_dir: Path, subject: str, space: str | None = None) -> Path:
-    """Pick the GM probseg matching the BOLD space (if provided)."""
+def find_gm_mask(fmriprep_dir: Path, subject: str) -> Path:
+    """Pick the GM probseg (assuming MNI152NLin2009cAsym space)."""
 
     anat_dir = fmriprep_dir / f"sub-{subject}" / "ses-01" / "anat"
     
-    pattern = "*_label-GM_probseg.nii.gz"
-    if space:
-        # Prefer mask in the same space as BOLD data
-        pattern = f"*space-{space}*_label-GM_probseg.nii.gz"
-
+    # Look for standard fMRIPrep MNI output
+    pattern = "*space-MNI152NLin2009cAsym*_label-GM_probseg.nii.gz"
     candidates = sorted(anat_dir.glob(pattern))
-
-    if not candidates:
-        logger.warning(f"No GM probability segmentation found matching pattern {pattern} in {anat_dir}")
-        if space:
-            # Fallback for robustness
-            candidates = sorted(anat_dir.glob("*_label-GM_probseg.nii.gz"))
-            if candidates:
-                logger.warning(f"Falling back to {candidates[0].name}")
 
     if not candidates:
         raise FileNotFoundError(f"No GM probability segmentation found in {anat_dir}")
@@ -235,11 +211,6 @@ def _load_stimulus_confounds(events: pd.DataFrame, n_scans: int, tr: float = TR)
     return confounds
 
 
-# -----------------------------------------------------------------------------
-# GLM routines
-# -----------------------------------------------------------------------------
-
-
 def run_subject_glm(
     bold_imgs: Sequence[Path],
     events_files: Sequence[Path],
@@ -271,8 +242,15 @@ def run_subject_glm(
 
     # Create binary mask image object.
     # Passing this to FirstLevelModel ensures it is resampled to the functional run geometry.
-    # TODO out of curiosity - save this mask for every subject
     gm_mask_img = image.math_img(f"img > {gm_threshold}", img=gm_probseg)
+    # Save the mask (using the utils function for consistency)
+    mask_out = output_dir / "gm_mask.nii.gz"
+    save_brain_map(
+        gm_mask_img, 
+        mask_out, 
+        plot=True, 
+        plot_kwargs={"title": "GM Mask"}
+    )
 
     glm = FirstLevelModel(
         t_r=tr,
@@ -289,18 +267,19 @@ def run_subject_glm(
     )
 
     glm = glm.fit(run_imgs=list(bold_imgs), events=events, confounds=confounds)
-    # TODO out of curiosity - examine output
-
     contrast_maps: Dict[str, Path] = {}
 
     for name, expression in CONTRASTS.items():
         # Result is already masked by mask_img
         zmap = glm.compute_contrast(expression, output_type="z_score")
-        
         out_file = output_dir / f"{name}_zmap.nii.gz"
-        zmap.to_filename(out_file)  # type: ignore
+        save_brain_map(
+            zmap, 
+            out_file, 
+            plot=True, 
+            plot_kwargs={"title": f"{name} (subject level)"}
+        )
         contrast_maps[name] = out_file
-        # TODO also make sure to save visualizations here
 
     return contrast_maps
 
@@ -337,7 +316,14 @@ def threshold_zmap(
         thr_img = image.math_img("img * (img != 0)", img=thr_img)
 
     out_file = zmap_path.with_name(f"{zmap_path.stem}_thr.nii.gz")
-    thr_img.to_filename(out_file)  # type: ignore
+    save_brain_map(
+        thr_img, 
+        out_file, 
+        plot=True, 
+        plot_kwargs={"title": "Thresholded z-map"}, 
+        make_cluster_table=True, 
+        cluster_table_kwargs={"stat_threshold": 0}
+    )
     return out_file
 
 
@@ -348,7 +334,12 @@ def conjunction_map(map_a: Path, map_b: Path) -> Path:
     img_b = image.math_img("img != 0", img=map_b)
     conj = image.math_img("img1 * img2", img1=img_a, img2=img_b)
     out_file = map_a.with_name("conjunction_img_txt.nii.gz")
-    conj.to_filename(out_file)  # type: ignore
+    save_brain_map(
+        conj, 
+        out_file, 
+        plot=True, 
+        plot_kwargs={"title": "Conjunction Map"}
+    )
     return out_file
 
 
@@ -377,12 +368,18 @@ def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> N
 
         zmap = second_level.compute_contrast(output_type="z_score")
         out_file = output_dir / f"group_{contrast_name}_zmap.nii.gz"
-        zmap.to_filename(out_file)  # type: ignore
+        save_brain_map(
+            zmap, 
+            out_file, 
+            plot=True, 
+            plot_kwargs={"title": f"Group {contrast_name}"}
+        )
         logger.info(f"Wrote group z-map for {contrast_name} to {out_file}")
 
         # Apply standard thresholds and save
         thr_file = threshold_zmap(out_file)
         logger.info(f"Thresholded group map for {contrast_name} written to {thr_file}")
+
 
 
 def run_functional_localizer(
@@ -417,7 +414,6 @@ def run_functional_localizer(
         n_jobs=n_jobs,
         use_stimulus_confounds=use_stimulus_confounds,
     )
-    # TODO double check - is the localizer saved?
 
     comp_contrast = contrasts.get("main_compositionality")
     if comp_contrast is None:
@@ -428,51 +424,7 @@ def run_functional_localizer(
     return thr_mask
 
 
-def summarize_roi_effects(
-    subject: str,
-    roi_mask: Path,
-    session_runs: List[Tuple[Path, Path, Path]],
-    output_dir: Path,
-    tr: float,
-    smoothing_fwhm: float,
-    gm_threshold: float,
-    n_jobs: int = 1,
-    use_stimulus_confounds: bool = False,
-) -> pd.DataFrame:
-    """Compute mean contrast values within ROI for held-out sessions (e.g., ses-02/03)."""
 
-    if not session_runs:
-        return pd.DataFrame()
-
-    bold_imgs, events_files, confounds_files = zip(*session_runs)
-    roi_out = output_dir / "heldout"
-
-    contrasts = run_subject_glm(
-        bold_imgs=bold_imgs,
-        events_files=events_files,
-        confounds_files=confounds_files,
-        gm_probseg=image.load_img(roi_mask),  # type: ignore
-        output_dir=roi_out,
-        tr=tr,
-        smoothing_fwhm=smoothing_fwhm,
-        gm_threshold=gm_threshold,
-        n_jobs=n_jobs,
-        use_stimulus_confounds=use_stimulus_confounds,
-    )
-
-    records = []
-    for name, path in contrasts.items():
-        data = apply_mask(path, roi_mask)
-        if data.size == 0:
-            continue
-        records.append({"subject": subject, "contrast": name, "mean_in_roi": float(data.mean())})
-
-    return pd.DataFrame.from_records(records)
-
-
-# -----------------------------------------------------------------------------
-# CLI
-# -----------------------------------------------------------------------------
 
 
 @click.command()
@@ -578,8 +530,44 @@ def run_univariate_glm(
     n_jobs: int,
     use_stimulus_confounds: bool,
 ) -> None:
-    """Run subject-level and group-level univariate GLM analyses."""
-
+    """Run subject-level and group-level univariate GLM analyses.
+    
+    :param fmriprep_dir: Directory with fMRIPrep outputs.
+    :type fmriprep_dir: Path
+    :param bids_dir: BIDS directory with events.tsv files.
+    :type bids_dir: Path
+    :param output_dir: Root folder for subject-level and group-level outputs.
+    :type output_dir: Path
+    :param subjects: Subject IDs without the 'sub-' prefix; if omitted, auto-dis
+        cover from fMRIPrep outputs.
+    :type subjects: Tuple[str, ...]
+    :param tr: Repetition time in seconds.
+    :type tr: float
+    :param smoothing_fwhm: Spatial smoothing FWHM in millimeters.
+    :type smoothing_fwhm: float
+    :param gm_threshold: Probability threshold for the GM mask.
+    :type gm_threshold: float
+    :param voxel_p: Voxel-wise p-value threshold applied to z-maps (two
+        -sided).
+    :type voxel_p: float
+    :param cluster_alpha: Cluster-level alpha (approximate; used with voxel
+        thresholding).
+    :type cluster_alpha: float
+    :param min_cluster_size: Minimum cluster size in voxels for thresholded
+        maps (optional).
+    :type min_cluster_size: int | None
+    :param run_localizer: Whether to run the session-1 functional localizer
+        workflow.
+    :type run_localizer: bool
+    :param max_runs: Debug: Limit number of runs processed per subject.
+    :type max_runs: int | None
+    :param n_jobs: Number of CPUs to use for parallel processing. -1 uses all
+        available.
+    :type n_jobs: int
+    :param use_stimulus_confounds: Include low-level stimulus features (text/image)
+        as confounds.
+    :type use_stimulus_confounds: bool
+    """
     subject_ids = (
         list(subjects)
         if subjects
@@ -593,7 +581,7 @@ def run_univariate_glm(
     group_level_dir = output_dir / "group_level"
 
     all_contrasts: Dict[str, List[Path]] = {k: [] for k in CONTRASTS}
-    roi_summaries: List[pd.DataFrame] = []
+    all_func_loc_contrasts: Dict[str, List[Path]] = {k: [] for k in CONTRASTS}
     localizer_masks: List[Path] = []
 
     for subject in subject_ids:
@@ -606,12 +594,7 @@ def run_univariate_glm(
             logger.warning(f"Skipping subject {subject}: no usable runs")
             continue
 
-        # Detect space from the first run to match GM mask
-        # TODO this should not be needed? GM mask should be in the same space ... or might have a different resolution?
-        first_bold = runs[0][0]
-        space_label = _extract_space(first_bold)
-
-        gm_mask = find_gm_mask(fmriprep_dir, subject, space=space_label)
+        gm_mask = find_gm_mask(fmriprep_dir, subject)
         subject_output = subject_level_dir / f"sub-{subject}"
 
         sessions = split_runs_by_session(runs)
@@ -632,20 +615,20 @@ def run_univariate_glm(
             use_stimulus_confounds=use_stimulus_confounds,
         )
 
-        # Threshold subject maps and build conjunction_map
-        # TODO why is a conjunction already prepared in the subject loop? weird ... also is a z- to t- conversion really necessary, shouldn't nilearn handle that in its 2nd level model?
-        thr_contrasts: Dict[str, Path] = {}
+        # Store raw subject maps for group analysis
         for name, path in contrasts.items():
-            # TODO can't we do threshold z-map, if really needed, in run_subject_glm already?
-            thr_path = threshold_zmap(
+            all_contrasts[name].append(path)
+
+        # Threshold subject maps only if explicitly needed for inspection or intermediate steps
+        # but NOT for the standard group-level GLM which expects unthresholded maps.
+        for name, path in contrasts.items():
+            threshold_zmap(
                 path,
                 voxel_p=voxel_p,
                 cluster_alpha=cluster_alpha,
                 two_sided=True,
                 min_cluster_size=min_cluster_size,
             )
-            thr_contrasts[name] = thr_path
-            all_contrasts[name].append(thr_path)
 
         if run_localizer:
             ses1_runs = sessions.get("ses-01", [])
@@ -662,25 +645,37 @@ def run_univariate_glm(
                 n_jobs=n_jobs,
                 use_stimulus_confounds=use_stimulus_confounds,
             )
+            # Save the individual localizer mask
+            loc_mask_out = subject_output / "localizer_mask.nii.gz"
+            save_brain_map(
+                loc_mask, 
+                loc_mask_out, 
+                plot=True, 
+                plot_kwargs={"title": "Functional Localizer Mask"}
+            )
 
             if loc_mask:
                 localizer_masks.append(loc_mask)
-                # TODO what is this whole "summarize ROI" stuff? the analysis here should be more or less identical to run_subject_glm?ß
-                summary = summarize_roi_effects(
-                    subject=subject,
-                    roi_mask=loc_mask,
-                    session_runs=heldout_runs,
-                    output_dir=subject_output,
+                # Compute maps for independent runs (ses-2/3) using the functional localizer from ses-1
+                fl_bold, fl_events, fl_conf = zip(*heldout_runs)
+                fl_contrasts = run_subject_glm(
+                    bold_imgs=fl_bold,
+                    events_files=fl_events,
+                    confounds_files=fl_conf,
+                    gm_probseg=image.load_img(loc_mask),  # type: ignore
+                    output_dir=subject_output / "func_loc",
                     tr=tr,
                     smoothing_fwhm=smoothing_fwhm,
                     gm_threshold=gm_threshold,
                     n_jobs=n_jobs,
                     use_stimulus_confounds=use_stimulus_confounds,
                 )
-                if not summary.empty:
-                    roi_summaries.append(summary)
+                for name, path in fl_contrasts.items():
+                    if name in all_func_loc_contrasts:
+                        all_func_loc_contrasts[name].append(path)
 
     run_group_level(contrast_maps=all_contrasts, output_dir=group_level_dir)
+    run_group_level(contrast_maps=all_func_loc_contrasts, output_dir=group_level_dir / "func_loc")
 
     # Compute group-level conjunction
     img_contrast = "img_high_vs_low"
@@ -698,20 +693,6 @@ def run_univariate_glm(
         logger.warning(
             f"Could not compute group conjunction: missing {img_map} or {txt_map}"
         )
-
-    if roi_summaries:
-        # TODO find out whatever this is
-        combined = pd.concat(roi_summaries, ignore_index=True)
-        csv_out = output_dir / "roi_summary.csv"
-        combined.to_csv(csv_out, index=False)
-        logger.info(f"Saved ROI summary to {csv_out}")
-
-    if localizer_masks:
-        prob_map = image.mean_img(localizer_masks)
-        prob_out = output_dir / "localizer_probability.nii.gz"
-        # TODO also save visualizations in addition to the nifti
-        prob_map.to_filename(prob_out)  # type: ignore
-        logger.info(f"Saved probabilistic localizer map to {prob_out}")
 
 
 if __name__ == "__main__":

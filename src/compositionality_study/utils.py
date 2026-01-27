@@ -1,13 +1,16 @@
 """Utils for the compositionality project."""
 
 from typing import Dict, List, Optional, Tuple, Union
+from pathlib import Path
 
 import amrlib
 import networkx as nx
+import nibabel as nib
 import numpy as np
 import pandas as pd
 import penman
 from datasets import load_dataset
+from nilearn import plotting, reporting
 from penman.exceptions import DecodeError
 from PIL import Image, ImageOps
 from spacy.language import Language
@@ -271,3 +274,69 @@ def apply_gamma_correction(
         return corrected_image
     else:
         return image
+
+
+def save_brain_map(
+    img: Union[nib.nifti1.Nifti1Image, object],
+    output_path: Union[str, Path],
+    plot: bool = True,
+    plot_kwargs: Optional[Dict] = None,
+    make_cluster_table: bool = False,
+    cluster_table_kwargs: Optional[Dict] = None,
+) -> None:
+    """Save a brain map to disk, and optionally save a plot and cluster table.
+
+    :param img: The brain map image (Nifti1Image)
+    :type img: nib.Nifti1Image
+    :param output_path: Where to save the image
+    :type output_path: Union[str, Path]
+    :param plot: Whether to save a plot figure, defaults to True
+    :type plot: bool, optional
+    :param plot_kwargs: Arguments for nilearn.plotting.plot_stat_map, defaults to None
+    :type plot_kwargs: Optional[Dict], optional
+    :param make_cluster_table: Whether to save a cluster table csv, defaults to False
+    :type make_cluster_table: bool, optional
+    :param cluster_table_kwargs: Arguments for nilearn.reporting.get_clusters_table, defaults to None
+    :type cluster_table_kwargs: Optional[Dict], optional
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Save the Nifti image
+    if hasattr(img, "to_filename"):
+        img.to_filename(output_path) # type: ignore
+    else:
+        nib.save(img, output_path) # type: ignore
+
+    str_path = str(output_path)
+    if str_path.endswith(".nii.gz"):
+        base = str_path[:-7]
+    elif str_path.endswith(".nii"):
+        base = str_path[:-4]
+    else:
+        base = str(output_path.with_suffix(""))
+
+    # Save plot
+    if plot:
+        plot_kwargs = plot_kwargs or {}
+        # Default display mode if not set
+        if "display_mode" not in plot_kwargs:
+            plot_kwargs["display_mode"] = "ortho" # Default
+            
+        try:
+            display = plotting.plot_stat_map(img, **plot_kwargs)
+            plot_path = f"{base}.png"
+            display.savefig(plot_path)  # type: ignore
+            display.close()  # type: ignore
+        except Exception as e:
+            print(f"Failed to plot brain map: {e}")
+        
+    # Save cluster table
+    if make_cluster_table:
+        cluster_table_kwargs = cluster_table_kwargs or {}
+        try:
+            table = reporting.get_clusters_table(img, **cluster_table_kwargs)
+            table_path = f"{base}.csv"
+            table.to_csv(table_path)  # type: ignore
+        except Exception as e:
+            print(f"Failed to generate cluster table: {e}")
