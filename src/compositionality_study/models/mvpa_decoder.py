@@ -29,7 +29,6 @@ TR = 1.5
 RADIUS_MM = 6.0
 SMOOTHING_FWHM = 6.0
 RELIABILITY_THRESHOLD = 0.1
-SEARCHLIGHT_JOBS = -1
 DEFAULT_VOXEL_P = 0.001
 DEFAULT_CLUSTER_P = 0.05
 
@@ -229,6 +228,7 @@ def run_mvpa_searchlight(
     subject_data: dict,
     output_dir: str,
     subject: str,
+    n_jobs_searchlight: int,
 ):
     """Run MVPA searchlight analysis for a single subject.
     
@@ -238,6 +238,8 @@ def run_mvpa_searchlight(
     :type output_dir: str
     :param subject: Subject ID
     :type subject: str
+    :param n_jobs_searchlight: Number of parallel jobs for searchlight
+    :type n_jobs_searchlight: int
     """
     betas = subject_data['betas']
     labels_df = subject_data['labels']
@@ -270,7 +272,7 @@ def run_mvpa_searchlight(
             mask_img,
             radius=RADIUS_MM,
             estimator=SVC(kernel="linear"),  # type: ignore
-            n_jobs=SEARCHLIGHT_JOBS,
+            n_jobs=n_jobs_searchlight,
             cv=cv,
             verbose=1,
         )
@@ -402,12 +404,14 @@ def run_group_analysis(
 @click.option("--bids-dir", default=BIDS_DIR, type=click.Path(exists=True))
 @click.option("--preproc-dir", default=PREPROC_MRI_DIR, type=click.Path(exists=True))
 @click.option("--output-dir", default=MVPA_DIR, type=click.Path())
+@click.option("--n_jobs_searchlight", default=32, type=int)
 def main(
     subjects: tuple,
     betas_dir: str,
     bids_dir: str,
     preproc_dir: str,
     output_dir: str,
+    n_jobs_searchlight: int,
 ):
     """Run MVPA Analysis.
     
@@ -421,6 +425,8 @@ def main(
     :type preproc_dir: str
     :param output_dir: Output directory
     :type output_dir: str
+    :param n_jobs_searchlight: Number of parallel jobs for searchlight
+    :type n_jobs_searchlight: int
     """
     if not subjects:
         if os.path.exists(betas_dir):
@@ -428,7 +434,7 @@ def main(
         
     for sub in subjects:
         data = load_and_preprocess_subject(sub, betas_dir, bids_dir, preproc_dir, output_dir)  # type: ignore
-        run_mvpa_searchlight(data, output_dir, sub)
+        run_mvpa_searchlight(data, output_dir, sub, n_jobs_searchlight)
 
     run_group_analysis(subjects, output_dir)
 
