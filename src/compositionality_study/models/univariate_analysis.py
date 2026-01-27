@@ -228,7 +228,9 @@ def _load_stimulus_confounds(events: pd.DataFrame, n_scans: int, tr: float = TR)
         cols = text_cols if row.get("modality") == "text" else img_cols
         valid_cols = [c for c in cols if c in data]
         if valid_cols:
-            confounds.iloc[start_tr:end_tr, confounds.columns.get_indexer(valid_cols)] = data[valid_cols].values
+            confounds.iloc[
+                start_tr:end_tr, confounds.columns.get_indexer(valid_cols)  # type: ignore
+            ] = data[valid_cols].values
 
     return confounds
 
@@ -296,7 +298,7 @@ def run_subject_glm(
         zmap = glm.compute_contrast(expression, output_type="z_score")
         
         out_file = output_dir / f"{name}_zmap.nii.gz"
-        zmap.to_filename(out_file)
+        zmap.to_filename(out_file)  # type: ignore
         contrast_maps[name] = out_file
         # TODO also make sure to save visualizations here
 
@@ -335,7 +337,7 @@ def threshold_zmap(
         thr_img = image.math_img("img * (img != 0)", img=thr_img)
 
     out_file = zmap_path.with_name(f"{zmap_path.stem}_thr.nii.gz")
-    thr_img.to_filename(out_file)
+    thr_img.to_filename(out_file)  # type: ignore
     return out_file
 
 
@@ -346,7 +348,7 @@ def conjunction_map(map_a: Path, map_b: Path) -> Path:
     img_b = image.math_img("img != 0", img=map_b)
     conj = image.math_img("img1 * img2", img1=img_a, img2=img_b)
     out_file = map_a.with_name("conjunction_img_txt.nii.gz")
-    conj.to_filename(out_file)
+    conj.to_filename(out_file)  # type: ignore
     return out_file
 
 
@@ -375,7 +377,7 @@ def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> N
 
         zmap = second_level.compute_contrast(output_type="z_score")
         out_file = output_dir / f"group_{contrast_name}_zmap.nii.gz"
-        zmap.to_filename(out_file)
+        zmap.to_filename(out_file)  # type: ignore
         logger.info(f"Wrote group z-map for {contrast_name} to {out_file}")
 
         # Apply standard thresholds and save
@@ -449,7 +451,7 @@ def summarize_roi_effects(
         bold_imgs=bold_imgs,
         events_files=events_files,
         confounds_files=confounds_files,
-        gm_probseg=image.load_img(roi_mask),
+        gm_probseg=image.load_img(roi_mask),  # type: ignore
         output_dir=roi_out,
         tr=tr,
         smoothing_fwhm=smoothing_fwhm,
@@ -708,7 +710,7 @@ def run_univariate_glm(
         prob_map = image.mean_img(localizer_masks)
         prob_out = output_dir / "localizer_probability.nii.gz"
         # TODO also save visualizations in addition to the nifti
-        prob_map.to_filename(prob_out)
+        prob_map.to_filename(prob_out)  # type: ignore
         logger.info(f"Saved probabilistic localizer map to {prob_out}")
 
 
