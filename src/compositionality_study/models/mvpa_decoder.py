@@ -404,7 +404,7 @@ def run_group_analysis(
 @click.option("--bids-dir", default=BIDS_DIR, type=click.Path(exists=True))
 @click.option("--preproc-dir", default=PREPROC_MRI_DIR, type=click.Path(exists=True))
 @click.option("--output-dir", default=MVPA_DIR, type=click.Path())
-@click.option("--n_jobs_searchlight", default=32, type=int)
+@click.option("--n-jobs-searchlight", default=32, type=int)
 def main(
     subjects: tuple,
     betas_dir: str,
