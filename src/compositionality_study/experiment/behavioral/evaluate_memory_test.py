@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import click
 import numpy as np
-import sys
 from scipy.stats import binomtest
 
 from compositionality_study.constants import (
@@ -92,7 +91,6 @@ def evaluate_memory_performance(start_subject, end_subject, n_days, bids_dir, gr
         for day in range(1, n_days + 1):
             sub_str = f"sub-{subject_id:02d}"
             ses_str = f"ses-{day:02d}"
-            day_str = str(day) # Filenames use 'day_1', folders use 'ses-01'
             
             # Construct paths
             # Response: /bids/sub-01/ses-01/beh/sub-01_ses-01_task-mem_beh.tsv

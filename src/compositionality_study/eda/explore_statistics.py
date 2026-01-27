@@ -7,6 +7,7 @@ from typing import List
 import click
 import datasets
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 import spacy
 from loguru import logger

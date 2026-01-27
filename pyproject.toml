@@ -149,3 +149,8 @@ exclude_lines = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.14",
+]
