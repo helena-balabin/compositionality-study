@@ -13,6 +13,7 @@ from nilearn.glm.first_level import FirstLevelModel
 from nilearn.glm.second_level import SecondLevelModel
 from nilearn.glm.thresholding import threshold_stats_img
 from scipy.stats import norm
+from tqdm import tqdm 
 
 from compositionality_study.constants import BIDS_DIR, MODELS_DIR, PREPROC_MRI_DIR
 from compositionality_study.utils import (
@@ -226,11 +227,13 @@ def run_subject_glm(
     """Run a first-level GLM and write subject-level contrast maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-
+    
+    logger.info(f"Loading {len(events_files)} runs (events & confounds)...")
     events = [load_events(f) for f in events_files]
     motion_confounds = [load_motion_regressors(f) for f in confounds_files]
 
     # Combine motion regressors with stimulus confounds
+    logger.info("Constructing design matrices...")
     confounds = []
     for ev, mot in zip(events, motion_confounds):
         if use_stimulus_confounds:
@@ -241,6 +244,7 @@ def run_subject_glm(
             confounds.append(mot)
 
     # Create binary mask image object.
+    logger.info("Processing GM mask...")
     # Passing this to FirstLevelModel ensures it is resampled to the functional run geometry.
     gm_mask_img = image.math_img(f"img > {gm_threshold}", img=gm_probseg)
     # Save the mask (using the utils function for consistency)
@@ -252,6 +256,7 @@ def run_subject_glm(
         plot_kwargs={"title": "GM Mask"}
     )
 
+    logger.info(f"Fitting FirstLevelModel (n_jobs={n_jobs})... this may take a few minutes.")
     glm = FirstLevelModel(
         t_r=tr,
         hrf_model="glover",
@@ -269,7 +274,8 @@ def run_subject_glm(
     glm = glm.fit(run_imgs=list(bold_imgs), events=events, confounds=confounds)
     contrast_maps: Dict[str, Path] = {}
 
-    for name, expression in CONTRASTS.items():
+    logger.info(f"Computing {len(CONTRASTS)} contrasts...")
+    for name, expression in tqdm(CONTRASTS.items(), desc="Contrasts"):
         # Result is already masked by mask_img
         zmap = glm.compute_contrast(expression, output_type="z_score")
         out_file = output_dir / f"{name}_zmap.nii.gz"
@@ -357,12 +363,15 @@ def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> N
     """Run fixed-effects group analysis for each contrast."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Starting group-level analysis for {len(contrast_maps)} contrasts...")
 
-    for contrast_name, maps in contrast_maps.items():
+    for contrast_name, maps in tqdm(contrast_maps.items(), desc="Group Analysis"):
         if not maps:
             logger.warning(f"Skipping group contrast {contrast_name}: no subject maps provided")
             continue
-
+        
+        logger.debug(f"Fitting group model for {contrast_name} ({len(maps)} subjects)")
         second_level = SecondLevelModel()
         second_level = second_level.fit(maps)
 

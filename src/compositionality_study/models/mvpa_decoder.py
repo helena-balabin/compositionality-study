@@ -15,6 +15,7 @@ from nilearn.image import load_img, math_img, smooth_img, threshold_img
 from nilearn.glm.second_level import non_parametric_inference
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
+from tqdm import tqdm
 
 from compositionality_study.constants import (
     BETAS_DIR,
@@ -172,34 +173,39 @@ def load_and_preprocess_subject(
     logger.info(f"Processing subject {subject}...")
     
     # 1. Load GLM Results
+    logger.info(f"[{subject}] Step 1/5: Loading GLM betas...")
     res_path = os.path.join(betas_dir, f"sub-{subject}", "TYPED_FITHRF_GLMDENOISE_RR.npy")
     results = np.load(res_path, allow_pickle=True).item()
     betas_raw = results['betasmd']
     r2_map = results['R2']
 
     # 2. Load Events
+    logger.info(f"[{subject}] Step 2/5: Loading BIDS events...")
     events_df = load_events_for_subject(bids_dir, preproc_dir, subject)
 
     # 3. Load Mask / Geometry
+    logger.info(f"[{subject}] Step 3/5: Loading geometrical reference...")
     subj_prep = os.path.join(preproc_dir, f"sub-{subject}")
     bold_files = glob.glob(os.path.join(subj_prep, "**", "*_desc-preproc_bold.nii.gz"), recursive=True)
     ref_img = nib.load(bold_files[0])  # type: ignore
     
     # 4. Voxel Selection
+    logger.info(f"[{subject}] Step 4/5: Computing voxel masks (R2 & Reliability)...")
     type_a_path = res_path.replace("TYPED_FITHRF_GLMDENOISE_RR", "TYPEA_ONOFF")
     onoffR2 = np.load(type_a_path, allow_pickle=True).item()['R2']
     r2_threshold = findtailthreshold(onoffR2.flatten())[0]
     # Log R2 threshold
-    logger.info(f"R2 threshold for {subject}: {r2_threshold:.4f}")
+    logger.info(f"[{subject}] R2 threshold: {r2_threshold:.4f}")
     valid_r2 = r2_map > r2_threshold
     # Log the percentage of voxels passing R2 threshold
-    logger.info(f"Voxels passing R2 threshold for {subject}: {np.sum(valid_r2)} / {valid_r2.size}")
+    logger.info(f"[{subject}] R2 pass: {np.sum(valid_r2)} / {valid_r2.size} voxels")
     # Compute the test-retest reliability mask 
     rel_mask = compute_reliability_mask(betas_raw, events_df, RELIABILITY_THRESHOLD)
     final_mask_indices = valid_r2 & rel_mask
-    logger.info(f"Voxels selected for {subject}: {np.sum(final_mask_indices)} / {final_mask_indices.size}")
+    logger.info(f"[{subject}] Final mask size: {np.sum(final_mask_indices)} voxels")
     
     # 5. Average Betas
+    logger.info(f"[{subject}] Step 5/5: Averaging betas by stimulus ID...")
     unique_stims = events_df['cocoid'].unique()
     averaged_betas = []
     averaged_labels = []
@@ -267,7 +273,7 @@ def run_mvpa_searchlight(
     valid_mask = labels_df['complexity'].notna()
 
     def run_sl(X_idx, y, cv, name):
-        logger.info(f"Running Searchlight: {name} for {subject}")
+        logger.info(f"[{subject}] Running Searchlight Analysis: {name}")
         sl = SearchLight(
             mask_img,
             radius=RADIUS_MM,
@@ -288,6 +294,7 @@ def run_mvpa_searchlight(
         return sl.scores_img_
 
     # 1 & 2 Within Modality
+    logger.info(f"[{subject}] Starting Within-Modality Decoding analyses...")
     for mod in ['text', 'image']:
         idx = labels_df.index[valid_mask & (labels_df['modality'] == mod)].tolist()
         y = labels_df.loc[idx, 'complexity'].values
@@ -295,6 +302,7 @@ def run_mvpa_searchlight(
         run_sl(idx, y, cv_strategy, f"within_{mod}")
 
     # 3 & 4 Cross Modality
+    logger.info(f"[{subject}] Starting Cross-Modality Decoding analyses...")
     idx_text = labels_df.index[valid_mask & (labels_df['modality'] == 'text')].tolist()
     idx_img = labels_df.index[valid_mask & (labels_df['modality'] == 'image')].tolist()
     
@@ -325,7 +333,7 @@ def run_group_analysis(
     :param output_dir: Output directory
     :type output_dir: str
     """
-    logger.info("Running group analysis...")
+    logger.info("Running group analysis ...")
     contrasts = [
         "within_text",
         "within_image",
@@ -336,7 +344,7 @@ def run_group_analysis(
     output_dir_group = os.path.join(output_dir, "group_analysis")
     os.makedirs(output_dir_group, exist_ok=True)
 
-    for contrast in contrasts:
+    for contrast in tqdm(contrasts, desc="Group Analysis"):
         maps = []
         for sub in subjects:
             f = os.path.join(
@@ -346,7 +354,10 @@ def run_group_analysis(
                 maps.append(f)
 
         if not maps:
+            logger.warning(f"No subject maps found for {contrast}, skipping.")
             continue
+        
+        logger.debug(f"Computing {contrast}: {len(maps)} subjects found.")
 
         # Load and subtract chance
         imgs = [load_img(m) for m in maps]
@@ -433,8 +444,8 @@ def main(
             subjects = tuple([d.split("-")[-1] for d in os.listdir(betas_dir) if d.startswith("sub-")])
         
     for sub in subjects:
-        data = load_and_preprocess_subject(sub, betas_dir, bids_dir, preproc_dir, output_dir)  # type: ignore
-        run_mvpa_searchlight(data, output_dir, sub, n_jobs_searchlight)
+        data = load_and_preprocess_subject(sub, betas_dir, bids_dir, preproc_dir)  # type: ignore
+        run_mvpa_searchlight(data, output_dir, sub, n_jobs_searchlight)  # type: ignore
 
     run_group_analysis(subjects, output_dir)
 
