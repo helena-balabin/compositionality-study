@@ -11,7 +11,7 @@ import click
 from glmsingle.gmm.findtailthreshold import findtailthreshold
 from loguru import logger
 from nilearn.decoding import SearchLight
-from nilearn.image import load_img, math_img, smooth_img, threshold_img
+from nilearn.image import index_img, load_img, math_img, smooth_img, threshold_img
 from nilearn.glm.second_level import non_parametric_inference
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
@@ -70,67 +70,14 @@ def load_events_for_subject(
         
         for f in events_files:
             df = pd.read_csv(os.path.join(func_dir, f), sep="\t")
+            # Remove any blank trials if present based on "blank" in the "modality" column
+            df = df[df['modality'] != 'blank'].reset_index(drop=True)
             all_events.append(df)
 
     if not all_events:
         raise ValueError(f"No events found for subject {subject}")
 
     return pd.concat(all_events, ignore_index=True)
-
-
-def compute_reliability_mask(
-    betas: np.ndarray,
-    events: pd.DataFrame,
-    threshold: float = RELIABILITY_THRESHOLD,
-) -> np.ndarray:
-    """Compute split-half reliability and threshold voxels.
-    
-    :param betas: Beta estimates (n_voxels, n_samples)
-    :type betas: np.ndarray
-    :param events: Events DataFrame
-    :type events: pd.DataFrame
-    :param threshold: Reliability threshold
-    :type threshold: float
-    :return: Boolean mask of reliable voxels
-    :rtype: np.ndarray
-    """
-    unique_stims = events['cocoid'].unique()
-    
-    n_voxels = betas.shape[0]
-    n_stims = len(unique_stims)
-    
-    split1_responses = np.zeros((n_voxels, n_stims))
-    split2_responses = np.zeros((n_voxels, n_stims))
-    
-    valid_stims_mask = np.ones(n_stims, dtype=bool)
-    
-    for i, stim in enumerate(unique_stims):
-        indices = events.index[events['cocoid'] == stim].tolist()
-        n_reps = len(indices)
-        midpoint = n_reps // 2 
-        idx1 = indices[:midpoint]
-        idx2 = indices[midpoint:]
-
-        split1_responses[:, i] = np.mean(betas[:, idx1], axis=1)
-        split2_responses[:, i] = np.mean(betas[:, idx2], axis=1)
-
-    split1_responses = split1_responses[:, valid_stims_mask]
-    split2_responses = split2_responses[:, valid_stims_mask]
-    
-    s1_centered = split1_responses - split1_responses.mean(axis=1, keepdims=True)
-    s2_centered = split2_responses - split2_responses.mean(axis=1, keepdims=True)
-    
-    ss1 = np.sum(s1_centered ** 2, axis=1)
-    ss2 = np.sum(s2_centered ** 2, axis=1)
-    
-    numerator = np.sum(s1_centered * s2_centered, axis=1)
-    denominator = np.sqrt(ss1 * ss2)
-    
-    correlations = np.zeros(n_voxels)
-    nonzero = denominator != 0
-    correlations[nonzero] = numerator[nonzero] / denominator[nonzero]
-    
-    return correlations > threshold
 
 
 def loading_mask(
@@ -190,41 +137,41 @@ def load_and_preprocess_subject(
     ref_img = nib.load(bold_files[0])  # type: ignore
     
     # 4. Voxel Selection
-    logger.info(f"[{subject}] Step 4/5: Computing voxel masks (R2 & Reliability)...")
+    logger.info(f"[{subject}] Step 4/5: Computing voxel masks (R2 threshold)...")
     type_a_path = res_path.replace("TYPED_FITHRF_GLMDENOISE_RR", "TYPEA_ONOFF")
-    onoffR2 = np.load(type_a_path, allow_pickle=True).item()['R2']
+    onoffR2 = np.load(type_a_path, allow_pickle=True).item()['onoffR2']
     r2_threshold = findtailthreshold(onoffR2.flatten())[0]
     # Log R2 threshold
     logger.info(f"[{subject}] R2 threshold: {r2_threshold:.4f}")
     valid_r2 = r2_map > r2_threshold
     # Log the percentage of voxels passing R2 threshold
     logger.info(f"[{subject}] R2 pass: {np.sum(valid_r2)} / {valid_r2.size} voxels")
-    # Compute the test-retest reliability mask 
-    rel_mask = compute_reliability_mask(betas_raw, events_df, RELIABILITY_THRESHOLD)
-    final_mask_indices = valid_r2 & rel_mask
-    logger.info(f"[{subject}] Final mask size: {np.sum(final_mask_indices)} voxels")
-    
+
     # 5. Average Betas
     logger.info(f"[{subject}] Step 5/5: Averaging betas by stimulus ID...")
     unique_stims = events_df['cocoid'].unique()
     averaged_betas = []
     averaged_labels = []
+
     for stim in unique_stims:
         indices = events_df.index[events_df['cocoid'] == stim].tolist()
-        mean_beta = np.mean(betas_raw[:, indices], axis=1)
+        mean_beta = np.mean(betas_raw[..., indices], axis=-1)
         row = events_df.iloc[indices[0]]
         averaged_betas.append(mean_beta)
         averaged_labels.append(row) 
-    averaged_betas = np.array(averaged_betas).T # (n_voxels, n_samples)
-    # Zero out non-selected voxels
-    averaged_betas[~final_mask_indices, :] = 0
+    
+    # Stack to (X, Y, Z, n_stims)
+    averaged_betas = np.stack(averaged_betas, axis=-1)
+    # Zero out non-selected voxels 
+    averaged_betas[~valid_r2] = 0.0
+    
     # Convert labels to DataFrame
-    labels_df = pd.DataFrame(averaged_labels)
+    labels_df = pd.DataFrame(averaged_labels).reset_index(drop=True)
 
     return {
         "betas": averaged_betas,
         "labels": labels_df,
-        "mask_indices": final_mask_indices,
+        "mask_data": valid_r2,
         "ref_affine": ref_img.affine,  # type: ignore
         "ref_shape": ref_img.shape[:3],  # type: ignore
     }
@@ -249,22 +196,16 @@ def run_mvpa_searchlight(
     """
     betas = subject_data['betas']
     labels_df = subject_data['labels']
-    mask_indices = subject_data['mask_indices']
+    mask_data = subject_data['mask_data']
     ref_affine = subject_data['ref_affine']
-    ref_shape = subject_data['ref_shape']
     
-    # Reconstruct 4D image
-    # Betas are now already in the full voxel space (V, samples), just need reshaping
-    n_samples = betas.shape[1]
-    full_img_data = betas.reshape(ref_shape + (n_samples,))
-    full_img = nib.Nifti1Image(full_img_data, ref_affine)  # type: ignore
+    # Create 4D image directly
+    full_img = nib.Nifti1Image(betas, ref_affine)  # type: ignore
     # Apply smoothing
     full_img = smooth_img(full_img, SMOOTHING_FWHM)
+    
     # Mask image
-    mask_vol_data = np.zeros(np.prod(ref_shape))
-    mask_vol_data[mask_indices] = 1
-    mask_vol = mask_vol_data.reshape(ref_shape)
-    mask_img = nib.Nifti1Image(mask_vol, ref_affine)  # type: ignore
+    mask_img = nib.Nifti1Image(mask_data.astype(np.int8), ref_affine)  # type: ignore
 
     # Output directory for subject
     subj_out = os.path.join(output_dir, f"sub-{subject}")
@@ -282,7 +223,9 @@ def run_mvpa_searchlight(
             cv=cv,
             verbose=1,
         )
-        sl.fit(full_img.slicer[..., X_idx], y)  # type: ignore
+        subset_img = index_img(full_img, X_idx)
+        sl.fit(subset_img, y)
+
         out_path = os.path.join(subj_out, f"{name}_accuracy.nii.gz")
         save_brain_map(
             sl.scores_img_, 
@@ -325,6 +268,7 @@ def run_mvpa_searchlight(
 def run_group_analysis(
     subjects: tuple,
     output_dir: str,
+    n_jobs: int,
 ):
     """Run group-level non-parametric analysis.
     
@@ -332,6 +276,8 @@ def run_group_analysis(
     :type subjects: tuple
     :param output_dir: Output directory
     :type output_dir: str
+    :param n_jobs: Number of parallel jobs
+    :type n_jobs: int
     """
     logger.info("Running group analysis ...")
     contrasts = [
@@ -359,29 +305,44 @@ def run_group_analysis(
         
         logger.debug(f"Computing {contrast}: {len(maps)} subjects found.")
 
-        # Load and subtract chance
+        # Load images
         imgs = [load_img(m) for m in maps]
-        imgs_minus_chance = [
-            math_img("img - 0.5", img=img) for img in imgs
-        ]
+        
+        # fix: Replace background 0s with 0.5 (chance) before subtraction to avoid -0.5 bias
+        # This assumes that unmapped regions (outside R2 mask) perform at chance level.
+        processed_imgs = []
+        for img in imgs:
+            data = img.get_fdata()
+            # If voxel is effectively 0 (background), set to chance (0.5)
+            data[data < 0.01] = 0.5 
+            processed_imgs.append(nib.nifti1.Nifti1Image(data, img.affine))
 
+        # Subtract chance (0.5)
+        # Now: Valid data = (Acc - 0.5), Background = (0.5 - 0.5) = 0.0
+        imgs_minus_chance = [
+            math_img("img - 0.5", img=img) for img in processed_imgs
+        ]
+        
         # One-sample design
         design_matrix = pd.DataFrame(
             {"intercept": [1] * len(imgs_minus_chance)}
         )
 
         # Second-level analysis
-        neg_log_pvals, outputs = non_parametric_inference(  # type: ignore
+        outputs: Dict = non_parametric_inference(  # type: ignore
             second_level_input=imgs_minus_chance,
             design_matrix=design_matrix,
             second_level_contrast="intercept",
-            n_perm=5000,                 
+            n_perm=5000,
             threshold=DEFAULT_VOXEL_P,   # cluster-forming p < 0.001
             two_sided_test=False,        # one-sided: accuracy > chance
             smoothing_fwhm=None,         # critical for searchlight
-            n_jobs=8,
+            n_jobs=n_jobs,
             verbose=1,
         )
+
+        # Extract the voxel-level FWE corrected p-values (equivalent to neg_log_pvals)
+        neg_log_pvals = outputs['logp_max_t']
 
         # Save the unthresholded z-equivalent map (optional but useful)
         nib.save(   # type: ignore
@@ -416,6 +377,12 @@ def run_group_analysis(
 @click.option("--preproc-dir", default=PREPROC_MRI_DIR, type=click.Path(exists=True))
 @click.option("--output-dir", default=MVPA_DIR, type=click.Path())
 @click.option("--n-jobs-searchlight", default=32, type=int)
+@click.option(
+    "--override-results/--no-override-results",
+    default=False,
+    show_default=True,
+    help="Recalculate results even if outputs already exist.",
+)
 def main(
     subjects: tuple,
     betas_dir: str,
@@ -423,6 +390,7 @@ def main(
     preproc_dir: str,
     output_dir: str,
     n_jobs_searchlight: int,
+    override_results: bool,
 ):
     """Run MVPA Analysis.
     
@@ -438,16 +406,26 @@ def main(
     :type output_dir: str
     :param n_jobs_searchlight: Number of parallel jobs for searchlight
     :type n_jobs_searchlight: int
+    :param override_results: Whether to recalculate results even if outputs exist
+    :type override_results: bool
     """
     if not subjects:
         if os.path.exists(betas_dir):
             subjects = tuple([d.split("-")[-1] for d in os.listdir(betas_dir) if d.startswith("sub-")])
         
     for sub in subjects:
+        subj_out = os.path.join(output_dir, f"sub-{sub}")
+        contrasts = ["within_text", "within_image", "cross_text2image", "cross_image2text"]
+        expected = [os.path.join(subj_out, f"{c}_accuracy.nii.gz") for c in contrasts]
+        
+        if not override_results and os.path.isdir(subj_out) and all(os.path.exists(p) for p in expected):
+            logger.info(f"Skipping subject {sub} - results exist.")
+            continue
+
         data = load_and_preprocess_subject(sub, betas_dir, bids_dir, preproc_dir)  # type: ignore
         run_mvpa_searchlight(data, output_dir, sub, n_jobs_searchlight)  # type: ignore
 
-    run_group_analysis(subjects, output_dir)
+    run_group_analysis(subjects, output_dir, n_jobs_searchlight)
 
 
 if __name__ == "__main__":

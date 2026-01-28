@@ -216,7 +216,7 @@ def run_subject_glm(
     bold_imgs: Sequence[Path],
     events_files: Sequence[Path],
     confounds_files: Sequence[Path],
-    gm_probseg: Path,
+    gm_probseg: Path | object,
     output_dir: Path,
     tr: float = TR,
     smoothing_fwhm: float = SMOOTHING_FWHM,
@@ -227,8 +227,9 @@ def run_subject_glm(
     """Run a first-level GLM and write subject-level contrast maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    subject = output_dir.parent.name.replace("sub-", "")
     
-    logger.info(f"Loading {len(events_files)} runs (events & confounds)...")
+    logger.info(f"Loading {len(events_files)} runs (events & confounds) for subject {subject}...")
     events = [load_events(f) for f in events_files]
     motion_confounds = [load_motion_regressors(f) for f in confounds_files]
 
@@ -247,6 +248,21 @@ def run_subject_glm(
     logger.info("Processing GM mask...")
     # Passing this to FirstLevelModel ensures it is resampled to the functional run geometry.
     gm_mask_img = image.math_img(f"img > {gm_threshold}", img=gm_probseg)
+    
+    # Resample the mask to the first functional image's geometry
+    # This prevents nilearn from upsampling the heavy 4D data to the mask's resolution
+    logger.info("Resampling GM mask to functional resolution")
+    
+    # Load reference affine from the first BOLD run
+    ref_img = image.load_img(bold_imgs[0])
+    target_affine = ref_img.affine
+    
+    gm_mask_img = image.resample_to_img(
+        source_img=gm_mask_img,
+        target_img=ref_img,
+        interpolation="nearest"
+    )
+
     # Save the mask (using the utils function for consistency)
     mask_out = output_dir / "gm_mask.nii.gz"
     save_brain_map(
@@ -268,7 +284,9 @@ def run_subject_glm(
         signal_scaling=0,
         minimize_memory=False,
         mask_img=gm_mask_img,
+        target_affine=target_affine,
         n_jobs=n_jobs,
+        verbose=1,
     )
 
     glm = glm.fit(run_imgs=list(bold_imgs), events=events, confounds=confounds)
@@ -296,7 +314,7 @@ def threshold_zmap(
     cluster_alpha: float = DEFAULT_CLUSTER_ALPHA,
     two_sided: bool = True,
     min_cluster_size: int | None = None,
-) -> Path:
+) -> Tuple[object, Path]:
     """Apply voxel-wise p-threshold and optional cluster filtering to a z-map."""
 
     zmap_img = image.load_img(zmap_path)
@@ -330,7 +348,7 @@ def threshold_zmap(
         make_cluster_table=True, 
         cluster_table_kwargs={"stat_threshold": 0}
     )
-    return out_file
+    return thr_img, out_file
 
 
 def conjunction_map(map_a: Path, map_b: Path) -> Path:
@@ -386,7 +404,7 @@ def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> N
         logger.info(f"Wrote group z-map for {contrast_name} to {out_file}")
 
         # Apply standard thresholds and save
-        thr_file = threshold_zmap(out_file)
+        _, thr_file = threshold_zmap(out_file)
         logger.info(f"Thresholded group map for {contrast_name} written to {thr_file}")
 
 
@@ -401,7 +419,7 @@ def run_functional_localizer(
     gm_threshold: float,
     n_jobs: int = 1,
     use_stimulus_confounds: bool = False,
-) -> Path | None:
+) -> object | None:
     """Fit a localizer (session-1) GLM for compositionality and return thresholded mask."""
 
     if not session_runs:
@@ -429,11 +447,8 @@ def run_functional_localizer(
         logger.warning(f"No main_compositionality contrast for subject {subject} localizer")
         return None
 
-    thr_mask = threshold_zmap(comp_contrast)
+    thr_mask, _ = threshold_zmap(comp_contrast)
     return thr_mask
-
-
-
 
 
 @click.command()
@@ -523,6 +538,12 @@ def run_functional_localizer(
     default=False,
     help="Include low-level stimulus features (text/image) as confounds.",
 )
+@click.option(
+    "--override-results/--no-override-results",
+    default=False,
+    show_default=True,
+    help="Recalculate results even if outputs already exist.",
+)
 def run_univariate_glm(
     fmriprep_dir: Path,
     bids_dir: Path,
@@ -538,6 +559,7 @@ def run_univariate_glm(
     max_runs: int | None,
     n_jobs: int,
     use_stimulus_confounds: bool,
+    override_results: bool,
 ) -> None:
     """Run subject-level and group-level univariate GLM analyses.
     
@@ -591,7 +613,7 @@ def run_univariate_glm(
 
     all_contrasts: Dict[str, List[Path]] = {k: [] for k in CONTRASTS}
     all_func_loc_contrasts: Dict[str, List[Path]] = {k: [] for k in CONTRASTS}
-    localizer_masks: List[Path] = []
+    localizer_masks: List[object] = []
 
     for subject in subject_ids:
         logger.info(f"Running univariate GLM for subject {subject}")
@@ -609,44 +631,24 @@ def run_univariate_glm(
         sessions = split_runs_by_session(runs)
         all_runs = [item for sublist in sessions.values() for item in sublist]
 
-        # Primary GLM using all runs
-        bold_imgs, events_files, confounds_files = zip(*all_runs)
-        contrasts = run_subject_glm(
-            bold_imgs=bold_imgs,
-            events_files=events_files,
-            confounds_files=confounds_files,
-            gm_probseg=gm_mask,
-            output_dir=subject_output,
-            tr=tr,
-            smoothing_fwhm=smoothing_fwhm,
-            gm_threshold=gm_threshold,
-            n_jobs=n_jobs,
-            use_stimulus_confounds=use_stimulus_confounds,
-        )
+        # Check if results exist
+        main_glm_done = False
+        contrasts = {}
+        if not override_results:
+            expected_paths = [subject_output / f"{k}_zmap.nii.gz" for k in CONTRASTS]
+            if all(p.exists() for p in expected_paths):
+                logger.info(f"Main GLM results exist for subject {subject}, reloading...")
+                contrasts = {k: subject_output / f"{k}_zmap.nii.gz" for k in CONTRASTS}
+                main_glm_done = True
 
-        # Store raw subject maps for group analysis
-        for name, path in contrasts.items():
-            all_contrasts[name].append(path)
-
-        # Threshold subject maps only if explicitly needed for inspection or intermediate steps
-        # but NOT for the standard group-level GLM which expects unthresholded maps.
-        for name, path in contrasts.items():
-            threshold_zmap(
-                path,
-                voxel_p=voxel_p,
-                cluster_alpha=cluster_alpha,
-                two_sided=True,
-                min_cluster_size=min_cluster_size,
-            )
-
-        if run_localizer:
-            ses1_runs = sessions.get("ses-01", [])
-            heldout_runs = [item for sess, items in sessions.items() if sess != "ses-01" for item in items]
-
-            loc_mask = run_functional_localizer(
-                subject=subject,
-                session_runs=ses1_runs,
-                gm_mask=gm_mask,
+        if not main_glm_done:
+            # Primary GLM using all runs
+            bold_imgs, events_files, confounds_files = zip(*all_runs)
+            contrasts = run_subject_glm(
+                bold_imgs=bold_imgs,
+                events_files=events_files,
+                confounds_files=confounds_files,
+                gm_probseg=gm_mask,
                 output_dir=subject_output,
                 tr=tr,
                 smoothing_fwhm=smoothing_fwhm,
@@ -654,34 +656,81 @@ def run_univariate_glm(
                 n_jobs=n_jobs,
                 use_stimulus_confounds=use_stimulus_confounds,
             )
-            # Save the individual localizer mask
-            loc_mask_out = subject_output / "localizer_mask.nii.gz"
-            save_brain_map(
-                loc_mask, 
-                loc_mask_out, 
-                plot=True, 
-                plot_kwargs={"title": "Functional Localizer Mask"}
-            )
 
-            if loc_mask:
-                localizer_masks.append(loc_mask)
-                # Compute maps for independent runs (ses-2/3) using the functional localizer from ses-1
-                fl_bold, fl_events, fl_conf = zip(*heldout_runs)
-                fl_contrasts = run_subject_glm(
-                    bold_imgs=fl_bold,
-                    events_files=fl_events,
-                    confounds_files=fl_conf,
-                    gm_probseg=image.load_img(loc_mask),  # type: ignore
-                    output_dir=subject_output / "func_loc",
+        # Store raw subject maps for group analysis
+        for name, path in contrasts.items():
+            all_contrasts[name].append(path)
+
+        # Threshold subject maps only if explicitly needed for inspection or intermediate steps
+        # but NOT for the standard group-level GLM which expects unthresholded maps.
+        # Skip if reloading, assuming they were generated.
+        if not main_glm_done:
+            for name, path in contrasts.items():
+                threshold_zmap(
+                    path,
+                    voxel_p=voxel_p,
+                    cluster_alpha=cluster_alpha,
+                    two_sided=True,
+                    min_cluster_size=min_cluster_size,
+                )
+
+        if run_localizer:
+            ses1_runs = sessions.get("ses-01", [])
+            heldout_runs = [item for sess, items in sessions.items() if sess != "ses-01" for item in items]
+
+            loc_done = False
+            fl_contrasts = {}
+            if not override_results:
+                loc_mask_path = subject_output / "localizer_mask.nii.gz"
+                fl_out_dir = subject_output / "func_loc"
+                expected_fl = [fl_out_dir / f"{k}_zmap.nii.gz" for k in CONTRASTS]
+                if loc_mask_path.exists() and all(p.exists() for p in expected_fl):
+                    logger.info(f"Localizer results exist for {subject}, reloading...")
+                    fl_contrasts = {k: fl_out_dir / f"{k}_zmap.nii.gz" for k in CONTRASTS}
+                    loc_done = True
+
+            if not loc_done:
+                loc_mask = run_functional_localizer(
+                    subject=subject,
+                    session_runs=ses1_runs,
+                    gm_mask=gm_mask,
+                    output_dir=subject_output,
                     tr=tr,
                     smoothing_fwhm=smoothing_fwhm,
                     gm_threshold=gm_threshold,
                     n_jobs=n_jobs,
                     use_stimulus_confounds=use_stimulus_confounds,
                 )
-                for name, path in fl_contrasts.items():
-                    if name in all_func_loc_contrasts:
-                        all_func_loc_contrasts[name].append(path)
+
+                if loc_mask:
+                    # Save the individual localizer mask
+                    loc_mask_out = subject_output / "localizer_mask.nii.gz"
+                    save_brain_map(
+                        loc_mask, 
+                        loc_mask_out, 
+                        plot=True, 
+                        plot_kwargs={"title": "Functional Localizer Mask"}
+                    )
+
+                    localizer_masks.append(loc_mask)
+                    # Compute maps for independent runs (ses-2/3) using the functional localizer from ses-1
+                    fl_bold, fl_events, fl_conf = zip(*heldout_runs)
+                    fl_contrasts = run_subject_glm(
+                        bold_imgs=fl_bold,
+                        events_files=fl_events,
+                        confounds_files=fl_conf,
+                        gm_probseg=loc_mask,
+                        output_dir=subject_output / "func_loc",
+                        tr=tr,
+                        smoothing_fwhm=smoothing_fwhm,
+                        gm_threshold=gm_threshold,
+                        n_jobs=n_jobs,
+                        use_stimulus_confounds=use_stimulus_confounds,
+                    )
+            
+            for name, path in fl_contrasts.items():
+                if name in all_func_loc_contrasts:
+                    all_func_loc_contrasts[name].append(path)
 
     run_group_level(contrast_maps=all_contrasts, output_dir=group_level_dir)
     run_group_level(contrast_maps=all_func_loc_contrasts, output_dir=group_level_dir / "func_loc")
