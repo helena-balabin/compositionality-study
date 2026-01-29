@@ -13,7 +13,7 @@ from loguru import logger
 from nilearn.decoding import SearchLight
 from nilearn.image import index_img, load_img, math_img, smooth_img, threshold_img
 from nilearn.glm.second_level import non_parametric_inference
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from sklearn.model_selection import StratifiedKFold
 from tqdm import tqdm
 
@@ -138,9 +138,7 @@ def load_and_preprocess_subject(
     
     # 4. Voxel Selection
     logger.info(f"[{subject}] Step 4/5: Computing voxel masks (R2 threshold)...")
-    type_a_path = res_path.replace("TYPED_FITHRF_GLMDENOISE_RR", "TYPEA_ONOFF")
-    onoffR2 = np.load(type_a_path, allow_pickle=True).item()['onoffR2']
-    r2_threshold = findtailthreshold(onoffR2.flatten())[0]
+    r2_threshold = findtailthreshold(r2_map.flatten())[0]
     # Log R2 threshold
     logger.info(f"[{subject}] R2 threshold: {r2_threshold:.4f}")
     valid_r2 = r2_map > r2_threshold
@@ -218,7 +216,7 @@ def run_mvpa_searchlight(
         sl = SearchLight(
             mask_img,
             radius=RADIUS_MM,
-            estimator=SVC(kernel="linear"),  # type: ignore
+            estimator=LinearSVC(),  # type: ignore
             n_jobs=n_jobs_searchlight,
             cv=cv,
             verbose=1,

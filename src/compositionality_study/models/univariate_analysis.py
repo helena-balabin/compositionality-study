@@ -385,15 +385,15 @@ def run_group_level(contrast_maps: Dict[str, List[Path]], output_dir: Path) -> N
     logger.info(f"Starting group-level analysis for {len(contrast_maps)} contrasts...")
 
     for contrast_name, maps in tqdm(contrast_maps.items(), desc="Group Analysis"):
-        if not maps:
-            logger.warning(f"Skipping group contrast {contrast_name}: no subject maps provided")
-            continue
-        
         logger.debug(f"Fitting group model for {contrast_name} ({len(maps)} subjects)")
-        second_level = SecondLevelModel()
-        second_level = second_level.fit(maps)
 
-        zmap = second_level.compute_contrast(output_type="z_score")
+        # Create a simple intercept-only design matrix for a one-sample t-test
+        design_matrix = pd.DataFrame([1] * len(maps), columns=["intercept"])
+
+        second_level = SecondLevelModel()
+        second_level = second_level.fit(maps, design_matrix=design_matrix)
+
+        zmap = second_level.compute_contrast(second_level_contrast="intercept", output_type="z_score")
         out_file = output_dir / f"group_{contrast_name}_zmap.nii.gz"
         save_brain_map(
             zmap, 
