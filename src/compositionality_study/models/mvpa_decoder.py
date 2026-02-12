@@ -11,11 +11,13 @@ import click
 from glmsingle.gmm.findtailthreshold import findtailthreshold
 from loguru import logger
 from nilearn.decoding import SearchLight
-from nilearn.image import index_img, load_img, math_img, smooth_img, threshold_img
-from nilearn.glm.second_level import non_parametric_inference
+from nilearn.image import index_img, load_img, smooth_img, new_img_like
+from nilearn.glm.second_level import SecondLevelModel
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import StratifiedKFold
 from tqdm import tqdm
+from nilearn.masking import compute_multi_epi_mask
+from nilearn import image
 
 from compositionality_study.constants import (
     BETAS_DIR,
@@ -25,13 +27,19 @@ from compositionality_study.constants import (
 )
 from compositionality_study.utils import save_brain_map
 
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 # Constants
 TR = 1.5
 RADIUS_MM = 6.0
 SMOOTHING_FWHM = 6.0
 RELIABILITY_THRESHOLD = 0.1
 DEFAULT_VOXEL_P = 0.001
-DEFAULT_CLUSTER_P = 0.05
+DEFAULT_CLUSTER_THRESHOLD = 50
 
 
 def load_events_for_subject(
@@ -142,6 +150,14 @@ def load_and_preprocess_subject(
     # Log R2 threshold
     logger.info(f"[{subject}] R2 threshold: {r2_threshold:.4f}")
     valid_r2 = r2_map > r2_threshold
+    # Save thresholded R2 map for visualization
+    valid_r2_img = new_img_like(ref_img, valid_r2)  # type: ignore
+    save_brain_map(
+        valid_r2_img,
+        os.path.join(betas_dir, f"sub-{subject}", "valid_R2_map.nii.gz"),
+        is_z_map=False,
+        make_surface_plot=True,
+    )
     # Log the percentage of voxels passing R2 threshold
     logger.info(f"[{subject}] R2 pass: {np.sum(valid_r2)} / {valid_r2.size} voxels")
 
@@ -211,7 +227,7 @@ def run_mvpa_searchlight(
     # Valid samples mask (not blank trials)
     valid_mask = labels_df['complexity'].notna()
 
-    def run_sl(X_idx, y, cv, name):
+    def run_sl(X_idx, y, cv, name, n_test_samples):
         logger.info(f"[{subject}] Running Searchlight Analysis: {name}")
         sl = SearchLight(
             mask_img,
@@ -225,57 +241,69 @@ def run_mvpa_searchlight(
         sl.fit(subset_img, y)
 
         out_path = os.path.join(subj_out, f"{name}_accuracy.nii.gz")
-        save_brain_map(
-            sl.scores_img_, 
-            out_path, 
-            plot=True, 
-            plot_kwargs={"title": f"Searchlight Accuracy: {name} (sub-{subject})", "display_mode": "z", "cut_coords": 5}
-        )
+        save_brain_map(sl.scores_img_, out_path)
+
+        # Compute Variance Map for Fixed Effects Group Analysis
+        # Var = p * (1-p) / N_test_samples
+        # Where p is accuracy.
+        acc_data = sl.scores_img_.get_fdata()  # type: ignore
+        # Ensure acc in [0, 1] - usually is.
+        # TODO no variance needed
+        var_data = (acc_data * (1.0 - acc_data)) / float(n_test_samples)
+        var_data = np.maximum(var_data, 1e-6)
+        var_img = new_img_like(sl.scores_img_, var_data)
+        var_path = os.path.join(subj_out, f"{name}_var.nii.gz")
+        save_brain_map(var_img, var_path, make_surface_plot=False)
 
         return sl.scores_img_
 
     # 1 & 2 Within Modality
     logger.info(f"[{subject}] Starting Within-Modality Decoding analyses...")
     for mod in ['text', 'image']:
-        idx = labels_df.index[valid_mask & (labels_df['modality'] == mod)].tolist()
-        y = labels_df.loc[idx, 'complexity'].values
+        idx = labels_df.index[valid_mask & (labels_df['modality'] == mod)].to_numpy(dtype=int)
+        y = labels_df.loc[idx, 'complexity'].to_numpy()
+        n_samples = len(idx)
         cv_strategy = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        run_sl(idx, y, cv_strategy, f"within_{mod}")
+        run_sl(idx, y, cv_strategy, f"within_{mod}", n_test_samples=n_samples)
 
     # 3 & 4 Cross Modality
     logger.info(f"[{subject}] Starting Cross-Modality Decoding analyses...")
     idx_text = labels_df.index[valid_mask & (labels_df['modality'] == 'text')].tolist()
     idx_img = labels_df.index[valid_mask & (labels_df['modality'] == 'image')].tolist()
     
-    y_text = labels_df.loc[idx_text, 'complexity'].values
-    y_img = labels_df.loc[idx_img, 'complexity'].values
+    y_text = labels_df.loc[idx_text, 'complexity'].to_numpy()
+    y_img = labels_df.loc[idx_img, 'complexity'].to_numpy()
     combined_idx = idx_text + idx_img
     combined_y = np.concatenate([y_text, y_img])
     n_text = len(idx_text)
     n_img = len(idx_img)
     
-    # Train Text -> Test Image
-    cv_txt2img = [(np.arange(n_text), np.arange(n_text, n_text + n_img))]
-    run_sl(combined_idx, combined_y, cv_txt2img, "cross_text2image")
+    # Train Text -> Test Image (Total test samples = n_img)
+    cv_txt2img = [(np.arange(n_text, dtype=int), np.arange(n_text, n_text + n_img, dtype=int))]
+    run_sl(combined_idx, combined_y, cv_txt2img, "cross_text2image", n_test_samples=n_img)
     
-    # Train Image -> Test Text
-    cv_img2txt = [(np.arange(n_text, n_text + n_img), np.arange(n_text))]
-    run_sl(combined_idx, combined_y, cv_img2txt, "cross_image2text")
+    # Train Image -> Test Text (Total test samples = n_text)
+    cv_img2txt = [(np.arange(n_text, n_text + n_img, dtype=int), np.arange(n_text, dtype=int))]
+    run_sl(combined_idx, combined_y, cv_img2txt, "cross_image2text", n_test_samples=n_text)
 
 
 def run_group_analysis(
     subjects: tuple,
     output_dir: str,
-    n_jobs: int,
+    betas_dir: str,
 ):
-    """Run group-level non-parametric analysis.
-    
+    """Run group-level random-effects (one-sample) analysis.
+
+    Each subject contributes a chance-centered effect map (accuracy - 0.5) and
+    an estimated variance map. ``SecondLevelModel`` fits an intercept-only model
+    across subjects (subject-wise RFX; variance maps give precision weighting).
+
     :param subjects: Tuple of subject IDs
     :type subjects: tuple
     :param output_dir: Output directory
     :type output_dir: str
-    :param n_jobs: Number of parallel jobs
-    :type n_jobs: int
+    :param betas_dir: Directory containing beta estimates and R2 maps
+    :type betas_dir: str
     """
     logger.info("Running group analysis ...")
     contrasts = [
@@ -287,85 +315,99 @@ def run_group_analysis(
 
     output_dir_group = os.path.join(output_dir, "group_analysis")
     os.makedirs(output_dir_group, exist_ok=True)
+    
+    # Build subject masks from saved R2 maps (raw or pre-thresholded)
+    mask_imgs = []
+    for sub in subjects:
+        r2_path = os.path.join(betas_dir, f"sub-{sub}", "R2_map.nii.gz")
+        valid_r2_path = os.path.join(betas_dir, f"sub-{sub}", "valid_R2_map.nii.gz")
+
+        if os.path.exists(valid_r2_path):
+            r2_img = load_img(valid_r2_path)
+            r2_data = r2_img.get_fdata()
+            subj_mask_data = r2_data > 0
+        elif os.path.exists(r2_path):
+            r2_img = load_img(r2_path)
+            r2_data = r2_img.get_fdata()
+            r2_threshold = findtailthreshold(r2_data.flatten())[0]
+            subj_mask_data = r2_data > r2_threshold
+        else:
+            raise FileNotFoundError(f"Missing R2 map for subject {sub}: {r2_path} or {valid_r2_path}")
+
+        subj_mask_img = new_img_like(r2_img, subj_mask_data.astype(np.int8))
+        mask_imgs.append(subj_mask_img)
+
+        # Save per-subject mask for transparency/debugging
+        subj_mask_out = os.path.join(output_dir, f"sub-{sub}", "mask.nii.gz")
+        os.makedirs(os.path.dirname(subj_mask_out), exist_ok=True)
+        save_brain_map(
+            subj_mask_img,
+            subj_mask_out,
+            is_z_map=False,
+            make_surface_plot=False,
+        )
+    group_mask = compute_multi_epi_mask(mask_imgs, threshold=0.25)
+    # Save group mask for reference
+    save_brain_map(
+        group_mask,
+        os.path.join(output_dir_group, "group_mask.nii.gz"),
+        is_z_map=False,
+        make_surface_plot=True,
+    )
 
     for contrast in tqdm(contrasts, desc="Group Analysis"):
-        maps = []
+        rows = []
         for sub in subjects:
-            f = os.path.join(
-                output_dir, f"sub-{sub}", f"{contrast}_accuracy.nii.gz"
+            subj_dir = os.path.join(output_dir, f"sub-{sub}")
+            acc_path = os.path.join(subj_dir, f"{contrast}_accuracy.nii.gz")
+            effect_path = os.path.join(subj_dir, f"{contrast}_effect.nii.gz")
+
+            if not os.path.exists(effect_path):
+                acc_img = load_img(acc_path)
+                centered = image.math_img("img - 0.5", img=acc_img)
+                centered.to_filename(effect_path)  # type: ignore
+
+            rows.append(
+                {
+                    "subject_label": sub,
+                    "map_name": contrast,
+                    "effects_map_path": effect_path,
+                }
             )
-            if os.path.exists(f):
-                maps.append(f)
 
-        if not maps:
-            logger.warning(f"No subject maps found for {contrast}, skipping.")
-            continue
-        
-        logger.debug(f"Computing {contrast}: {len(maps)} subjects found.")
+        second_level_df = pd.DataFrame(rows).sort_values("subject_label").reset_index(drop=True)
+        design_matrix = pd.DataFrame({"intercept": np.ones(len(second_level_df))})
 
-        # Load images
-        imgs = [load_img(m) for m in maps]
-        
-        # fix: Replace background 0s with 0.5 (chance) before subtraction to avoid -0.5 bias
-        # This assumes that unmapped regions (outside R2 mask) perform at chance level.
-        processed_imgs = []
-        for img in imgs:
-            data = img.get_fdata()
-            # If voxel is effectively 0 (background), set to chance (0.5)
-            data[data < 0.01] = 0.5 
-            processed_imgs.append(nib.nifti1.Nifti1Image(data, img.affine))
-
-        # Subtract chance (0.5)
-        # Now: Valid data = (Acc - 0.5), Background = (0.5 - 0.5) = 0.0
-        imgs_minus_chance = [
-            math_img("img - 0.5", img=img) for img in processed_imgs
-        ]
-        
-        # One-sample design
-        design_matrix = pd.DataFrame(
-            {"intercept": [1] * len(imgs_minus_chance)}
-        )
-
-        # Second-level analysis
-        outputs: Dict = non_parametric_inference(  # type: ignore
-            second_level_input=imgs_minus_chance,
-            design_matrix=design_matrix,
-            second_level_contrast="intercept",
-            n_perm=5000,
-            threshold=DEFAULT_VOXEL_P,   # cluster-forming p < 0.001
-            two_sided_test=False,        # one-sided: accuracy > chance
-            smoothing_fwhm=None,         # critical for searchlight
-            n_jobs=n_jobs,
+        # Apply RFX analysis here
+        group_model = SecondLevelModel(
+            smoothing_fwhm=None,
+            mask_img=group_mask,
+            n_jobs=1,
             verbose=1,
+        ).fit(second_level_df, design_matrix=design_matrix)
+
+        z_score_img = group_model.compute_contrast(
+            second_level_contrast="intercept",
+            first_level_contrast=contrast,
+            output_type="z_score",
         )
 
-        # Extract the voxel-level FWE corrected p-values (equivalent to neg_log_pvals)
-        neg_log_pvals = outputs['logp_max_t']
+        thresholds = [
+            (0.05, 0, "p05_cluster0"),
+            (0.001, 0, "p001_cluster0"),
+            (0.001, 50, "p001_cluster50"),
+        ]
 
-        # Save the unthresholded z-equivalent map (optional but useful)
-        nib.save(   # type: ignore
-            neg_log_pvals,  # type: ignore
-            os.path.join(output_dir_group, f"group_{contrast}_neglogp.nii.gz"),
-        )
-
-        # Cluster-level FWE correction
-        cluster_logp = outputs["logp_max_size"]  # type: ignore
-        cluster_logp_thr = -np.log10(DEFAULT_CLUSTER_P)
-        cluster_corrected_map = threshold_img(
-            cluster_logp, threshold=cluster_logp_thr
-        )
-
-        save_brain_map(
-            cluster_corrected_map,
-            os.path.join(
-                output_dir_group,
-                f"group_{contrast}_clusterFWE.nii.gz",
-            ),
-            plot=True,
-            plot_kwargs={"title": f"Group Cluster FWE: {contrast}"},
-            make_cluster_table=True,
-            cluster_table_kwargs={"stat_threshold": 0},
-        )
+        for voxel_p, cluster_thr, tag in thresholds:
+            save_brain_map(
+                z_score_img,
+                os.path.join(output_dir_group, f"group_{contrast}_zmap_{tag}.nii.gz"),
+                is_z_map=True,
+                voxel_p=voxel_p,
+                cluster_threshold=cluster_thr,
+                make_surface_plot=False,
+                sided="positive",
+            )
 
 
 @click.command()
@@ -421,9 +463,9 @@ def main(
             continue
 
         data = load_and_preprocess_subject(sub, betas_dir, bids_dir, preproc_dir)  # type: ignore
-        run_mvpa_searchlight(data, output_dir, sub, n_jobs_searchlight)  # type: ignore
+        run_mvpa_searchlight(data, output_dir, sub, int(n_jobs_searchlight))  # type: ignore
 
-    run_group_analysis(subjects, output_dir, n_jobs_searchlight)
+    run_group_analysis(subjects, output_dir, betas_dir)
 
 
 if __name__ == "__main__":

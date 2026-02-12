@@ -29,6 +29,9 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 dynamic = ["dependencies"]
+dependencies = [
+    "nilearn>=0.12.1",
+]
 
 [project.urls]
 Homepage = "https://github.com//compositionality-study"

@@ -1,6 +1,6 @@
 """Utils for the compositionality project."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 from pathlib import Path
 
 import amrlib
@@ -10,7 +10,9 @@ import numpy as np
 import pandas as pd
 import penman
 from datasets import load_dataset
-from nilearn import plotting, reporting
+from loguru import logger
+from nilearn import image, plotting
+from nilearn.glm.thresholding import threshold_stats_img
 from penman.exceptions import DecodeError
 from PIL import Image, ImageOps
 from spacy.language import Language
@@ -22,6 +24,9 @@ from compositionality_study.constants import HF_DATASET_NAME
 amrlib.setup_spacy_extension()
 
 _COCO_DF = None
+
+DEFAULT_VOXEL_P = 0.001
+DEFAULT_CLUSTER_THRESHOLD = 50
 
 
 def get_coco_df() -> pd.DataFrame:
@@ -77,6 +82,128 @@ def get_stimulus_data(
             except (ValueError, TypeError):
                 pass
     return None
+
+
+def derive_run_id(bold_file: Path) -> str:
+    """Strip space/desc tokens to get the BIDS run identifier."""
+    stem = bold_file.name.replace(".nii.gz", "").replace(".nii", "")
+    parts: List[str] = []
+
+    for token in stem.split("_"):
+        if token.startswith("space-") or token.startswith("desc-"):
+            break
+        parts.append(token)
+
+    return "_".join(parts)
+
+
+def load_events(events_tsv: Path) -> pd.DataFrame:
+    """Load events and normalize the condition column name."""
+    events = pd.read_csv(events_tsv, sep="\t")
+
+    modality = events["modality"].astype(str).str.strip().str.lower()
+    complexity = events["complexity"].astype(str).str.strip().str.lower()
+    events["trial_type"] = modality + "_" + complexity
+
+    if "trial_type" in events.columns:
+        events = events.dropna(subset=["trial_type"])
+        events["trial_type"] = events["trial_type"].astype(str)
+
+    return events
+
+
+def find_gm_mask(fmriprep_dir: Path, subject: str) -> Path:
+    """Pick the GM probseg (assuming MNI152NLin2009cAsym space)."""
+
+    anat_dir = fmriprep_dir / f"sub-{subject}" / "ses-01" / "anat"
+    candidates = sorted(anat_dir.glob("*space-MNI152NLin2009cAsym*_label-GM_probseg.nii.gz"))
+    return candidates[0]
+
+
+def collect_runs(
+    fmriprep_dir: Path, bids_dir: Path, subject: str, max_runs: int | None = None
+) -> List[Tuple[Path, Path, Path]]:
+    """Pair each preprocessed BOLD run with matching events and confounds."""
+
+    bold_files = sorted((fmriprep_dir / f"sub-{subject}").glob("**/*_desc-preproc_bold.nii.gz"))
+    runs: List[Tuple[Path, Path, Path]] = []
+
+    if max_runs is not None:
+        logger.info(f"Debugging: limiting to {max_runs} runs for subject {subject}")
+        bold_files = bold_files[:max_runs]
+
+    for bold_file in bold_files:
+        run_id = derive_run_id(bold_file)
+        rel_dir = bold_file.parent.relative_to(fmriprep_dir / f"sub-{subject}")
+
+        events_file = bids_dir / f"sub-{subject}" / rel_dir / f"{run_id}_events.tsv"
+        confounds_file = bold_file.parent / f"{run_id}_desc-confounds_timeseries.tsv"
+
+        runs.append((bold_file, events_file, confounds_file))
+
+    return runs
+
+
+def load_stimulus_confounds(events: pd.DataFrame, n_scans: int, tr: float) -> pd.DataFrame:
+    """Generate extra confounds based on stimulus properties."""
+    coco_df = get_coco_df()
+
+    text_cols = ["sentence_length", "amr_n_nodes"]
+    img_cols = ["coco_a_nodes", "ic_score", "aspect_ratio", "coco_person"]
+    all_cols = text_cols + img_cols
+
+    confounds = pd.DataFrame(0.0, index=range(n_scans), columns=all_cols)
+    txt_df, img_df = get_stimulus_features_lookup(coco_df)
+
+    for _, row in events.iterrows():
+        data = get_stimulus_data(
+            modality=row.get("modality"),
+            stimulus=row.get("stimulus"),
+            cocoid=row.get("cocoid"),
+            txt_df=txt_df,
+            img_df=img_df,
+        )
+
+        if data is None:
+            continue
+
+        start_tr = int(round(row["onset"] / tr))
+        n_trs = int(round(row["duration"] / tr))
+        end_tr = min(start_tr + n_trs, n_scans)
+
+        if start_tr >= n_scans:
+            continue
+
+        cols = text_cols if row.get("modality") == "text" else img_cols
+        valid_cols = [c for c in cols if c in data]
+        if valid_cols:
+            confounds.iloc[
+                start_tr:end_tr, confounds.columns.get_indexer(valid_cols)  # type: ignore
+            ] = data[valid_cols].values
+
+    return confounds
+
+
+def conjunction_map(map_a: Path, map_b: Path) -> Path:
+    """Compute a simple conjunction (logical AND) of two thresholded maps."""
+
+    img_a = image.math_img("img != 0", img=map_a)
+    img_b = image.math_img("img != 0", img=map_b)
+    conj = image.math_img("img1 * img2", img1=img_a, img2=img_b)
+    out_file = map_a.with_name("conjunction_img_txt.nii.gz")
+    save_brain_map(conj, out_file)
+    return out_file
+
+
+def split_runs_by_session(runs: Iterable[Tuple[Path, Path, Path]]) -> Dict[str, List[Tuple[Path, Path, Path]]]:
+    """Group runs by session token for downstream localizer logic."""
+
+    grouped: Dict[str, List[Tuple[Path, Path, Path]]] = {}
+    for bold, events, confounds in runs:
+        run_id = derive_run_id(bold)
+        session = run_id.split("_")[1]
+        grouped.setdefault(session, []).append((bold, events, confounds))
+    return grouped
 
 
 
@@ -279,28 +406,54 @@ def apply_gamma_correction(
 def save_brain_map(
     img: Union[nib.nifti1.Nifti1Image, object],
     output_path: Union[str, Path],
-    plot: bool = True,
-    plot_kwargs: Optional[Dict] = None,
-    make_cluster_table: bool = False,
-    cluster_table_kwargs: Optional[Dict] = None,
-) -> None:
-    """Save a brain map to disk, and optionally save a plot and cluster table.
+    is_z_map: bool = False,
+    voxel_p: float = DEFAULT_VOXEL_P,
+    cluster_threshold: int = DEFAULT_CLUSTER_THRESHOLD,
+    make_surface_plot: bool = True,
+    surface_plot_kwargs: Optional[Dict] = None,
+    sided: str = "positive",
+) -> Optional[nib.nifti1.Nifti1Image]:
+    """Save a brain map to disk, generate mosaic plots, and cluster tables.
 
-    :param img: The brain map image (Nifti1Image)
-    :type img: nib.Nifti1Image
+    For z-score/stat maps (``is_z_map=True``), apply one-sided FPR thresholding
+    with ``threshold_stats_img`` (using ``voxel_p`` and ``cluster_threshold``).
+    Set ``sided="positive"`` to keep only positive effects, ``sided="negative"``
+    for negative effects, or ``sided="both"`` to save both directions (files
+    suffixed with ``_pos_thr`` and ``_neg_thr``).
+
+    :param img: The brain map image
     :param output_path: Where to save the image
-    :type output_path: Union[str, Path]
-    :param plot: Whether to save a plot figure, defaults to True
-    :type plot: bool, optional
-    :param plot_kwargs: Arguments for nilearn.plotting.plot_stat_map, defaults to None
-    :type plot_kwargs: Optional[Dict], optional
-    :param make_cluster_table: Whether to save a cluster table csv, defaults to False
-    :type make_cluster_table: bool, optional
-    :param cluster_table_kwargs: Arguments for nilearn.reporting.get_clusters_table, defaults to None
-    :type cluster_table_kwargs: Optional[Dict], optional
+    :param is_z_map: Whether the image is a z-/stat-map that should be thresholded
+    :param voxel_p: Two-sided voxel-wise p-value used for thresholding
+    :param make_surface_plot: Whether to save a surface plot
+    :param surface_plot_kwargs: Extra args for ``generate_surface_plots``
+    :param sided: Direction for one-sided thresholding (positive, negative, both)
+    :returns: Thresholded positive image if available, otherwise None
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _base_path(path: Path) -> str:
+        str_path = str(path)
+        if str_path.endswith(".nii.gz"):
+            return str_path[:-7]
+        if str_path.endswith(".nii"):
+            return str_path[:-4]
+        return str(path.with_suffix(""))
+
+    def _plot(target_img: object, target_path: Path, cmap: Optional[str] = None) -> None:
+        base = _base_path(target_path)
+        try:
+            display = plotting.plot_stat_map(
+                target_img,
+                display_mode="mosaic",
+                cut_coords=5,
+                cmap=cmap,  # type: ignore
+            )
+            display.savefig(f"{base}_mosaic.png")  # type: ignore
+            display.close()  # type: ignore
+        except Exception as e:
+            logger.error(f"Failed to plot brain map: {e}")
     
     # Save the Nifti image
     if hasattr(img, "to_filename"):
@@ -308,35 +461,50 @@ def save_brain_map(
     else:
         nib.save(img, output_path) # type: ignore
 
-    str_path = str(output_path)
-    if str_path.endswith(".nii.gz"):
-        base = str_path[:-7]
-    elif str_path.endswith(".nii"):
-        base = str_path[:-4]
-    else:
-        base = str(output_path.with_suffix(""))
+    _plot(img, output_path)
 
-    # Save plot
-    if plot:
-        plot_kwargs = plot_kwargs or {}
-        # Default display mode if not set
-        if "display_mode" not in plot_kwargs:
-            plot_kwargs["display_mode"] = "ortho" # Default
-            
+    thresholded_img = None
+    if is_z_map:
         try:
-            display = plotting.plot_stat_map(img, **plot_kwargs)
-            plot_path = f"{base}.png"
-            display.savefig(plot_path)  # type: ignore
-            display.close()  # type: ignore
+            do_pos = sided in ("positive", "both")
+            do_neg = sided in ("negative", "both")
+
+            def _save_thr(target_img: object, suffix: str, flip_back: bool = False, cmap: Optional[str] = None) -> object:
+                thr_img, _ = threshold_stats_img(
+                    target_img,
+                    alpha=voxel_p,
+                    height_control="fpr",
+                    cluster_threshold=cluster_threshold,
+                    two_sided=False,
+                )
+                if flip_back:
+                    thr_img = image.math_img("-img", img=thr_img)
+                if str(output_path).endswith(".nii.gz"):
+                    thr_path = output_path.with_name(output_path.name.replace(".nii.gz", f"_{suffix}.nii.gz"))
+                else:
+                    thr_path = output_path.with_name(f"{output_path.stem}_{suffix}{output_path.suffix}")
+                thr_img.to_filename(thr_path)  # type: ignore
+                _plot(thr_img, thr_path, cmap=cmap)
+                return thr_img
+
+            if do_pos:
+                thresholded_img = _save_thr(img, "pos_thr", cmap="Reds")
+            if do_neg:
+                _save_thr(image.math_img("-img", img=img), "neg_thr", flip_back=True, cmap="Blues_r")
         except Exception as e:
-            print(f"Failed to plot brain map: {e}")
-        
-    # Save cluster table
-    if make_cluster_table:
-        cluster_table_kwargs = cluster_table_kwargs or {}
+            logger.error(f"Failed to threshold brain map: {e}")
+
+    # Save surface plot
+    if make_surface_plot:
+        from compositionality_study.visualization.visualize_brain_maps import generate_surface_plots
+        surface_plot_kwargs = surface_plot_kwargs or {}
         try:
-            table = reporting.get_clusters_table(img, **cluster_table_kwargs)
-            table_path = f"{base}.csv"
-            table.to_csv(table_path)  # type: ignore
+            generate_surface_plots(
+                nii_file=output_path, 
+                output_dir=output_path.parent, 
+                **surface_plot_kwargs
+            )
         except Exception as e:
-            print(f"Failed to generate cluster table: {e}")
+            logger.error(f"Failed to generate surface plot: {e}")
+
+    return thresholded_img  # type: ignore
