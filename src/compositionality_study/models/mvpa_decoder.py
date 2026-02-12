@@ -247,8 +247,6 @@ def run_mvpa_searchlight(
         # Var = p * (1-p) / N_test_samples
         # Where p is accuracy.
         acc_data = sl.scores_img_.get_fdata()  # type: ignore
-        # Ensure acc in [0, 1] - usually is.
-        # TODO no variance needed
         var_data = (acc_data * (1.0 - acc_data)) / float(n_test_samples)
         var_data = np.maximum(var_data, 1e-6)
         var_img = new_img_like(sl.scores_img_, var_data)
