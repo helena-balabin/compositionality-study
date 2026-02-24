@@ -6,7 +6,7 @@ import click
 import nibabel as nib
 import numpy as np
 import pandas as pd
-from glmsingle import GLM_single
+from glmsingle import GLM_single  # type: ignore
 from loguru import logger
 
 from compositionality_study.constants import (

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import nibabel as nib
 import click
-from glmsingle.gmm.findtailthreshold import findtailthreshold
+from glmsingle.gmm.findtailthreshold import findtailthreshold  # type: ignore
 from loguru import logger
 from nilearn.decoding import SearchLight
 from nilearn.image import index_img, load_img, smooth_img, new_img_like
@@ -39,7 +39,7 @@ RADIUS_MM = 6.0
 SMOOTHING_FWHM = 6.0
 RELIABILITY_THRESHOLD = 0.1
 DEFAULT_VOXEL_P = 0.001
-DEFAULT_CLUSTER_THRESHOLD = 50
+DEFAULT_CLUSTER_THRESHOLD = 20
 
 
 def load_events_for_subject(

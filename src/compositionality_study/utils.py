@@ -15,7 +15,7 @@ from nilearn import image, plotting
 from nilearn.glm.thresholding import threshold_stats_img
 from penman.exceptions import DecodeError
 from PIL import Image, ImageOps
-from spacy.language import Language
+from spacy.language import Language  # type: ignore
 from spacy.tokens import Doc, Token
 
 from compositionality_study.constants import HF_DATASET_NAME

@@ -1,6 +1,6 @@
 """Create Fourier-scrambled versions of some images in the selected stimuli directory."""
 
-import cv2
+import cv2  # type: ignore
 import numpy as np
 
 

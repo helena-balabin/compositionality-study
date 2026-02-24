@@ -6,14 +6,14 @@ import os
 from typing import Dict, Optional, Union
 
 import click
-import cv2
+import cv2  # type: ignore
 import numpy as np
 import torch
 import torch.nn.functional as F  # noqa
 from datasets import Dataset, load_from_disk
 from matplotlib import pyplot as plt
 from PIL import Image
-from torchvision import transforms
+from torchvision import transforms  # type: ignore
 from tqdm import tqdm
 
 from compositionality_study.constants import (
