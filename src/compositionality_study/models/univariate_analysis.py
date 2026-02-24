@@ -156,12 +156,12 @@ def run_subject_glm(
     # Generate a report
     report = glm.generate_report(
         contrasts=list(CONTRASTS.values()),
-        title=f"First-Level GLM Report",
+        title="First-Level GLM Report",
         plot_type="glass",
         two_sided=True,
         alpha=voxel_p,
     )
-    report_file = output_dir / f"first_level_report.html"
+    report_file = output_dir / "first_level_report.html"
     report.save_as_html(report_file)
 
     return glm
