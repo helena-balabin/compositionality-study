@@ -16,8 +16,8 @@ This study sets out to achieve a high degree of reproducibility through open sci
 
 **Registered Report — Stage 1: In-Principle Acceptance (IPA)**: This study has received Stage 1 IPA. The methodology and proposed analyses were peer-reviewed and provisionally accepted for publication in [Neurobiology of Language (NoL)](https://direct.mit.edu/nol/pages/registered-reports), pending successful execution of the approved protocol.
 
-- **OSF Project**: [Link to OSF repository](https://osf.io/ta45d/overview)
-- **Stage 1 Manuscript**: [Link to manuscript](https://osf.io/ta45d/files/4nd6h)
+- **OSF Project**: [Link to OSF repository](https://osf.io/ta45d/overview?view_only=439003edb48c4053ab464d000894fa3e)
+- **Stage 1 Manuscript**: [Link to manuscript](https://osf.io/ta45d/overview?view_only=439003edb48c4053ab464d000894fa3e)
 
 Upon study completion, we plan to make the (anonymized/defaced) fMRI dataset publicly available.
 
