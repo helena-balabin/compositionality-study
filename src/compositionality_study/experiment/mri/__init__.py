@@ -1,1 +1,0 @@
-"""MRI experiment code."""
