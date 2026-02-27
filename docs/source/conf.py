@@ -23,8 +23,8 @@ sys.path.insert(0, os.path.abspath("../../src"))
 # -- Project information -----------------------------------------------------
 
 project = "compositionality_study"
-copyright = f"{date.today().year}, Helena Balabin"
-author = "Helena Balabin"
+copyright = f"{date.today().year}, Anonymous"
+author = "Anonymous"
 
 # The full version, including alpha/beta/rc tags.
 release = "0.0.1-dev"
@@ -200,7 +200,7 @@ texinfo_documents = [
         "compositionality_study",
         "Compositionality Study Documentation",
         author,
-        "Helena Balabin",
+        "Anonymous",
         "Code for the preparation and analysis of the planned functional MRI experiment for the Natural Language Processing in the Human Brain PhD project",
         "Miscellaneous",
     ),

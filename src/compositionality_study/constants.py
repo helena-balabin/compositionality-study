@@ -49,7 +49,7 @@ COCO_SELECTED_STIMULI_DIR = os.path.join(COCO_DIR, "coco_328_stimuli")
 THINGS_IMAGE_DIR = os.path.join(COCO_DIR, "images_things")
 IMAGES_COCO_SELECTED_STIMULI_DIR = os.path.join(COCO_DIR, "coco_328_stimuli")
 
-HF_DATASET_NAME = "helena-balabin/coco_a_preprocessed_all"
+HF_DATASET_NAME = "coco_a_preprocessed_all"
 # Path to COCO action annotations
 COCO_A_ANNOT_FILE = os.path.join(COCO_DIR, "coco_annotations", "cocoa_beta2015.json")
 # Directory for stimuli converted into local files for psychopy

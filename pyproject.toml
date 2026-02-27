@@ -7,10 +7,10 @@ name = "compositionality-study"
 version = "0.0.1-dev"
 description = "Code for the fMRI experiment on compositionality in text and images"
 authors = [
-    { name = "Helena Balabin", email = "helena.balabin@kuleuven.be" }
+    { name = "Anonymous", email = "ano@nymo.us" }
 ]
 maintainers = [
-    { name = "Helena Balabin", email = "helena.balabin@kuleuven.be" }
+    { name = "Anonymous", email = "ano@nymo.us" }
 ]
 license = "MIT"
 readme = "README.md"
